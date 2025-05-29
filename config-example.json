@@ -1,0 +1,84 @@
+{
+  "webServerPort": 9000,
+  "debug": false,
+  "inputs": [
+    {
+      "type": "dynamic",
+      "name": "radio-live",
+      "prefix": "🎵 Now Playing: ",
+      "suffix": " 🎵",
+      "settings": {
+        "secret": "supersecret123",
+        "expiration": {
+          "type": "dynamic"
+        }
+      }
+    },
+    {
+      "type": "url",
+      "name": "nowplaying-api",
+      "prefix": "From API: ",
+      "suffix": " [Live]",
+      "settings": {
+        "url": "https://api.example.com/nowplaying",
+        "jsonParsing": true,
+        "jsonKey": "radio.programs.current",
+        "pollingInterval": 30
+      }
+    },
+    {
+      "type": "text",
+      "name": "default-text",
+      "settings": {
+        "text": "Welcome to ZuidWest FM!"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "type": "icecast",
+      "name": "main-stream",
+      "inputs": ["radio-live", "nowplaying-api", "default-text"],
+      "formatters": ["ucwords"],
+      "settings": {
+        "delay": 2,
+        "server": "localhost",
+        "port": 8000,
+        "username": "source",
+        "password": "hackme",
+        "mountpoint": "/stream"
+      }
+    },
+    {
+      "type": "file",
+      "name": "nowplaying-file",
+      "inputs": ["radio-live", "default-text"],
+      "formatters": ["uppercase"],
+      "settings": {
+        "delay": 0,
+        "filename": "/tmp/nowplaying.txt"
+      }
+    },
+    {
+      "type": "http",
+      "name": "webhook",
+      "inputs": ["radio-live", "nowplaying-api", "default-text"],
+      "formatters": ["ucwords"],
+      "settings": {
+        "delay": 1,
+        "url": "https://api.example.com/metadata",
+        "bearerToken": "your-token-here"
+      }
+    },
+    {
+      "type": "file",
+      "name": "rds-output",
+      "inputs": ["radio-live", "nowplaying-api", "default-text"],
+      "formatters": ["rds"],
+      "settings": {
+        "delay": 0,
+        "filename": "/tmp/rds.txt"
+      }
+    }
+  ]
+}
