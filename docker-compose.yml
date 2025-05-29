@@ -1,0 +1,19 @@
+services:
+  zwfm-metadata:
+    image: ghcr.io/oszuidwest/zwfm-metadata:latest
+    container_name: zwfm-metadata
+    restart: unless-stopped
+
+    volumes:
+      - /opt/metadata/config.json:/app/config.json:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /opt/metadata/output:/app/output
+
+    ports:
+      - "9000:9000"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
