@@ -145,3 +145,7 @@ func filterVisibleText(text string) string {
 	}
 	return result.String()
 }
+
+func init() {
+	RegisterFormatter("rds", func() Formatter { return &RDSFormatter{} })
+}

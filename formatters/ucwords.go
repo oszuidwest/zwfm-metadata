@@ -38,3 +38,7 @@ func (u *UcwordsFormatter) FormatV2(text string) string {
 
 	return string(runes)
 }
+
+func init() {
+	RegisterFormatter("ucwords", func() Formatter { return &UcwordsFormatter{} })
+}

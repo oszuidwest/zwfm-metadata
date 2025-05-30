@@ -9,3 +9,7 @@ type UppercaseFormatter struct{}
 func (u *UppercaseFormatter) Format(text string) string {
 	return strings.ToUpper(text)
 }
+
+func init() {
+	RegisterFormatter("uppercase", func() Formatter { return &UppercaseFormatter{} })
+}

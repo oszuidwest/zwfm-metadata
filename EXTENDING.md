@@ -117,19 +117,30 @@ type MyCustomInputSettings struct {
 
 ### 4. Register Input in Main Application
 
-In your application's configuration loading (see `main.go`), add a case for your new input type:
+In `main.go`, add a case for your new input type in the `createInput` function:
 
 ```go
-switch inputConfig.Type {
-case "mycustom":
-    var settings config.MyCustomInputSettings
-    if err := mapstructure.Decode(inputConfig.Settings, &settings); err != nil {
-        return fmt.Errorf("invalid settings for input %s: %w", inputConfig.Name, err)
+// createInput creates an input based on configuration
+func createInput(cfg config.InputConfig) (core.Input, error) {
+    switch cfg.Type {
+    case "mycustom":
+        settings, err := utils.ParseJSONSettings[config.MyCustomInputSettings](cfg.Settings)
+        if err != nil {
+            return nil, err
+        }
+        return inputs.NewMyCustomInput(cfg.Name, *settings), nil
+    
+    default:
+        return nil, &unknownTypeError{Type: cfg.Type}
     }
-    input := inputs.NewMyCustomInput(inputConfig.Name, settings)
-    // Register with manager...
 }
 ```
+
+The main application will automatically handle:
+- Adding the input to the manager
+- Setting the input type for status display
+- Configuring prefix/suffix if specified
+- Starting the input with proper context
 
 ### 5. Usage Example
 
@@ -247,19 +258,31 @@ type MyCustomOutputSettings struct {
 
 ### 5. Register Output in Main Application
 
-Add case for your new output type in configuration loading:
+In `main.go`, add a case for your new output type in the `createOutput` function:
 
 ```go
-switch outputConfig.Type {
-case "mycustom":
-    var settings config.MyCustomOutputSettings
-    if err := mapstructure.Decode(outputConfig.Settings, &settings); err != nil {
-        return fmt.Errorf("invalid settings for output %s: %w", outputConfig.Name, err)
+// createOutput creates an output based on configuration
+func createOutput(cfg config.OutputConfig) (core.Output, error) {
+    switch cfg.Type {
+    case "mycustom":
+        settings, err := utils.ParseJSONSettings[config.MyCustomOutputSettings](cfg.Settings)
+        if err != nil {
+            return nil, err
+        }
+        return outputs.NewMyCustomOutput(cfg.Name, *settings), nil
+    
+    default:
+        return nil, &unknownTypeError{Type: cfg.Type}
     }
-    output := outputs.NewMyCustomOutput(outputConfig.Name, settings)
-    // Register with manager...
 }
 ```
+
+The main application will automatically handle:
+- Setting inputs for the output
+- Registering input mappings with the timeline manager
+- Registering formatters with the timeline manager
+- Adding the output to the manager
+- Setting the output type for status display
 
 ### 6. Usage Example
 
@@ -286,6 +309,8 @@ Formatters implement the simple `formatters.Formatter` interface.
 ```go
 package formatters
 
+import "strings"
+
 // MyCustomFormatter applies custom text transformation
 type MyCustomFormatter struct{}
 
@@ -301,21 +326,23 @@ func (m *MyCustomFormatter) customTransform(text string) string {
     text = strings.ReplaceAll(text, "@", "at")
     return text
 }
+
+func init() {
+    RegisterFormatter("mycustom", func() Formatter { return &MyCustomFormatter{} })
+}
 ```
 
 ### 2. Register Formatter
 
-Add your formatter to the registry in `formatters/formatter.go`:
+Add an `init()` function to your formatter file to register it:
 
 ```go
-var formatterRegistry = map[string]FormatterFactory{
-    "uppercase": func() Formatter { return &UppercaseFormatter{} },
-    "lowercase": func() Formatter { return &LowercaseFormatter{} },
-    "ucwords":   func() Formatter { return &UcwordsFormatter{} },
-    "rds":       func() Formatter { return &RDSFormatter{} },
-    "mycustom":  func() Formatter { return &MyCustomFormatter{} },  // Add this line
+func init() {
+    RegisterFormatter("mycustom", func() Formatter { return &MyCustomFormatter{} })
 }
 ```
+
+This will automatically register your formatter when the package is imported.
 
 ### 3. Usage Example
 

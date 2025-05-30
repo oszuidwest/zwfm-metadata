@@ -13,12 +13,7 @@ type Formatter interface {
 type FormatterFactory func() Formatter
 
 // formatterRegistry holds all registered formatters
-var formatterRegistry = map[string]FormatterFactory{
-	"uppercase": func() Formatter { return &UppercaseFormatter{} },
-	"lowercase": func() Formatter { return &LowercaseFormatter{} },
-	"ucwords":   func() Formatter { return &UcwordsFormatter{} },
-	"rds":       func() Formatter { return &RDSFormatter{} },
-}
+var formatterRegistry = map[string]FormatterFactory{}
 
 // RegisterFormatter registers a new formatter factory
 func RegisterFormatter(name string, factory FormatterFactory) {
