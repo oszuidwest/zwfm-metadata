@@ -211,8 +211,8 @@ func (m *MyCustomOutput) sendToDestination(metadata string) error {
 If your output needs access to full metadata details (not just formatted text), implement `core.EnhancedOutput`:
 
 ```go
-// ProcessFormattedMetadataWithDetails implements the EnhancedOutput interface
-func (m *MyCustomOutput) ProcessFormattedMetadataWithDetails(formattedText string, metadata *core.Metadata) {
+// ProcessEnhancedMetadata implements the EnhancedOutput interface
+func (m *MyCustomOutput) ProcessEnhancedMetadata(formattedText string, metadata *core.Metadata) {
     if !m.HasChanged(formattedText) {
         return
     }
@@ -367,7 +367,7 @@ type Output interface {
 ```go
 type EnhancedOutput interface {
     Output
-    ProcessFormattedMetadataWithDetails(formattedText string, metadata *Metadata)
+    ProcessEnhancedMetadata(formattedText string, metadata *Metadata)
 }
 ```
 

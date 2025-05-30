@@ -174,12 +174,12 @@ func createOutput(cfg config.OutputConfig) (core.Output, error) {
 		}
 		return outputs.NewFileOutput(cfg.Name, *settings), nil
 
-	case "http":
-		settings, err := utils.ParseJSONSettings[config.HTTPOutputSettings](cfg.Settings)
+	case "post":
+		settings, err := utils.ParseJSONSettings[config.PostOutputSettings](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewHTTPOutput(cfg.Name, *settings), nil
+		return outputs.NewPostOutput(cfg.Name, *settings), nil
 
 	default:
 		return nil, &unknownTypeError{Type: cfg.Type}

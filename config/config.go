@@ -72,8 +72,8 @@ type FileOutputSettings struct {
 	Filename string `json:"filename"`
 }
 
-// HTTPOutputSettings represents settings for HTTP POST output
-type HTTPOutputSettings struct {
+// PostOutputSettings represents settings for POST output with full metadata
+type PostOutputSettings struct {
 	Delay       int    `json:"delay"`
 	URL         string `json:"url"`
 	BearerToken string `json:"bearerToken,omitempty"`

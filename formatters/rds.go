@@ -145,4 +145,3 @@ func filterVisibleText(text string) string {
 	}
 	return result.String()
 }
-

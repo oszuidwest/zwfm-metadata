@@ -647,7 +647,7 @@ func (m *Manager) executeUpdate(update ScheduledUpdate) {
 
 	// Check if output supports enhanced metadata processing
 	if enhancedOutput, ok := update.Output.(EnhancedOutput); ok {
-		enhancedOutput.ProcessFormattedMetadataWithDetails(formattedText, update.Metadata)
+		enhancedOutput.ProcessEnhancedMetadata(formattedText, update.Metadata)
 	} else {
 		update.Output.ProcessFormattedMetadata(formattedText)
 	}

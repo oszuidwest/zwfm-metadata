@@ -134,17 +134,18 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 - `delay` (required) - Seconds to delay metadata updates
 - `filename` (required) - Full path to output file
 
-**HTTP Output** - POST webhooks
+
+**POST Output** - Complete metadata POST with bearer token
 ```json
 {
-  "type": "http",
-  "name": "webhook", 
+  "type": "post",
+  "name": "full-webhook",
   "inputs": ["radio-live", "nowplaying-api", "default-text"],
   "formatters": ["ucwords"],
   "settings": {
     "delay": 1,
     "url": "https://api.example.com/metadata",
-    "bearerToken": "your-token-here"
+    "bearerToken": "your-bearer-token-here"
   }
 }
 ```
@@ -153,12 +154,15 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 - `url` (required) - Webhook endpoint URL
 - `bearerToken` (optional) - Authorization bearer token
 
-**JSON Payload:**
+**Complete JSON Payload:**
 ```json
 {
   "formatted_metadata": "Artist - Title",
+  "songID": "12345",
   "title": "Title",
   "artist": "Artist",
+  "duration": "3:45",
+  "updated_at": "2023-12-01T15:30:00Z",
   "expires_at": "2023-12-01T15:33:00Z"
 }
 ```

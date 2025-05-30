@@ -47,6 +47,6 @@ type Output interface {
 // EnhancedOutput interface for outputs that need access to full metadata
 type EnhancedOutput interface {
 	Output
-	// ProcessFormattedMetadataWithDetails processes metadata with full details
-	ProcessFormattedMetadataWithDetails(formattedText string, metadata *Metadata)
+	// ProcessEnhancedMetadata processes metadata with full details
+	ProcessEnhancedMetadata(formattedText string, metadata *Metadata)
 }

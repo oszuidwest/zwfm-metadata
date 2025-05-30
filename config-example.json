@@ -60,17 +60,6 @@
       }
     },
     {
-      "type": "http",
-      "name": "webhook",
-      "inputs": ["radio-live", "nowplaying-api", "default-text"],
-      "formatters": ["ucwords"],
-      "settings": {
-        "delay": 1,
-        "url": "https://api.example.com/metadata",
-        "bearerToken": "your-token-here"
-      }
-    },
-    {
       "type": "file",
       "name": "rds-output",
       "inputs": ["radio-live", "nowplaying-api", "default-text"],
@@ -78,6 +67,17 @@
       "settings": {
         "delay": 0,
         "filename": "/tmp/rds.txt"
+      }
+    },
+    {
+      "type": "post",
+      "name": "full-webhook",
+      "inputs": ["radio-live", "nowplaying-api", "default-text"],
+      "formatters": ["ucwords"],
+      "settings": {
+        "delay": 1,
+        "url": "https://api.example.com/metadata/full",
+        "bearerToken": "your-bearer-token-here"
       }
     }
   ]
