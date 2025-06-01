@@ -100,32 +100,58 @@ func (p *PostOutput) sendPayload(payload PostPayload) {
 func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 	result := make(map[string]interface{})
 	
+	// TODO: Remove all PayloadMappingOmitEmpty logic when padenc-api properly handles empty fields
+	// This includes the conditional checks below that skip empty values
+	
 	// Process the mapping configuration
 	for key, value := range p.settings.PayloadMapping {
 		switch v := value.(type) {
 		case string:
 			// Handle template strings with placeholders
 			if strings.Contains(v, "${") {
-				result[key] = p.replacePlaceholders(v, payload)
+				mappedValue := p.replacePlaceholders(v, payload)
+				if !p.settings.PayloadMappingOmitEmpty || mappedValue != "" {
+					result[key] = mappedValue
+				}
 			} else {
 				// Direct field mapping
-				result[key] = p.getFieldValue(v, payload)
+				fieldValue := p.getFieldValue(v, payload)
+				if !p.settings.PayloadMappingOmitEmpty || (fieldValue != nil && fieldValue != "" && fieldValue != (*time.Time)(nil)) {
+					result[key] = fieldValue
+				}
 			}
 		case map[string]interface{}:
 			// Handle nested objects
 			nestedResult := make(map[string]interface{})
+			hasValues := false
 			for nestedKey, nestedValue := range v {
 				if nestedStr, ok := nestedValue.(string); ok {
 					if strings.Contains(nestedStr, "${") {
-						nestedResult[nestedKey] = p.replacePlaceholders(nestedStr, payload)
+						mappedValue := p.replacePlaceholders(nestedStr, payload)
+						if !p.settings.PayloadMappingOmitEmpty || mappedValue != "" {
+							nestedResult[nestedKey] = mappedValue
+							if mappedValue != "" {
+								hasValues = true
+							}
+						}
 					} else {
-						nestedResult[nestedKey] = p.getFieldValue(nestedStr, payload)
+						fieldValue := p.getFieldValue(nestedStr, payload)
+						if !p.settings.PayloadMappingOmitEmpty || (fieldValue != nil && fieldValue != "" && fieldValue != (*time.Time)(nil)) {
+							nestedResult[nestedKey] = fieldValue
+							if fieldValue != nil && fieldValue != "" && fieldValue != (*time.Time)(nil) {
+								hasValues = true
+							}
+						}
 					}
 				} else {
 					nestedResult[nestedKey] = nestedValue
+					hasValues = true
 				}
 			}
-			result[key] = nestedResult
+			// For nested objects, only omit if omitEmpty is true and no values exist
+			if !p.settings.PayloadMappingOmitEmpty || hasValues {
+				result[key] = nestedResult
+			}
 		default:
 			// Static values
 			result[key] = value

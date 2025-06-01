@@ -154,6 +154,7 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 - `url` (required) - Webhook endpoint URL
 - `bearerToken` (optional) - Authorization bearer token
 - `payloadMapping` (optional) - Custom JSON payload structure mapping
+- `payloadMappingOmitEmpty` (optional, default: false) - Omit empty fields from custom payload (TODO: Remove when padenc-api supports empty fields)
 
 **Default JSON Payload (when payloadMapping is not specified):**
 ```json
@@ -186,7 +187,8 @@ Define any JSON structure by mapping internal fields to your API format:
         "artist": "artist"
       },
       "expires_at": "expires_at"
-    }
+    },
+    "payloadMappingOmitEmpty": true
   }
 }
 ```
@@ -197,6 +199,16 @@ This configuration produces:
   "item": {
     "title": "Viva la Vida",
     "artist": "Coldplay"
+  },
+  "expires_at": "2023-12-31T23:59:59Z"
+}
+```
+
+With `payloadMappingOmitEmpty: true`, empty fields are excluded. For example, if there's no artist:
+```json
+{
+  "item": {
+    "title": "Viva la Vida"
   },
   "expires_at": "2023-12-31T23:59:59Z"
 }
