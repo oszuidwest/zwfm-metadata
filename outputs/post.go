@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
@@ -79,13 +80,106 @@ func (p *PostOutput) ProcessEnhancedMetadata(formattedText string, metadata *cor
 
 // sendPayload sends the complete payload to the configured URL
 func (p *PostOutput) sendPayload(payload PostPayload) {
-	if err := p.sendHTTPRequest(payload); err != nil {
+	var payloadToSend interface{}
+	
+	// If custom payload mapping is defined, use it
+	if p.settings.PayloadMapping != nil {
+		mappedPayload := p.mapPayload(payload)
+		payloadToSend = mappedPayload
+	} else {
+		// Use default payload structure
+		payloadToSend = payload
+	}
+	
+	if err := p.sendHTTPRequest(payloadToSend); err != nil {
 		utils.LogError("Failed to send POST request from output %s: %v", p.GetName(), err)
 	}
 }
 
+// mapPayload maps the internal payload to custom structure based on configuration
+func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
+	result := make(map[string]interface{})
+	
+	// Process the mapping configuration
+	for key, value := range p.settings.PayloadMapping {
+		switch v := value.(type) {
+		case string:
+			// Handle template strings with placeholders
+			if strings.Contains(v, "${") {
+				result[key] = p.replacePlaceholders(v, payload)
+			} else {
+				// Direct field mapping
+				result[key] = p.getFieldValue(v, payload)
+			}
+		case map[string]interface{}:
+			// Handle nested objects
+			nestedResult := make(map[string]interface{})
+			for nestedKey, nestedValue := range v {
+				if nestedStr, ok := nestedValue.(string); ok {
+					if strings.Contains(nestedStr, "${") {
+						nestedResult[nestedKey] = p.replacePlaceholders(nestedStr, payload)
+					} else {
+						nestedResult[nestedKey] = p.getFieldValue(nestedStr, payload)
+					}
+				} else {
+					nestedResult[nestedKey] = nestedValue
+				}
+			}
+			result[key] = nestedResult
+		default:
+			// Static values
+			result[key] = value
+		}
+	}
+	
+	return result
+}
+
+// replacePlaceholders replaces ${field} placeholders in template strings
+func (p *PostOutput) replacePlaceholders(template string, payload PostPayload) string {
+	result := template
+	
+	// Replace all supported placeholders
+	result = strings.ReplaceAll(result, "${formatted_metadata}", payload.FormattedMetadata)
+	result = strings.ReplaceAll(result, "${songID}", payload.SongID)
+	result = strings.ReplaceAll(result, "${title}", payload.Title)
+	result = strings.ReplaceAll(result, "${artist}", payload.Artist)
+	result = strings.ReplaceAll(result, "${duration}", payload.Duration)
+	result = strings.ReplaceAll(result, "${updated_at}", payload.UpdatedAt.Format(time.RFC3339))
+	
+	if payload.ExpiresAt != nil {
+		result = strings.ReplaceAll(result, "${expires_at}", payload.ExpiresAt.Format(time.RFC3339))
+	} else {
+		result = strings.ReplaceAll(result, "${expires_at}", "")
+	}
+	
+	return result
+}
+
+// getFieldValue gets a field value from the payload by name
+func (p *PostOutput) getFieldValue(fieldName string, payload PostPayload) interface{} {
+	switch fieldName {
+	case "formatted_metadata":
+		return payload.FormattedMetadata
+	case "songID":
+		return payload.SongID
+	case "title":
+		return payload.Title
+	case "artist":
+		return payload.Artist
+	case "duration":
+		return payload.Duration
+	case "updated_at":
+		return payload.UpdatedAt
+	case "expires_at":
+		return payload.ExpiresAt
+	default:
+		return nil
+	}
+}
+
 // sendHTTPRequest sends the payload to the configured URL with bearer token
-func (p *PostOutput) sendHTTPRequest(payload PostPayload) error {
+func (p *PostOutput) sendHTTPRequest(payload interface{}) error {
 	// Marshal payload to JSON
 	jsonData, err := json.Marshal(payload)
 	if err != nil {

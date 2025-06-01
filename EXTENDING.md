@@ -250,9 +250,10 @@ Add settings struct to `config/config.go`:
 ```go
 // MyCustomOutputSettings represents settings for custom output
 type MyCustomOutputSettings struct {
-    Delay    int    `json:"delay"`
-    Endpoint string `json:"endpoint"`
-    APIKey   string `json:"apiKey"`
+    Delay          int                    `json:"delay"`
+    Endpoint       string                 `json:"endpoint"`
+    APIKey         string                 `json:"apiKey"`
+    PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
 }
 ```
 
@@ -299,6 +300,64 @@ The main application will automatically handle:
   }
 }
 ```
+
+#### Custom Payload Mapping (POST Output)
+
+The POST output supports custom payload mapping to transform the internal metadata format to match any API structure:
+
+```json
+{
+  "type": "post",
+  "name": "custom-api",
+  "inputs": ["radio-live", "fallback"],
+  "formatters": ["ucwords"],
+  "settings": {
+    "delay": 0,
+    "url": "http://localhost:8080/track",
+    "bearerToken": "your_secret_api_key_here",
+    "payloadMapping": {
+      "item": {
+        "title": "title",
+        "artist": "artist"
+      },
+      "expires_at": "expires_at"
+    }
+  }
+}
+```
+
+This transforms the default payload structure:
+```json
+{
+  "formatted_metadata": "Artist - Title",
+  "songID": "12345",
+  "title": "Title",
+  "artist": "Artist",
+  "duration": "3:45",
+  "updated_at": "2023-12-01T15:30:00Z",
+  "expires_at": "2023-12-01T15:33:00Z"
+}
+```
+
+Into your custom structure:
+```json
+{
+  "item": {
+    "title": "Title",
+    "artist": "Artist"
+  },
+  "expires_at": "2023-12-01T15:33:00Z"
+}
+```
+
+Available fields for mapping:
+- `formatted_metadata` - The formatted text after applying formatters
+- `songID` - Song identifier
+- `title` - Song title
+- `artist` - Artist name
+- `duration` - Song duration
+- `updated_at` - When the metadata was updated
+- `expires_at` - When the metadata expires (null if no expiration)
 
 ## Adding a New Formatter
 

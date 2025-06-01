@@ -79,6 +79,24 @@
         "url": "https://api.example.com/metadata/full",
         "bearerToken": "your-bearer-token-here"
       }
+    },
+    {
+      "type": "post",
+      "name": "custom-api",
+      "inputs": ["radio-live", "nowplaying-api", "default-text"],
+      "formatters": ["ucwords"],
+      "settings": {
+        "delay": 0,
+        "url": "http://localhost:8080/track",
+        "bearerToken": "your_secret_api_key_here",
+        "payloadMapping": {
+          "item": {
+            "title": "title",
+            "artist": "artist"
+          },
+          "expires_at": "expires_at"
+        }
+      }
     }
   ]
 }

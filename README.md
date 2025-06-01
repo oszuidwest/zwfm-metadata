@@ -153,8 +153,9 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 - `delay` (required) - Seconds to delay metadata updates
 - `url` (required) - Webhook endpoint URL
 - `bearerToken` (optional) - Authorization bearer token
+- `payloadMapping` (optional) - Custom JSON payload structure mapping
 
-**Complete JSON Payload:**
+**Default JSON Payload (when payloadMapping is not specified):**
 ```json
 {
   "formatted_metadata": "Artist - Title",
@@ -166,6 +167,49 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
   "expires_at": "2023-12-01T15:33:00Z"
 }
 ```
+
+**Custom Payload Mapping:**
+Define any JSON structure by mapping internal fields to your API format:
+```json
+{
+  "type": "post",
+  "name": "custom-api",
+  "inputs": ["radio-live", "nowplaying-api", "default-text"],
+  "formatters": ["ucwords"],
+  "settings": {
+    "delay": 0,
+    "url": "http://localhost:8080/track",
+    "bearerToken": "your_secret_api_key_here",
+    "payloadMapping": {
+      "item": {
+        "title": "title",
+        "artist": "artist"
+      },
+      "expires_at": "expires_at"
+    }
+  }
+}
+```
+
+This configuration produces:
+```json
+{
+  "item": {
+    "title": "Viva la Vida",
+    "artist": "Coldplay"
+  },
+  "expires_at": "2023-12-31T23:59:59Z"
+}
+```
+
+**Available fields for mapping:**
+- `formatted_metadata` - The formatted text after applying formatters
+- `songID` - Song identifier
+- `title` - Song title
+- `artist` - Artist name
+- `duration` - Song duration
+- `updated_at` - When the metadata was updated
+- `expires_at` - When the metadata expires (null if no expiration)
 
 **Output Options (all types):**
 - `inputs` (required) - Array of input names in priority order

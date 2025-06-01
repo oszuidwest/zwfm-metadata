@@ -74,9 +74,10 @@ type FileOutputSettings struct {
 
 // PostOutputSettings represents settings for POST output with full metadata
 type PostOutputSettings struct {
-	Delay       int    `json:"delay"`
-	URL         string `json:"url"`
-	BearerToken string `json:"bearerToken,omitempty"`
+	Delay          int                    `json:"delay"`
+	URL            string                 `json:"url"`
+	BearerToken    string                 `json:"bearerToken,omitempty"`
+	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
 }
 
 // LoadConfig loads configuration from a file
