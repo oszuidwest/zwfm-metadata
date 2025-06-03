@@ -28,7 +28,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -o zwfm-metadata .
 
 # Runtime stage
-FROM alpine:3.21.3
+FROM alpine:3.22.0
 
 # Install packages + create user + setup directories
 RUN apk --no-cache add ca-certificates tzdata wget && \
