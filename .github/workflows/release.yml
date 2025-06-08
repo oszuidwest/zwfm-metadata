@@ -3,7 +3,6 @@ name: Release
 on:
   push:
     tags: ['v*']
-    branches: ['main']
   workflow_dispatch:
     inputs:
       version:
@@ -37,9 +36,6 @@ jobs:
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
             echo "is_release=true" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "version=edge" >> $GITHUB_OUTPUT
-            echo "is_release=false" >> $GITHUB_OUTPUT
           elif [[ "${{ inputs.version }}" == "edge" ]]; then
             echo "version=edge" >> $GITHUB_OUTPUT
             echo "is_release=false" >> $GITHUB_OUTPUT
@@ -97,17 +93,9 @@ jobs:
           tag_name: ${{ steps.version.outputs.version }}
           name: ${{ steps.version.outputs.version }}
           body: |
-            ## ZWFM Metadata ${{ steps.version.outputs.version }}
+            **Docker**: `docker pull ghcr.io/oszuidwest/zwfm-metadata:${{ steps.version.outputs.version }}`
             
-            ### Binary Downloads
-            - **Linux**: `zwfm-metadata-linux-amd64` (Intel/AMD), `zwfm-metadata-linux-arm64` (ARM64), `zwfm-metadata-linux-armv7` (ARM v7)
-            - **Windows**: `zwfm-metadata-windows-amd64.exe` (Intel/AMD), `zwfm-metadata-windows-arm64.exe` (ARM64)
-            - **macOS**: `zwfm-metadata-darwin-amd64` (Intel), `zwfm-metadata-darwin-arm64` (Apple Silicon)
-            
-            ### Docker
-            ```bash
-            docker pull ghcr.io/oszuidwest/zwfm-metadata:${{ steps.version.outputs.version }}
-            ```
+            Binary downloads are available below as release assets.
           files: dist/*
           generate_release_notes: true
 
@@ -115,6 +103,7 @@ jobs:
         if: steps.version.outputs.is_release == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: edge-binaries-${{ github.sha }}
+          name: edge-${{ github.sha }}
           path: dist/*
           retention-days: 7
+
