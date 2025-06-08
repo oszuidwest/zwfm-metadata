@@ -1,19 +1,31 @@
-name: Test
+name: CI
 
 on:
   push:
     branches: ['main']
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.golangci.yml'
+      - '.golangci.yaml'
   pull_request:
     branches: ['main']
-
-permissions:
-  contents: read
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.golangci.yml'
+      - '.golangci.yaml'
 
 env:
   GO_VERSION: '1.24'
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +44,13 @@ jobs:
       - name: Run vet
         run: go vet ./...
       
-      - name: Run formatting check
+      - name: Check formatting
         run: |
           go fmt ./...
           git diff --exit-code
+      
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          args: --timeout=5m
