@@ -4,10 +4,12 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_run:
-    workflows: ["Release"]
-    types:
-      - completed
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to build'
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -23,8 +25,6 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    # Only run if Release workflow succeeded, or for other trigger types
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
       packages: write
@@ -40,6 +40,12 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_type }}" = "tag" ]; then
             VERSION=${{ github.ref_name }}
+          elif [ "${{ github.event_name }}" = "workflow_call" ]; then
+            VERSION="${{ inputs.version }}"
+            # Checkout the tag if it's a version tag
+            if [[ "$VERSION" =~ ^v[0-9] ]]; then
+              git checkout "$VERSION"
+            fi
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ inputs.version }}" = "latest" ]; then
               # Get the most recent tag
@@ -61,9 +67,6 @@ jobs:
                 fi
               fi
             fi
-          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
-            # Get the tag that was just created by the release workflow
-            VERSION=$(git describe --tags --abbrev=0)
           else
             echo "Invalid workflow trigger"
             exit 1

@@ -43,6 +43,8 @@ jobs:
             TAG="v${{ inputs.version }}"
             echo "version=$TAG" >> $GITHUB_OUTPUT
             echo "is_release=true" >> $GITHUB_OUTPUT
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git config --global user.name "github-actions[bot]"
             git tag "$TAG"
             git push origin "$TAG"
           fi
@@ -106,4 +108,14 @@ jobs:
           name: edge-${{ github.sha }}
           path: dist/*
           retention-days: 7
+
+  docker:
+    needs: release
+    if: needs.release.outputs.version && needs.release.result == 'success'
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+    permissions:
+      contents: read
+      packages: write
 
