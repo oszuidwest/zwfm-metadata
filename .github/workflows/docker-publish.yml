@@ -120,7 +120,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
+            type=raw,value=latest,enable=${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_call' && startsWith(inputs.version, 'v'))) && !contains(inputs.version || github.ref, '-') }}
             
             # For manual builds with latest tag - explicit version tags
             # For manual edge builds
@@ -135,6 +135,7 @@ jobs:
             org.opencontainers.image.description=Metadata handling middleware for ZuidWest FM
             org.opencontainers.image.vendor=Streekomroep ZuidWest
             org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.version=${{ steps.version.outputs.version == 'edge' && 'edge' || steps.version.outputs.docker_tag }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
