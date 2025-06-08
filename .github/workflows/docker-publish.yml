@@ -104,7 +104,6 @@ jobs:
             
             # For main branch pushes - edge tag
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=edge-{{sha}},enable=${{ github.ref == 'refs/heads/main' }}
             
             # For manual builds with latest tag - explicit version tags
             type=raw,value=${{ steps.version.outputs.docker_tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.use_latest_tag && steps.version.outputs.is_semver == 'true' }}
