@@ -81,7 +81,7 @@ func (p *PostOutput) ProcessEnhancedMetadata(formattedText string, metadata *cor
 // sendPayload sends the complete payload to the configured URL
 func (p *PostOutput) sendPayload(payload PostPayload) {
 	var payloadToSend interface{}
-	
+
 	// If custom payload mapping is defined, use it
 	if p.settings.PayloadMapping != nil {
 		mappedPayload := p.mapPayload(payload)
@@ -90,7 +90,7 @@ func (p *PostOutput) sendPayload(payload PostPayload) {
 		// Use default payload structure
 		payloadToSend = payload
 	}
-	
+
 	if err := p.sendHTTPRequest(payloadToSend); err != nil {
 		utils.LogError("Failed to send POST request from output %s: %v", p.GetName(), err)
 	}
@@ -99,10 +99,10 @@ func (p *PostOutput) sendPayload(payload PostPayload) {
 // mapPayload maps the internal payload to custom structure based on configuration
 func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 	result := make(map[string]interface{})
-	
+
 	// TODO: Remove all PayloadMappingOmitEmpty logic when padenc-api properly handles empty fields
 	// This includes the conditional checks below that skip empty values
-	
+
 	// Process the mapping configuration
 	for key, value := range p.settings.PayloadMapping {
 		switch v := value.(type) {
@@ -157,14 +157,14 @@ func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 			result[key] = value
 		}
 	}
-	
+
 	return result
 }
 
 // replacePlaceholders replaces ${field} placeholders in template strings
 func (p *PostOutput) replacePlaceholders(template string, payload PostPayload) string {
 	result := template
-	
+
 	// Replace all supported placeholders
 	result = strings.ReplaceAll(result, "${formatted_metadata}", payload.FormattedMetadata)
 	result = strings.ReplaceAll(result, "${songID}", payload.SongID)
@@ -172,13 +172,13 @@ func (p *PostOutput) replacePlaceholders(template string, payload PostPayload) s
 	result = strings.ReplaceAll(result, "${artist}", payload.Artist)
 	result = strings.ReplaceAll(result, "${duration}", payload.Duration)
 	result = strings.ReplaceAll(result, "${updated_at}", payload.UpdatedAt.Format(time.RFC3339))
-	
+
 	if payload.ExpiresAt != nil {
 		result = strings.ReplaceAll(result, "${expires_at}", payload.ExpiresAt.Format(time.RFC3339))
 	} else {
 		result = strings.ReplaceAll(result, "${expires_at}", "")
 	}
-	
+
 	return result
 }
 

@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'main'
   workflow_dispatch:
     inputs:
       use_latest_tag:
@@ -29,44 +31,54 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get latest tag (for manual builds)
-        if: github.event_name == 'workflow_dispatch' && inputs.use_latest_tag
-        id: get-tag
+      - name: Set version from tag or latest
+        id: version
         run: |
-          # Get the most recent tag
-          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$TAG" ]; then
-            # Strip v prefix for Docker tags
-            DOCKER_TAG="${TAG#v}"
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
-            echo "docker_tag=$DOCKER_TAG" >> $GITHUB_OUTPUT
-            echo "Found latest tag: $TAG (Docker: $DOCKER_TAG)"
-            
-            # Parse version components for manual builds
-            if [[ $DOCKER_TAG =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-              MAJOR="${BASH_REMATCH[1]}"
-              MINOR="${BASH_REMATCH[2]}"
-              PATCH="${BASH_REMATCH[3]}"
-              echo "major=$MAJOR" >> $GITHUB_OUTPUT
-              echo "minor=$MINOR" >> $GITHUB_OUTPUT
-              echo "patch=$PATCH" >> $GITHUB_OUTPUT
-              echo "Parsed version: $MAJOR.$MINOR.$PATCH"
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION=${{ github.ref_name }}
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            VERSION="edge-$(git rev-parse --short HEAD)"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.use_latest_tag }}" = "true" ]; then
+            # Get the most recent tag
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [ -z "$VERSION" ]; then
+              echo "No tags found, using edge build"
+              VERSION="edge-$(git rev-parse --short HEAD)"
             else
-              echo "Could not parse version from $DOCKER_TAG"
+              # Set ref for metadata action
+              echo "GITHUB_REF=refs/tags/$VERSION" >> $GITHUB_ENV
             fi
-            
-            # Set ref for metadata action
-            echo "GITHUB_REF=refs/tags/$TAG" >> $GITHUB_ENV
           else
-            echo "No tags found, using main branch"
-            echo "tag=" >> $GITHUB_OUTPUT
-            echo "docker_tag=" >> $GITHUB_OUTPUT
+            VERSION="edge-$(git rev-parse --short HEAD)"
           fi
+          
+          # Set outputs
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          
+          # Create Docker-compatible version (without 'v' prefix)
+          if [[ "$VERSION" =~ ^v[0-9] ]]; then
+            DOCKER_TAG="${VERSION#v}"
+          else
+            DOCKER_TAG="$VERSION"
+          fi
+          echo "docker_tag=${DOCKER_TAG}" >> $GITHUB_OUTPUT
+          
+          # Parse semantic version components if applicable
+          if [[ $DOCKER_TAG =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "major=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+            echo "minor=${BASH_REMATCH[2]}" >> $GITHUB_OUTPUT
+            echo "patch=${BASH_REMATCH[3]}" >> $GITHUB_OUTPUT
+            echo "is_semver=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_semver=false" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "Version: ${VERSION} (Docker: ${DOCKER_TAG})"
 
       - name: Checkout tag (for manual builds with tag)
-        if: github.event_name == 'workflow_dispatch' && inputs.use_latest_tag && steps.get-tag.outputs.tag != ''
+        if: github.event_name == 'workflow_dispatch' && inputs.use_latest_tag && steps.version.outputs.version != 'edge'
         run: |
-          git checkout ${{ steps.get-tag.outputs.tag }}
+          git checkout ${{ steps.version.outputs.version }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -90,14 +102,18 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
             
+            # For main branch pushes - edge tag
+            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=edge-{{sha}},enable=${{ github.ref == 'refs/heads/main' }}
+            
             # For manual builds with latest tag - explicit version tags
-            type=raw,value=${{ steps.get-tag.outputs.docker_tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.use_latest_tag && steps.get-tag.outputs.docker_tag != '' }}
-            type=raw,value=${{ steps.get-tag.outputs.major }}.${{ steps.get-tag.outputs.minor }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.use_latest_tag && steps.get-tag.outputs.major != '' }}
-            type=raw,value=${{ steps.get-tag.outputs.major }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.use_latest_tag && steps.get-tag.outputs.major != '' }}
-            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' && inputs.use_latest_tag && steps.get-tag.outputs.tag != '' && !contains(steps.get-tag.outputs.tag, '-') }}
+            type=raw,value=${{ steps.version.outputs.docker_tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.use_latest_tag && steps.version.outputs.is_semver == 'true' }}
+            type=raw,value=${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.use_latest_tag && steps.version.outputs.is_semver == 'true' }}
+            type=raw,value=${{ steps.version.outputs.major }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.use_latest_tag && steps.version.outputs.is_semver == 'true' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_dispatch' && inputs.use_latest_tag && steps.version.outputs.is_semver == 'true' }}
             
             # For manual builds without tag (edge)
-            type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' && (!inputs.use_latest_tag || steps.get-tag.outputs.tag == '') }}
+            type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' && (!inputs.use_latest_tag || steps.version.outputs.version == 'edge') }}
           labels: |
             org.opencontainers.image.title=ZuidWest FM Metadata
             org.opencontainers.image.description=Metadata handling middleware for ZuidWest FM
@@ -118,3 +134,6 @@ jobs:
           sbom: false
           build-args: |
             BUILDKIT_INLINE_CACHE=1
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ github.event.repository.updated_at }}

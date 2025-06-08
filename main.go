@@ -15,6 +15,13 @@ import (
 	"zwfm-metadata/web"
 )
 
+// Build information (set via ldflags)
+var (
+	Version   = "dev"
+	Commit    = "unknown"
+	BuildTime = "unknown"
+)
+
 func main() {
 	// Parse command line flags
 	configFile := flag.String("config", "config.json", "Path to configuration file")
@@ -28,6 +35,9 @@ func main() {
 
 	// Set debug logging based on config
 	utils.SetDebug(cfg.Debug)
+
+	// Log startup information
+	utils.LogInfo("Starting ZuidWest FM Metadata %s (commit: %s)", Version, Commit)
 
 	// Create timeline manager
 	manager := core.NewManager()
