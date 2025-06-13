@@ -15,9 +15,9 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	port    int
-	manager *core.Manager
-	server  *http.Server
+	port   int
+	router *core.MetadataRouter
+	server *http.Server
 }
 
 // OutputStatus represents the status of an output
@@ -31,10 +31,10 @@ type OutputStatus struct {
 }
 
 // NewServer creates a new server instance
-func NewServer(port int, manager *core.Manager) *Server {
+func NewServer(port int, router *core.MetadataRouter) *Server {
 	return &Server{
-		port:    port,
-		manager: manager,
+		port:   port,
+		router: router,
 	}
 }
 
@@ -104,7 +104,7 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the input
-	input, exists := s.manager.GetInput(inputName)
+	input, exists := s.router.GetInput(inputName)
 	if !exists {
 		http.Error(w, fmt.Sprintf("Input '%s' not found", inputName), http.StatusNotFound)
 		return
@@ -146,24 +146,24 @@ func (s *Server) dashboardAPIHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// Get input statuses
-	inputStatuses := s.manager.GetInputStatus()
+	inputStatuses := s.router.GetInputStatus()
 
 	// Get output information
-	outputs := s.manager.GetOutputs()
+	outputs := s.router.GetOutputs()
 	outputStatuses := make([]OutputStatus, 0, len(outputs))
 	activeFlows := 0
 
 	for _, output := range outputs {
 		outputStatus := OutputStatus{
 			Name:       output.GetName(),
-			Type:       s.manager.GetOutputType(output.GetName()),
+			Type:       s.router.GetOutputType(output.GetName()),
 			Delay:      output.GetDelay(),
-			Inputs:     s.manager.GetOutputInputs(output.GetName()),
-			Formatters: s.manager.GetOutputFormatterNames(output.GetName()),
+			Inputs:     s.router.GetOutputInputs(output.GetName()),
+			Formatters: s.router.GetOutputFormatterNames(output.GetName()),
 		}
 
 		// Get current input for this output
-		currentInput := s.manager.GetCurrentInputForOutput(output.GetName())
+		currentInput := s.router.GetCurrentInputForOutput(output.GetName())
 		if currentInput != "" {
 			outputStatus.CurrentInput = currentInput
 			activeFlows++

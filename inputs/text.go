@@ -8,15 +8,15 @@ import (
 
 // TextInput handles static text input
 type TextInput struct {
-	*core.BaseInput
-	core.WaitForShutdown
-	settings config.TextInputSettings
+	*core.InputBase
+	core.PassiveComponent
+	settings config.TextInputConfig
 }
 
 // NewTextInput creates a new text input
-func NewTextInput(name string, settings config.TextInputSettings) *TextInput {
+func NewTextInput(name string, settings config.TextInputConfig) *TextInput {
 	input := &TextInput{
-		BaseInput: core.NewBaseInput(name),
+		InputBase: core.NewInputBase(name),
 		settings:  settings,
 	}
 

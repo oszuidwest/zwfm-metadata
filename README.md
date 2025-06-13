@@ -154,7 +154,7 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 - `url` (required) - Webhook endpoint URL
 - `bearerToken` (optional) - Authorization bearer token
 - `payloadMapping` (optional) - Custom JSON payload structure mapping
-- `payloadMappingOmitEmpty` (optional, default: false) - Omit empty fields from custom payload (TODO: Remove when padenc-api supports empty fields)
+- `omitEmpty` (optional, default: false) - Omit empty fields from custom payload (TODO: Remove when padenc-api supports empty fields)
 
 **Default JSON Payload (when payloadMapping is not specified):**
 ```json
@@ -172,10 +172,11 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 **Custom Payload Mapping:**
 Define any JSON structure by mapping internal fields to your API format. The `payloadMapping` supports both static values and dynamic field references using Go template syntax:
 
-- **Static values**: Any string without `{{}}` is used as-is
+- **Static values**: Any string without `{{}}` is used as-is (you can add any custom fields!)
 - **Field references**: Use `{{.fieldname}}` to reference metadata fields
 - **Mixed templates**: Combine static text with fields, e.g., `"Now playing: {{.title}}"`
 
+**Example configuration** (adapt to your needs):
 ```json
 {
   "type": "post",
@@ -192,14 +193,16 @@ Define any JSON structure by mapping internal fields to your API format. The `pa
         "artist": "{{.artist}}"
       },
       "expires_at": "{{.expires_at}}",
-      "station": "ZWFM Radio"
+      "station": "My Radio Station",
+      "channel": "FM 101.5",
+      "custom_field": "any value you want"
     },
-    "payloadMappingOmitEmpty": true
+    "omitEmpty": true
   }
 }
 ```
 
-This configuration produces:
+**Example output** (with the above configuration):
 ```json
 {
   "item": {
@@ -207,9 +210,13 @@ This configuration produces:
     "artist": "Coldplay"
   },
   "expires_at": "2023-12-31T23:59:59Z",
-  "station": "ZWFM Radio"
+  "station": "My Radio Station",
+  "channel": "FM 101.5",
+  "custom_field": "any value you want"
 }
 ```
+
+Note: The fields `station`, `channel`, and `custom_field` are examples of static custom fields you can add. You can name them anything and add as many as your API requires!
 
 **Static expires_at example:**
 To set a fixed expiration date (e.g., for shows that don't expire):
@@ -224,7 +231,7 @@ To set a fixed expiration date (e.g., for shows that don't expire):
 }
 ```
 
-With `payloadMappingOmitEmpty: true`, empty fields are excluded. For example, if there's no artist:
+With `omitEmpty: true`, empty fields are excluded. For example, if there's no artist:
 ```json
 {
   "item": {
@@ -243,14 +250,16 @@ With `payloadMappingOmitEmpty: true`, empty fields are excluded. For example, if
 - `{{.updated_at}}` - When the metadata was updated
 - `{{.expires_at}}` - When the metadata expires (null if no expiration)
 
-**Template examples:**
+**More template examples:**
 ```json
 {
   "payloadMapping": {
     "description": "Now playing: {{.title}} by {{.artist}}",
     "category": "music",
     "timestamp": "{{.updated_at}}",
-    "static_field": "This is a static value"
+    "source": "streaming_system",
+    "region": "europe",
+    "any_custom_field": "You can add whatever your API needs!"
   }
 }
 ```

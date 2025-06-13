@@ -13,16 +13,16 @@ import (
 
 // IcecastOutput handles sending metadata to Icecast servers
 type IcecastOutput struct {
-	*core.BaseOutput
-	core.WaitForShutdown
-	settings   config.IcecastOutputSettings
+	*core.OutputBase
+	core.PassiveComponent
+	settings   config.IcecastOutputConfig
 	httpClient *http.Client
 }
 
 // NewIcecastOutput creates a new Icecast output
-func NewIcecastOutput(name string, settings config.IcecastOutputSettings) *IcecastOutput {
+func NewIcecastOutput(name string, settings config.IcecastOutputConfig) *IcecastOutput {
 	return &IcecastOutput{
-		BaseOutput: core.NewBaseOutput(name),
+		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
 		httpClient: utils.CreateHTTPClient(10 * time.Second),
 	}
@@ -33,8 +33,8 @@ func (i *IcecastOutput) GetDelay() int {
 	return i.settings.Delay
 }
 
-// ProcessFormattedMetadata implements the Output interface (called by timeline manager)
-func (i *IcecastOutput) ProcessFormattedMetadata(formattedText string) {
+// SendFormattedMetadata implements the Output interface (called by metadata router)
+func (i *IcecastOutput) SendFormattedMetadata(formattedText string) {
 	// Check if value changed to avoid unnecessary HTTP requests
 	if !i.HasChanged(formattedText) {
 		return

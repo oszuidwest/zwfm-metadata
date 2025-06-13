@@ -10,11 +10,11 @@ The ZWFM metadata system consists of three main extension points:
 - **Outputs** - Send formatted metadata to destinations (streaming servers, files, webhooks)  
 - **Formatters** - Transform metadata text (uppercase, lowercase, RDS compliance, etc.)
 
-All components communicate through the central `Manager` which handles priority fallback, scheduling, and change detection.
+All components communicate through the central `MetadataRouter` which handles priority fallback, scheduling, and change detection.
 
 ## Adding a New Input
 
-Inputs implement the `core.Input` interface and typically embed `core.BaseInput` for common functionality.
+Inputs implement the `core.Input` interface and typically embed `core.InputBase` for common functionality.
 
 ### 1. Create Input Structure
 
@@ -29,15 +29,15 @@ import (
 
 // MyCustomInput handles custom input source
 type MyCustomInput struct {
-    *core.BaseInput
-    core.WaitForShutdown  // For passive inputs
-    settings config.MyCustomInputSettings
+    *core.InputBase
+    core.PassiveComponent  // For passive inputs
+    settings config.MyCustomInputConfig
 }
 
 // NewMyCustomInput creates a new custom input
-func NewMyCustomInput(name string, settings config.MyCustomInputSettings) *MyCustomInput {
+func NewMyCustomInput(name string, settings config.MyCustomInputConfig) *MyCustomInput {
     return &MyCustomInput{
-        BaseInput: core.NewBaseInput(name),
+        InputBase: core.NewInputBase(name),
         settings:  settings,
     }
 }
@@ -48,7 +48,7 @@ func NewMyCustomInput(name string, settings config.MyCustomInputSettings) *MyCus
 For **passive inputs** (like Dynamic/Text that wait for external updates):
 
 ```go
-// Start implements the Input interface (WaitForShutdown provides this)
+// Start implements the Input interface (PassiveComponent provides this)
 // No additional implementation needed - just waits for shutdown
 
 // UpdateMetadata updates metadata from external source
@@ -107,8 +107,8 @@ func (m *MyCustomInput) fetchAndUpdate() error {
 Add settings struct to `config/config.go`:
 
 ```go
-// MyCustomInputSettings represents settings for custom input
-type MyCustomInputSettings struct {
+// MyCustomInputConfig represents settings for custom input
+type MyCustomInputConfig struct {
     APIKey          string `json:"apiKey"`
     PollingInterval int    `json:"pollingInterval"`
     CustomParam     string `json:"customParam"`
@@ -124,7 +124,7 @@ In `main.go`, add a case for your new input type in the `createInput` function:
 func createInput(cfg config.InputConfig) (core.Input, error) {
     switch cfg.Type {
     case "mycustom":
-        settings, err := utils.ParseJSONSettings[config.MyCustomInputSettings](cfg.Settings)
+        settings, err := utils.ParseJSONSettings[config.MyCustomInputConfig](cfg.Settings)
         if err != nil {
             return nil, err
         }
@@ -137,7 +137,7 @@ func createInput(cfg config.InputConfig) (core.Input, error) {
 ```
 
 The main application will automatically handle:
-- Adding the input to the manager
+- Adding the input to the router
 - Setting the input type for status display
 - Configuring prefix/suffix if specified
 - Starting the input with proper context
@@ -160,7 +160,7 @@ The main application will automatically handle:
 
 ## Adding a New Output
 
-Outputs implement the `core.Output` interface and typically embed `core.BaseOutput` for common functionality.
+Outputs implement the `core.Output` interface and typically embed `core.OutputBase` for common functionality.
 
 ### 1. Create Output Structure
 
@@ -175,15 +175,15 @@ import (
 
 // MyCustomOutput handles custom output destination
 type MyCustomOutput struct {
-    *core.BaseOutput
-    core.WaitForShutdown
-    settings config.MyCustomOutputSettings
+    *core.OutputBase
+    core.PassiveComponent
+    settings config.MyCustomOutputConfig
 }
 
 // NewMyCustomOutput creates a new custom output
-func NewMyCustomOutput(name string, settings config.MyCustomOutputSettings) *MyCustomOutput {
+func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCustomOutput {
     return &MyCustomOutput{
-        BaseOutput: core.NewBaseOutput(name),
+        OutputBase: core.NewOutputBase(name),
         settings:   settings,
     }
 }
@@ -197,8 +197,8 @@ func (m *MyCustomOutput) GetDelay() int {
     return m.settings.Delay
 }
 
-// ProcessFormattedMetadata implements the Output interface
-func (m *MyCustomOutput) ProcessFormattedMetadata(formattedText string) {
+// SendFormattedMetadata implements the Output interface
+func (m *MyCustomOutput) SendFormattedMetadata(formattedText string) {
     // Check if value changed to avoid unnecessary operations
     if !m.HasChanged(formattedText) {
         return
@@ -222,8 +222,8 @@ func (m *MyCustomOutput) sendToDestination(metadata string) error {
 If your output needs access to full metadata details (not just formatted text), implement `core.EnhancedOutput`:
 
 ```go
-// ProcessEnhancedMetadata implements the EnhancedOutput interface
-func (m *MyCustomOutput) ProcessEnhancedMetadata(formattedText string, metadata *core.Metadata) {
+// SendEnhancedMetadata implements the EnhancedOutput interface
+func (m *MyCustomOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata) {
     if !m.HasChanged(formattedText) {
         return
     }
@@ -248,8 +248,8 @@ func (m *MyCustomOutput) ProcessEnhancedMetadata(formattedText string, metadata 
 Add settings struct to `config/config.go`:
 
 ```go
-// MyCustomOutputSettings represents settings for custom output
-type MyCustomOutputSettings struct {
+// MyCustomOutputConfig represents settings for custom output
+type MyCustomOutputConfig struct {
     Delay          int                    `json:"delay"`
     Endpoint       string                 `json:"endpoint"`
     APIKey         string                 `json:"apiKey"`
@@ -266,7 +266,7 @@ In `main.go`, add a case for your new output type in the `createOutput` function
 func createOutput(cfg config.OutputConfig) (core.Output, error) {
     switch cfg.Type {
     case "mycustom":
-        settings, err := utils.ParseJSONSettings[config.MyCustomOutputSettings](cfg.Settings)
+        settings, err := utils.ParseJSONSettings[config.MyCustomOutputConfig](cfg.Settings)
         if err != nil {
             return nil, err
         }
@@ -280,9 +280,9 @@ func createOutput(cfg config.OutputConfig) (core.Output, error) {
 
 The main application will automatically handle:
 - Setting inputs for the output
-- Registering input mappings with the timeline manager
-- Registering formatters with the timeline manager
-- Adding the output to the manager
+- Registering input mappings with the metadata router
+- Registering formatters with the metadata router
+- Adding the output to the router
 - Setting the output type for status display
 
 ### 6. Usage Example
@@ -444,7 +444,7 @@ type Output interface {
     GetName() string                                    // Return output name
     GetDelay() int                                      // Return delay in seconds
     SetInputs(inputs []Input)                           // Set input list
-    ProcessFormattedMetadata(formattedText string)      // Process metadata
+    SendFormattedMetadata(formattedText string)      // Process metadata
 }
 ```
 
@@ -453,7 +453,7 @@ type Output interface {
 ```go
 type EnhancedOutput interface {
     Output
-    ProcessEnhancedMetadata(formattedText string, metadata *Metadata)
+    SendEnhancedMetadata(formattedText string, metadata *Metadata)
 }
 ```
 
@@ -467,11 +467,11 @@ type Formatter interface {
 
 ## Key Design Patterns
 
-### 1. Embedding BaseInput/BaseOutput
-Always embed `core.BaseInput` or `core.BaseOutput` to get common functionality like subscription management and change detection.
+### 1. Embedding InputBase/OutputBase
+Always embed `core.InputBase` or `core.OutputBase` to get common functionality like subscription management and change detection.
 
-### 2. WaitForShutdown for Passive Components
-Use `core.WaitForShutdown` for components that don't need background tasks (most outputs, dynamic/text inputs).
+### 2. PassiveComponent for Passive Components
+Use `core.PassiveComponent` for components that don't need background tasks (most outputs, dynamic/text inputs).
 
 ### 3. Change Detection
 Outputs should call `HasChanged()` to avoid unnecessary operations when metadata hasn't changed.
@@ -488,7 +488,7 @@ Always validate configuration in constructors and return meaningful errors.
 ## Testing Your Extensions
 
 1. **Unit Tests**: Test your components in isolation
-2. **Integration Tests**: Test with the full Manager
+2. **Integration Tests**: Test with the full MetadataRouter
 3. **Configuration Tests**: Verify JSON configuration parsing
 4. **Error Handling**: Test failure scenarios
 
@@ -496,7 +496,7 @@ Example test structure:
 
 ```go
 func TestMyCustomInput(t *testing.T) {
-    settings := config.MyCustomInputSettings{
+    settings := config.MyCustomInputConfig{
         APIKey: "test123",
         PollingInterval: 30,
     }
@@ -541,19 +541,19 @@ import (
 )
 
 type RedisInput struct {
-    *core.BaseInput
-    settings config.RedisInputSettings
+    *core.InputBase
+    settings config.RedisInputConfig
     client   *redis.Client
 }
 
-func NewRedisInput(name string, settings config.RedisInputSettings) *RedisInput {
+func NewRedisInput(name string, settings config.RedisInputConfig) *RedisInput {
     client := redis.NewClient(&redis.Options{
         Addr: settings.Address,
         DB:   settings.Database,
     })
     
     return &RedisInput{
-        BaseInput: core.NewBaseInput(name),
+        InputBase: core.NewInputBase(name),
         settings:  settings,
         client:    client,
     }
@@ -615,7 +615,7 @@ Configuration:
 
 ```go
 // config/config.go
-type RedisInputSettings struct {
+type RedisInputConfig struct {
     Address         string `json:"address"`
     Database        int    `json:"database"`
     Key             string `json:"key"`

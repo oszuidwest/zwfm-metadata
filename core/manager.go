@@ -53,8 +53,8 @@ type Timeline struct {
 	mu      sync.RWMutex
 }
 
-// Manager manages all inputs and outputs with centralized timeline scheduling
-type Manager struct {
+// MetadataRouter manages all inputs and outputs with centralized timeline scheduling
+type MetadataRouter struct {
 	inputs               map[string]Input
 	outputs              map[string]Output
 	inputSubscriptions   map[string]chan *Metadata         // input name -> subscription channel
@@ -71,9 +71,9 @@ type Manager struct {
 	mu                   sync.RWMutex
 }
 
-// NewManager creates a new manager instance
-func NewManager() *Manager {
-	return &Manager{
+// NewMetadataRouter creates a new metadata router instance
+func NewMetadataRouter() *MetadataRouter {
+	return &MetadataRouter{
 		inputs:               make(map[string]Input),
 		outputs:              make(map[string]Output),
 		inputSubscriptions:   make(map[string]chan *Metadata),
@@ -91,7 +91,7 @@ func NewManager() *Manager {
 }
 
 // AddInput adds an input to the manager
-func (m *Manager) AddInput(input Input) error {
+func (m *MetadataRouter) AddInput(input Input) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -105,7 +105,7 @@ func (m *Manager) AddInput(input Input) error {
 }
 
 // AddOutput adds an output to the manager
-func (m *Manager) AddOutput(output Output) error {
+func (m *MetadataRouter) AddOutput(output Output) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -119,28 +119,28 @@ func (m *Manager) AddOutput(output Output) error {
 }
 
 // SetOutputInputs sets which inputs an output uses
-func (m *Manager) SetOutputInputs(outputName string, inputNames []string) {
+func (m *MetadataRouter) SetOutputInputs(outputName string, inputNames []string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.outputInputs[outputName] = inputNames
 }
 
 // SetOutputFormatters sets which formatters an output uses
-func (m *Manager) SetOutputFormatters(outputName string, formatters []formatters.Formatter) {
+func (m *MetadataRouter) SetOutputFormatters(outputName string, formatters []formatters.Formatter) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.outputFormatters[outputName] = formatters
 }
 
 // SetOutputFormatterNames sets the formatter names for an output
-func (m *Manager) SetOutputFormatterNames(outputName string, formatterNames []string) {
+func (m *MetadataRouter) SetOutputFormatterNames(outputName string, formatterNames []string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.outputFormatterNames[outputName] = formatterNames
 }
 
 // SetInputPrefixSuffix sets the prefix and suffix for an input
-func (m *Manager) SetInputPrefixSuffix(inputName string, prefix, suffix string) {
+func (m *MetadataRouter) SetInputPrefixSuffix(inputName string, prefix, suffix string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.inputPrefixSuffix[inputName] = InputPrefixSuffix{
@@ -150,21 +150,21 @@ func (m *Manager) SetInputPrefixSuffix(inputName string, prefix, suffix string) 
 }
 
 // SetInputType sets the type for an input (used for status display)
-func (m *Manager) SetInputType(inputName string, inputType string) {
+func (m *MetadataRouter) SetInputType(inputName string, inputType string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.inputTypes[inputName] = inputType
 }
 
 // SetOutputType sets the type for an output (used for status display)
-func (m *Manager) SetOutputType(outputName string, outputType string) {
+func (m *MetadataRouter) SetOutputType(outputName string, outputType string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.outputTypes[outputName] = outputType
 }
 
 // GetOutputType returns the type for an output
-func (m *Manager) GetOutputType(outputName string) string {
+func (m *MetadataRouter) GetOutputType(outputName string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if outputType, exists := m.outputTypes[outputName]; exists {
@@ -174,7 +174,7 @@ func (m *Manager) GetOutputType(outputName string) string {
 }
 
 // GetInputStatus returns the status of all inputs including prefix/suffix
-func (m *Manager) GetInputStatus() []InputStatus {
+func (m *MetadataRouter) GetInputStatus() []InputStatus {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -230,7 +230,7 @@ func (m *Manager) GetInputStatus() []InputStatus {
 }
 
 // GetInput retrieves an input by name
-func (m *Manager) GetInput(name string) (Input, bool) {
+func (m *MetadataRouter) GetInput(name string) (Input, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -239,7 +239,7 @@ func (m *Manager) GetInput(name string) (Input, bool) {
 }
 
 // GetInputs returns all inputs
-func (m *Manager) GetInputs() []Input {
+func (m *MetadataRouter) GetInputs() []Input {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -251,7 +251,7 @@ func (m *Manager) GetInputs() []Input {
 }
 
 // GetOutputs returns all outputs sorted by name
-func (m *Manager) GetOutputs() []Output {
+func (m *MetadataRouter) GetOutputs() []Output {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -269,7 +269,7 @@ func (m *Manager) GetOutputs() []Output {
 }
 
 // GetOutputInputs returns the input names for an output
-func (m *Manager) GetOutputInputs(outputName string) []string {
+func (m *MetadataRouter) GetOutputInputs(outputName string) []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -280,7 +280,7 @@ func (m *Manager) GetOutputInputs(outputName string) []string {
 }
 
 // GetOutputFormatterNames returns the formatter names for an output
-func (m *Manager) GetOutputFormatterNames(outputName string) []string {
+func (m *MetadataRouter) GetOutputFormatterNames(outputName string) []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -291,7 +291,7 @@ func (m *Manager) GetOutputFormatterNames(outputName string) []string {
 }
 
 // GetCurrentInputForOutput returns the current active input for an output
-func (m *Manager) GetCurrentInputForOutput(outputName string) string {
+func (m *MetadataRouter) GetCurrentInputForOutput(outputName string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -302,7 +302,7 @@ func (m *Manager) GetCurrentInputForOutput(outputName string) string {
 }
 
 // Start starts all inputs and outputs with centralized timeline scheduling
-func (m *Manager) Start(ctx context.Context) error {
+func (m *MetadataRouter) Start(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -343,13 +343,13 @@ func (m *Manager) Start(ctx context.Context) error {
 		}(name, output)
 	}
 
-	utils.LogInfo("Started centralized timeline manager")
+	utils.LogInfo("Started centralized metadata router")
 
 	return nil
 }
 
 // handleInputMetadata handles metadata updates from inputs
-func (m *Manager) handleInputMetadata(ctx context.Context, inputName string, ch chan *Metadata) {
+func (m *MetadataRouter) handleInputMetadata(ctx context.Context, inputName string, ch chan *Metadata) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -362,7 +362,7 @@ func (m *Manager) handleInputMetadata(ctx context.Context, inputName string, ch 
 }
 
 // scheduleInputChangeUpdates schedules updates for outputs when input metadata changes
-func (m *Manager) scheduleInputChangeUpdates(inputName string, metadata *Metadata) {
+func (m *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata *Metadata) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -427,7 +427,7 @@ func (m *Manager) scheduleInputChangeUpdates(inputName string, metadata *Metadat
 }
 
 // outputUsesInput checks if an output uses a specific input
-func (m *Manager) outputUsesInput(outputName string, inputName string) bool {
+func (m *MetadataRouter) outputUsesInput(outputName string, inputName string) bool {
 	inputNames, exists := m.outputInputs[outputName]
 	if !exists {
 		return false
@@ -442,12 +442,12 @@ func (m *Manager) outputUsesInput(outputName string, inputName string) bool {
 }
 
 // cancelScheduledUpdates cancels all pending updates for an output
-func (m *Manager) cancelScheduledUpdates(outputName string) {
+func (m *MetadataRouter) cancelScheduledUpdates(outputName string) {
 	m.timeline.cancelUpdatesForOutput(outputName)
 }
 
 // startExpirationChecker checks for expired metadata and schedules fallback updates
-func (m *Manager) startExpirationChecker(ctx context.Context) {
+func (m *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -464,7 +464,7 @@ func (m *Manager) startExpirationChecker(ctx context.Context) {
 }
 
 // checkForExpirations finds expired inputs and schedules fallback updates (with delays)
-func (m *Manager) checkForExpirations() {
+func (m *MetadataRouter) checkForExpirations() {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -542,7 +542,7 @@ func (m *Manager) checkForExpirations() {
 }
 
 // formatMetadataForOutput formats metadata for a specific output using its formatters and input prefix/suffix
-func (m *Manager) formatMetadataForOutput(outputName string, metadata *Metadata, inputName string) string {
+func (m *MetadataRouter) formatMetadataForOutput(outputName string, metadata *Metadata, inputName string) string {
 	if metadata == nil {
 		return ""
 	}
@@ -578,7 +578,7 @@ func (m *Manager) formatMetadataForOutput(outputName string, metadata *Metadata,
 }
 
 // startTimelineProcessor processes scheduled updates from the timeline
-func (m *Manager) startTimelineProcessor(ctx context.Context) {
+func (m *MetadataRouter) startTimelineProcessor(ctx context.Context) {
 	ticker := time.NewTicker(100 * time.Millisecond) // Check every 100ms for precision
 	defer ticker.Stop()
 
@@ -595,7 +595,7 @@ func (m *Manager) startTimelineProcessor(ctx context.Context) {
 }
 
 // processReadyUpdates executes all updates that are ready to be processed
-func (m *Manager) processReadyUpdates() {
+func (m *MetadataRouter) processReadyUpdates() {
 	now := time.Now()
 	readyUpdates := m.timeline.getReadyUpdates(now)
 
@@ -612,7 +612,7 @@ func (m *Manager) processReadyUpdates() {
 }
 
 // executeUpdate processes a single scheduled update
-func (m *Manager) executeUpdate(update ScheduledUpdate) {
+func (m *MetadataRouter) executeUpdate(update ScheduledUpdate) {
 	// Find which input this metadata came from
 	var inputName string
 	m.mu.RLock()
@@ -647,9 +647,9 @@ func (m *Manager) executeUpdate(update ScheduledUpdate) {
 
 	// Check if output supports enhanced metadata processing
 	if enhancedOutput, ok := update.Output.(EnhancedOutput); ok {
-		enhancedOutput.ProcessEnhancedMetadata(formattedText, update.Metadata)
+		enhancedOutput.SendEnhancedMetadata(formattedText, update.Metadata)
 	} else {
-		update.Output.ProcessFormattedMetadata(formattedText)
+		update.Output.SendFormattedMetadata(formattedText)
 	}
 }
 

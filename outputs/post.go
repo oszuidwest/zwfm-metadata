@@ -15,9 +15,9 @@ import (
 
 // PostOutput handles sending complete metadata via HTTP POST requests with bearer token
 type PostOutput struct {
-	*core.BaseOutput
-	core.WaitForShutdown
-	settings   config.PostOutputSettings
+	*core.OutputBase
+	core.PassiveComponent
+	settings   config.PostOutputConfig
 	httpClient *http.Client
 }
 
@@ -33,9 +33,9 @@ type PostPayload struct {
 }
 
 // NewPostOutput creates a new POST output
-func NewPostOutput(name string, settings config.PostOutputSettings) *PostOutput {
+func NewPostOutput(name string, settings config.PostOutputConfig) *PostOutput {
 	return &PostOutput{
-		BaseOutput: core.NewBaseOutput(name),
+		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
 		httpClient: utils.CreateHTTPClient(10 * time.Second),
 	}
@@ -46,8 +46,8 @@ func (p *PostOutput) GetDelay() int {
 	return p.settings.Delay
 }
 
-// ProcessFormattedMetadata implements the Output interface (fallback for non-enhanced usage)
-func (p *PostOutput) ProcessFormattedMetadata(formattedText string) {
+// SendFormattedMetadata implements the Output interface (fallback for non-enhanced usage)
+func (p *PostOutput) SendFormattedMetadata(formattedText string) {
 	// For POST output, we need full metadata, so create minimal payload
 	payload := PostPayload{
 		FormattedMetadata: formattedText,
@@ -58,8 +58,8 @@ func (p *PostOutput) ProcessFormattedMetadata(formattedText string) {
 	p.sendPayload(payload)
 }
 
-// ProcessEnhancedMetadata implements the EnhancedOutput interface
-func (p *PostOutput) ProcessEnhancedMetadata(formattedText string, metadata *core.Metadata) {
+// SendEnhancedMetadata implements the EnhancedOutput interface
+func (p *PostOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata) {
 	// Check if value changed to avoid unnecessary HTTP requests
 	if !p.HasChanged(formattedText) {
 		return
@@ -101,7 +101,7 @@ func (p *PostOutput) sendPayload(payload PostPayload) {
 func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 	result := make(map[string]interface{})
 
-	// TODO: Remove all PayloadMappingOmitEmpty logic when padenc-api properly handles empty fields
+	// TODO: Remove all OmitEmpty logic when padenc-api properly handles empty fields
 	// This includes the conditional checks below that skip empty values
 
 	// Process the mapping configuration
@@ -112,12 +112,12 @@ func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 			if strings.Contains(v, "{{") && strings.Contains(v, "}}") {
 				// Process as template
 				processedValue := p.processTemplate(v, payload)
-				if !p.settings.PayloadMappingOmitEmpty || processedValue != "" {
+				if !p.settings.OmitEmpty || processedValue != "" {
 					result[key] = processedValue
 				}
 			} else {
 				// Use as static string value
-				if !p.settings.PayloadMappingOmitEmpty || v != "" {
+				if !p.settings.OmitEmpty || v != "" {
 					result[key] = v
 				}
 			}
@@ -131,7 +131,7 @@ func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 					if strings.Contains(nestedStr, "{{") && strings.Contains(nestedStr, "}}") {
 						// Process as template
 						processedValue := p.processTemplate(nestedStr, payload)
-						if !p.settings.PayloadMappingOmitEmpty || processedValue != "" {
+						if !p.settings.OmitEmpty || processedValue != "" {
 							nestedResult[nestedKey] = processedValue
 							if processedValue != "" {
 								hasValues = true
@@ -139,7 +139,7 @@ func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 						}
 					} else {
 						// Use as static string value
-						if !p.settings.PayloadMappingOmitEmpty || nestedStr != "" {
+						if !p.settings.OmitEmpty || nestedStr != "" {
 							nestedResult[nestedKey] = nestedStr
 							if nestedStr != "" {
 								hasValues = true
@@ -152,7 +152,7 @@ func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 				}
 			}
 			// For nested objects, only omit if omitEmpty is true and no values exist
-			if !p.settings.PayloadMappingOmitEmpty || hasValues {
+			if !p.settings.OmitEmpty || hasValues {
 				result[key] = nestedResult
 			}
 		default:
@@ -164,31 +164,10 @@ func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 	return result
 }
 
-// replacePlaceholders replaces ${field} placeholders in template strings
-func (p *PostOutput) replacePlaceholders(template string, payload PostPayload) string {
-	result := template
-
-	// Replace all supported placeholders
-	result = strings.ReplaceAll(result, "${formatted_metadata}", payload.FormattedMetadata)
-	result = strings.ReplaceAll(result, "${songID}", payload.SongID)
-	result = strings.ReplaceAll(result, "${title}", payload.Title)
-	result = strings.ReplaceAll(result, "${artist}", payload.Artist)
-	result = strings.ReplaceAll(result, "${duration}", payload.Duration)
-	result = strings.ReplaceAll(result, "${updated_at}", payload.UpdatedAt.Format(time.RFC3339))
-
-	if payload.ExpiresAt != nil {
-		result = strings.ReplaceAll(result, "${expires_at}", payload.ExpiresAt.Format(time.RFC3339))
-	} else {
-		result = strings.ReplaceAll(result, "${expires_at}", "")
-	}
-
-	return result
-}
-
 // processTemplate processes template strings with {{.field}} syntax
 func (p *PostOutput) processTemplate(template string, payload PostPayload) string {
 	result := template
-	
+
 	// Replace {{.field}} patterns with actual values
 	result = strings.ReplaceAll(result, "{{.formatted_metadata}}", payload.FormattedMetadata)
 	result = strings.ReplaceAll(result, "{{.songID}}", payload.SongID)
@@ -204,28 +183,6 @@ func (p *PostOutput) processTemplate(template string, payload PostPayload) strin
 	}
 
 	return result
-}
-
-// getFieldValue gets a field value from the payload by name
-func (p *PostOutput) getFieldValue(fieldName string, payload PostPayload) interface{} {
-	switch fieldName {
-	case "formatted_metadata":
-		return payload.FormattedMetadata
-	case "songID":
-		return payload.SongID
-	case "title":
-		return payload.Title
-	case "artist":
-		return payload.Artist
-	case "duration":
-		return payload.Duration
-	case "updated_at":
-		return payload.UpdatedAt
-	case "expires_at":
-		return payload.ExpiresAt
-	default:
-		return nil
-	}
 }
 
 // sendHTTPRequest sends the payload to the configured URL with bearer token

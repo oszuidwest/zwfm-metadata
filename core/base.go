@@ -6,48 +6,48 @@ import (
 	"sync"
 )
 
-// WaitForShutdown provides a Start() method for passive components.
+// PassiveComponent provides a Start() method for passive components.
 //
 // In this system, inputs provide metadata and can be "available" or "unavailable".
 // Some inputs (like URLInput) need background tasks to fetch data and maintain availability.
 // Others are passive:
 //   - TextInput: Always available with static metadata
 //   - DynamicInput: Available when it receives HTTP updates
-//   - All outputs: Just wait to process metadata from the Manager
+//   - All outputs: Just wait to process metadata from the MetadataRouter
 //
 // Passive components don't need to do anything in Start() except wait for shutdown.
-// They embed WaitForShutdown to get this behavior.
-type WaitForShutdown struct{}
+// They embed PassiveComponent to get this behavior.
+type PassiveComponent struct{}
 
 // Start waits for context cancellation (shutdown signal)
-func (w *WaitForShutdown) Start(ctx context.Context) error {
+func (p *PassiveComponent) Start(ctx context.Context) error {
 	<-ctx.Done()
 	return nil
 }
 
-// BaseInput provides common fields and methods for all input types
-type BaseInput struct {
+// InputBase provides common fields and methods for all input types
+type InputBase struct {
 	name        string
 	metadata    *Metadata
 	subscribers []chan<- *Metadata
 	mu          sync.RWMutex
 }
 
-// NewBaseInput creates a new BaseInput
-func NewBaseInput(name string) *BaseInput {
-	return &BaseInput{
+// NewInputBase creates a new InputBase
+func NewInputBase(name string) *InputBase {
+	return &InputBase{
 		name:        name,
 		subscribers: make([]chan<- *Metadata, 0),
 	}
 }
 
 // GetName returns the input name
-func (b *BaseInput) GetName() string {
+func (b *InputBase) GetName() string {
 	return b.name
 }
 
 // GetMetadata returns the current metadata (including expired metadata)
-func (b *BaseInput) GetMetadata() *Metadata {
+func (b *InputBase) GetMetadata() *Metadata {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -58,14 +58,14 @@ func (b *BaseInput) GetMetadata() *Metadata {
 }
 
 // Subscribe adds a channel to receive metadata updates
-func (b *BaseInput) Subscribe(ch chan<- *Metadata) {
+func (b *InputBase) Subscribe(ch chan<- *Metadata) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.subscribers = append(b.subscribers, ch)
 }
 
 // Unsubscribe removes a channel from receiving metadata updates
-func (b *BaseInput) Unsubscribe(ch chan<- *Metadata) {
+func (b *InputBase) Unsubscribe(ch chan<- *Metadata) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -78,7 +78,7 @@ func (b *BaseInput) Unsubscribe(ch chan<- *Metadata) {
 }
 
 // SetMetadata updates the metadata and notifies subscribers
-func (b *BaseInput) SetMetadata(metadata *Metadata) {
+func (b *InputBase) SetMetadata(metadata *Metadata) {
 	// Decode HTML entities in metadata fields
 	if metadata != nil {
 		metadata.Title = html.UnescapeString(metadata.Title)
@@ -124,7 +124,7 @@ func (b *BaseInput) SetMetadata(metadata *Metadata) {
 	}
 }
 
-// BaseOutput provides common fields for all output types
+// OutputBase provides common fields for all output types
 // ChangeDetector handles change detection for outputs
 type ChangeDetector struct {
 	lastValue string
@@ -157,40 +157,40 @@ func (c *ChangeDetector) SetCurrentValue(value string) {
 	c.lastValue = value
 }
 
-type BaseOutput struct {
+type OutputBase struct {
 	name           string
 	inputs         []Input
 	changeDetector ChangeDetector
 }
 
-// NewBaseOutput creates a new BaseOutput
-func NewBaseOutput(name string) *BaseOutput {
-	return &BaseOutput{
+// NewOutputBase creates a new OutputBase
+func NewOutputBase(name string) *OutputBase {
+	return &OutputBase{
 		name: name,
 	}
 }
 
 // GetName returns the output name
-func (b *BaseOutput) GetName() string {
+func (b *OutputBase) GetName() string {
 	return b.name
 }
 
 // SetInputs sets the inputs for this output
-func (b *BaseOutput) SetInputs(inputs []Input) {
+func (b *OutputBase) SetInputs(inputs []Input) {
 	b.inputs = inputs
 }
 
 // GetCurrentValue returns the current formatted value
-func (b *BaseOutput) GetCurrentValue() string {
+func (b *OutputBase) GetCurrentValue() string {
 	return b.changeDetector.GetCurrentValue()
 }
 
 // SetCurrentValue updates the current formatted value
-func (b *BaseOutput) SetCurrentValue(value string) {
+func (b *OutputBase) SetCurrentValue(value string) {
 	b.changeDetector.SetCurrentValue(value)
 }
 
 // HasChanged checks if the value has changed
-func (b *BaseOutput) HasChanged(newValue string) bool {
+func (b *OutputBase) HasChanged(newValue string) bool {
 	return b.changeDetector.HasChanged(newValue)
 }

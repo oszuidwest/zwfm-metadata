@@ -9,15 +9,15 @@ import (
 
 // FileOutput handles writing metadata to files
 type FileOutput struct {
-	*core.BaseOutput
-	core.WaitForShutdown
-	settings config.FileOutputSettings
+	*core.OutputBase
+	core.PassiveComponent
+	settings config.FileOutputConfig
 }
 
 // NewFileOutput creates a new file output
-func NewFileOutput(name string, settings config.FileOutputSettings) *FileOutput {
+func NewFileOutput(name string, settings config.FileOutputConfig) *FileOutput {
 	return &FileOutput{
-		BaseOutput: core.NewBaseOutput(name),
+		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
 	}
 }
@@ -27,8 +27,8 @@ func (f *FileOutput) GetDelay() int {
 	return f.settings.Delay
 }
 
-// ProcessFormattedMetadata implements the Output interface (called by timeline manager)
-func (f *FileOutput) ProcessFormattedMetadata(formattedText string) {
+// SendFormattedMetadata implements the Output interface (called by metadata router)
+func (f *FileOutput) SendFormattedMetadata(formattedText string) {
 	// Check if value changed to avoid unnecessary file writes
 	if !f.HasChanged(formattedText) {
 		return

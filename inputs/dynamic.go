@@ -12,15 +12,15 @@ import (
 
 // DynamicInput handles dynamic HTTP input
 type DynamicInput struct {
-	*core.BaseInput
-	core.WaitForShutdown
-	settings config.DynamicInputSettings
+	*core.InputBase
+	core.PassiveComponent
+	settings config.DynamicInputConfig
 }
 
 // NewDynamicInput creates a new dynamic input
-func NewDynamicInput(name string, settings config.DynamicInputSettings) *DynamicInput {
+func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicInput {
 	return &DynamicInput{
-		BaseInput: core.NewBaseInput(name),
+		InputBase: core.NewInputBase(name),
 		settings:  settings,
 	}
 }

@@ -34,8 +34,8 @@ type OutputConfig struct {
 	Settings   map[string]interface{} `json:"settings"`
 }
 
-// DynamicInputSettings represents settings for dynamic input
-type DynamicInputSettings struct {
+// DynamicInputConfig represents configuration for dynamic input
+type DynamicInputConfig struct {
 	Secret     string `json:"secret"`
 	Expiration struct {
 		Type    string `json:"type"` // "dynamic", "fixed", "none"
@@ -43,21 +43,21 @@ type DynamicInputSettings struct {
 	} `json:"expiration"`
 }
 
-// URLInputSettings represents settings for URL input
-type URLInputSettings struct {
+// URLInputConfig represents configuration for URL input
+type URLInputConfig struct {
 	URL             string `json:"url"`
 	JSONParsing     bool   `json:"jsonParsing"`
 	JSONKey         string `json:"jsonKey,omitempty"`
 	PollingInterval int    `json:"pollingInterval"`
 }
 
-// TextInputSettings represents settings for text input
-type TextInputSettings struct {
+// TextInputConfig represents configuration for text input
+type TextInputConfig struct {
 	Text string `json:"text"`
 }
 
-// IcecastOutputSettings represents settings for Icecast output
-type IcecastOutputSettings struct {
+// IcecastOutputConfig represents configuration for Icecast output
+type IcecastOutputConfig struct {
 	Delay      int    `json:"delay"`
 	Server     string `json:"server"`
 	Port       int    `json:"port"`
@@ -66,23 +66,23 @@ type IcecastOutputSettings struct {
 	Mountpoint string `json:"mountpoint"`
 }
 
-// FileOutputSettings represents settings for file output
-type FileOutputSettings struct {
+// FileOutputConfig represents configuration for file output
+type FileOutputConfig struct {
 	Delay    int    `json:"delay"`
 	Filename string `json:"filename"`
 }
 
-// PostOutputSettings represents settings for POST output with full metadata
-type PostOutputSettings struct {
+// PostOutputConfig represents configuration for POST output with full metadata
+type PostOutputConfig struct {
 	Delay          int                    `json:"delay"`
 	URL            string                 `json:"url"`
 	BearerToken    string                 `json:"bearerToken,omitempty"`
 	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
-	// TODO: Remove PayloadMappingOmitEmpty when padenc-api properly handles empty fields
+	// TODO: Remove OmitEmpty when padenc-api properly handles empty fields
 	// This is a temporary workaround to exclude empty fields from the payload
 	// Once padenc-api can handle empty string values correctly, this field and all
 	// related logic in outputs/post.go should be removed
-	PayloadMappingOmitEmpty bool `json:"payloadMappingOmitEmpty,omitempty"`
+	OmitEmpty bool `json:"omitEmpty,omitempty"`
 }
 
 // LoadConfig loads configuration from a file

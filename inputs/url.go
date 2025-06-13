@@ -15,15 +15,15 @@ import (
 
 // URLInput handles URL polling input
 type URLInput struct {
-	*core.BaseInput
-	settings   config.URLInputSettings
+	*core.InputBase
+	settings   config.URLInputConfig
 	httpClient *http.Client
 }
 
 // NewURLInput creates a new URL input
-func NewURLInput(name string, settings config.URLInputSettings) *URLInput {
+func NewURLInput(name string, settings config.URLInputConfig) *URLInput {
 	return &URLInput{
-		BaseInput:  core.NewBaseInput(name),
+		InputBase:  core.NewInputBase(name),
 		settings:   settings,
 		httpClient: utils.CreateHTTPClient(10 * time.Second),
 	}

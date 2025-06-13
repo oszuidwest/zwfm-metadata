@@ -24,7 +24,7 @@ type Input interface {
 	GetName() string
 	// GetMetadata returns the current metadata
 	GetMetadata() *Metadata
-	// Subscribe allows manager to subscribe to updates
+	// Subscribe allows router to subscribe to updates
 	Subscribe(ch chan<- *Metadata)
 	// Unsubscribe removes a subscription
 	Unsubscribe(ch chan<- *Metadata)
@@ -40,13 +40,13 @@ type Output interface {
 	GetDelay() int
 	// SetInputs sets the prioritized list of inputs
 	SetInputs(inputs []Input)
-	// ProcessFormattedMetadata processes pre-formatted metadata string (async safe)
-	ProcessFormattedMetadata(formattedText string)
+	// SendFormattedMetadata processes pre-formatted metadata string (async safe)
+	SendFormattedMetadata(formattedText string)
 }
 
 // EnhancedOutput interface for outputs that need access to full metadata
 type EnhancedOutput interface {
 	Output
-	// ProcessEnhancedMetadata processes metadata with full details
-	ProcessEnhancedMetadata(formattedText string, metadata *Metadata)
+	// SendEnhancedMetadata processes metadata with full details
+	SendEnhancedMetadata(formattedText string, metadata *Metadata)
 }

@@ -39,8 +39,8 @@ func main() {
 	// Log startup information
 	utils.LogInfo("Starting ZuidWest FM Metadata %s (commit: %s)", Version, Commit)
 
-	// Create timeline manager
-	manager := core.NewManager()
+	// Create metadata router
+	router := core.NewMetadataRouter()
 
 	// Create inputs
 	for _, inputCfg := range cfg.Inputs {
@@ -49,16 +49,16 @@ func main() {
 			utils.LogFatal("Failed to create input %s: %v", inputCfg.Name, err)
 		}
 
-		if err := manager.AddInput(input); err != nil {
+		if err := router.AddInput(input); err != nil {
 			utils.LogFatal("Failed to add input %s: %v", inputCfg.Name, err)
 		}
 
 		// Store input type for status display
-		manager.SetInputType(inputCfg.Name, inputCfg.Type)
+		router.SetInputType(inputCfg.Name, inputCfg.Type)
 
 		// Configure prefix/suffix for this input
 		if inputCfg.Prefix != "" || inputCfg.Suffix != "" {
-			manager.SetInputPrefixSuffix(inputCfg.Name, inputCfg.Prefix, inputCfg.Suffix)
+			router.SetInputPrefixSuffix(inputCfg.Name, inputCfg.Prefix, inputCfg.Suffix)
 			utils.LogInfo("Added input: %s (type: %s, prefix: %q, suffix: %q)", inputCfg.Name, inputCfg.Type, inputCfg.Prefix, inputCfg.Suffix)
 		} else {
 			utils.LogInfo("Added input: %s (type: %s)", inputCfg.Name, inputCfg.Type)
@@ -75,7 +75,7 @@ func main() {
 		// Set inputs for output
 		var outputInputs []core.Input
 		for _, inputName := range outputCfg.Inputs {
-			input, exists := manager.GetInput(inputName)
+			input, exists := router.GetInput(inputName)
 			if !exists {
 				utils.LogFatal("Input %s not found for output %s", inputName, outputCfg.Name)
 			}
@@ -83,10 +83,10 @@ func main() {
 		}
 		output.SetInputs(outputInputs)
 
-		// Register input mapping with timeline manager
-		manager.SetOutputInputs(outputCfg.Name, outputCfg.Inputs)
+		// Register input mapping with timeline router
+		router.SetOutputInputs(outputCfg.Name, outputCfg.Inputs)
 
-		// Register formatters with timeline manager
+		// Register formatters with timeline router
 		var outputFormatters []formatters.Formatter
 		for _, formatterName := range outputCfg.Formatters {
 			formatter, err := formatters.GetFormatter(formatterName)
@@ -95,13 +95,13 @@ func main() {
 			}
 			outputFormatters = append(outputFormatters, formatter)
 		}
-		manager.SetOutputFormatters(outputCfg.Name, outputFormatters)
-		manager.SetOutputFormatterNames(outputCfg.Name, outputCfg.Formatters)
+		router.SetOutputFormatters(outputCfg.Name, outputFormatters)
+		router.SetOutputFormatterNames(outputCfg.Name, outputCfg.Formatters)
 
-		if err := manager.AddOutput(output); err != nil {
+		if err := router.AddOutput(output); err != nil {
 			utils.LogFatal("Failed to add output %s: %v", outputCfg.Name, err)
 		}
-		manager.SetOutputType(outputCfg.Name, outputCfg.Type)
+		router.SetOutputType(outputCfg.Name, outputCfg.Type)
 
 		utils.LogInfo("Added output: %s (type: %s, delay: %ds)", outputCfg.Name, outputCfg.Type, output.GetDelay())
 	}
@@ -121,16 +121,16 @@ func main() {
 	}()
 
 	// Start web server
-	server := web.NewServer(cfg.WebServerPort, manager)
+	server := web.NewServer(cfg.WebServerPort, router)
 	go func() {
 		if err := server.Start(ctx); err != nil {
 			utils.LogError("Web server encountered an error: %v", err)
 		}
 	}()
 
-	// Start timeline manager
-	if err := manager.Start(ctx); err != nil {
-		utils.LogFatal("Failed to start timeline manager: %v", err)
+	// Start timeline router
+	if err := router.Start(ctx); err != nil {
+		utils.LogFatal("Failed to start timeline router: %v", err)
 	}
 
 	// Wait for context cancellation
@@ -142,21 +142,21 @@ func main() {
 func createInput(cfg config.InputConfig) (core.Input, error) {
 	switch cfg.Type {
 	case "dynamic":
-		settings, err := utils.ParseJSONSettings[config.DynamicInputSettings](cfg.Settings)
+		settings, err := utils.ParseJSONSettings[config.DynamicInputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
 		return inputs.NewDynamicInput(cfg.Name, *settings), nil
 
 	case "url":
-		settings, err := utils.ParseJSONSettings[config.URLInputSettings](cfg.Settings)
+		settings, err := utils.ParseJSONSettings[config.URLInputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
 		return inputs.NewURLInput(cfg.Name, *settings), nil
 
 	case "text":
-		settings, err := utils.ParseJSONSettings[config.TextInputSettings](cfg.Settings)
+		settings, err := utils.ParseJSONSettings[config.TextInputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
@@ -171,21 +171,21 @@ func createInput(cfg config.InputConfig) (core.Input, error) {
 func createOutput(cfg config.OutputConfig) (core.Output, error) {
 	switch cfg.Type {
 	case "icecast":
-		settings, err := utils.ParseJSONSettings[config.IcecastOutputSettings](cfg.Settings)
+		settings, err := utils.ParseJSONSettings[config.IcecastOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
 		return outputs.NewIcecastOutput(cfg.Name, *settings), nil
 
 	case "file":
-		settings, err := utils.ParseJSONSettings[config.FileOutputSettings](cfg.Settings)
+		settings, err := utils.ParseJSONSettings[config.FileOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
 		return outputs.NewFileOutput(cfg.Name, *settings), nil
 
 	case "post":
-		settings, err := utils.ParseJSONSettings[config.PostOutputSettings](cfg.Settings)
+		settings, err := utils.ParseJSONSettings[config.PostOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
