@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -212,6 +213,9 @@ func (p *PostOutput) sendHTTPRequest(payload interface{}) error {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
+	// Log the request body for debugging (before any potential failures)
+	utils.LogDebug("Sending POST to %s with payload: %s", p.settings.URL, string(jsonData))
+
 	// Create HTTP request
 	req, err := http.NewRequest("POST", p.settings.URL, bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -236,10 +240,12 @@ func (p *PostOutput) sendHTTPRequest(payload interface{}) error {
 
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		// Read response body for error details
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	utils.LogDebug("Successfully sent POST to %s (%d): %s", p.settings.URL, resp.StatusCode, string(jsonData))
+	utils.LogDebug("Successfully sent POST to %s (%d)", p.settings.URL, resp.StatusCode)
 
 	return nil
 }
