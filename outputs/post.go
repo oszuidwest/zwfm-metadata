@@ -108,17 +108,17 @@ func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 	for key, value := range p.settings.PayloadMapping {
 		switch v := value.(type) {
 		case string:
-			// Handle template strings with placeholders
-			if strings.Contains(v, "${") {
-				mappedValue := p.replacePlaceholders(v, payload)
-				if !p.settings.PayloadMappingOmitEmpty || mappedValue != "" {
-					result[key] = mappedValue
+			// Check if string contains template syntax {{.field}}
+			if strings.Contains(v, "{{") && strings.Contains(v, "}}") {
+				// Process as template
+				processedValue := p.processTemplate(v, payload)
+				if !p.settings.PayloadMappingOmitEmpty || processedValue != "" {
+					result[key] = processedValue
 				}
 			} else {
-				// Direct field mapping
-				fieldValue := p.getFieldValue(v, payload)
-				if !p.settings.PayloadMappingOmitEmpty || (fieldValue != nil && fieldValue != "" && fieldValue != (*time.Time)(nil)) {
-					result[key] = fieldValue
+				// Use as static string value
+				if !p.settings.PayloadMappingOmitEmpty || v != "" {
+					result[key] = v
 				}
 			}
 		case map[string]interface{}:
@@ -127,19 +127,21 @@ func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 			hasValues := false
 			for nestedKey, nestedValue := range v {
 				if nestedStr, ok := nestedValue.(string); ok {
-					if strings.Contains(nestedStr, "${") {
-						mappedValue := p.replacePlaceholders(nestedStr, payload)
-						if !p.settings.PayloadMappingOmitEmpty || mappedValue != "" {
-							nestedResult[nestedKey] = mappedValue
-							if mappedValue != "" {
+					// Check if string contains template syntax {{.field}}
+					if strings.Contains(nestedStr, "{{") && strings.Contains(nestedStr, "}}") {
+						// Process as template
+						processedValue := p.processTemplate(nestedStr, payload)
+						if !p.settings.PayloadMappingOmitEmpty || processedValue != "" {
+							nestedResult[nestedKey] = processedValue
+							if processedValue != "" {
 								hasValues = true
 							}
 						}
 					} else {
-						fieldValue := p.getFieldValue(nestedStr, payload)
-						if !p.settings.PayloadMappingOmitEmpty || (fieldValue != nil && fieldValue != "" && fieldValue != (*time.Time)(nil)) {
-							nestedResult[nestedKey] = fieldValue
-							if fieldValue != nil && fieldValue != "" && fieldValue != (*time.Time)(nil) {
+						// Use as static string value
+						if !p.settings.PayloadMappingOmitEmpty || nestedStr != "" {
+							nestedResult[nestedKey] = nestedStr
+							if nestedStr != "" {
 								hasValues = true
 							}
 						}
@@ -178,6 +180,27 @@ func (p *PostOutput) replacePlaceholders(template string, payload PostPayload) s
 		result = strings.ReplaceAll(result, "${expires_at}", payload.ExpiresAt.Format(time.RFC3339))
 	} else {
 		result = strings.ReplaceAll(result, "${expires_at}", "")
+	}
+
+	return result
+}
+
+// processTemplate processes template strings with {{.field}} syntax
+func (p *PostOutput) processTemplate(template string, payload PostPayload) string {
+	result := template
+	
+	// Replace {{.field}} patterns with actual values
+	result = strings.ReplaceAll(result, "{{.formatted_metadata}}", payload.FormattedMetadata)
+	result = strings.ReplaceAll(result, "{{.songID}}", payload.SongID)
+	result = strings.ReplaceAll(result, "{{.title}}", payload.Title)
+	result = strings.ReplaceAll(result, "{{.artist}}", payload.Artist)
+	result = strings.ReplaceAll(result, "{{.duration}}", payload.Duration)
+	result = strings.ReplaceAll(result, "{{.updated_at}}", payload.UpdatedAt.Format(time.RFC3339))
+
+	if payload.ExpiresAt != nil {
+		result = strings.ReplaceAll(result, "{{.expires_at}}", payload.ExpiresAt.Format(time.RFC3339))
+	} else {
+		result = strings.ReplaceAll(result, "{{.expires_at}}", "")
 	}
 
 	return result

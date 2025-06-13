@@ -170,7 +170,12 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 ```
 
 **Custom Payload Mapping:**
-Define any JSON structure by mapping internal fields to your API format:
+Define any JSON structure by mapping internal fields to your API format. The `payloadMapping` supports both static values and dynamic field references using Go template syntax:
+
+- **Static values**: Any string without `{{}}` is used as-is
+- **Field references**: Use `{{.fieldname}}` to reference metadata fields
+- **Mixed templates**: Combine static text with fields, e.g., `"Now playing: {{.title}}"`
+
 ```json
 {
   "type": "post",
@@ -183,10 +188,11 @@ Define any JSON structure by mapping internal fields to your API format:
     "bearerToken": "your_secret_api_key_here",
     "payloadMapping": {
       "item": {
-        "title": "title",
-        "artist": "artist"
+        "title": "{{.title}}",
+        "artist": "{{.artist}}"
       },
-      "expires_at": "expires_at"
+      "expires_at": "{{.expires_at}}",
+      "station": "ZWFM Radio"
     },
     "payloadMappingOmitEmpty": true
   }
@@ -200,7 +206,21 @@ This configuration produces:
     "title": "Viva la Vida",
     "artist": "Coldplay"
   },
-  "expires_at": "2023-12-31T23:59:59Z"
+  "expires_at": "2023-12-31T23:59:59Z",
+  "station": "ZWFM Radio"
+}
+```
+
+**Static expires_at example:**
+To set a fixed expiration date (e.g., for shows that don't expire):
+```json
+{
+  "payloadMapping": {
+    "item": {
+      "name": "{{.title}}"
+    },
+    "expires_at": "2099-12-31T23:59:59Z"
+  }
 }
 ```
 
@@ -215,13 +235,25 @@ With `payloadMappingOmitEmpty: true`, empty fields are excluded. For example, if
 ```
 
 **Available fields for mapping:**
-- `formatted_metadata` - The formatted text after applying formatters
-- `songID` - Song identifier
-- `title` - Song title
-- `artist` - Artist name
-- `duration` - Song duration
-- `updated_at` - When the metadata was updated
-- `expires_at` - When the metadata expires (null if no expiration)
+- `{{.formatted_metadata}}` - The formatted text after applying formatters
+- `{{.songID}}` - Song identifier
+- `{{.title}}` - Song title
+- `{{.artist}}` - Artist name
+- `{{.duration}}` - Song duration
+- `{{.updated_at}}` - When the metadata was updated
+- `{{.expires_at}}` - When the metadata expires (null if no expiration)
+
+**Template examples:**
+```json
+{
+  "payloadMapping": {
+    "description": "Now playing: {{.title}} by {{.artist}}",
+    "category": "music",
+    "timestamp": "{{.updated_at}}",
+    "static_field": "This is a static value"
+  }
+}
+```
 
 **Output Options (all types):**
 - `inputs` (required) - Array of input names in priority order
