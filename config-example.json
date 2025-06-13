@@ -30,7 +30,7 @@
       "type": "text",
       "name": "default-text",
       "settings": {
-        "text": "Welcome to ZuidWest FM!"
+        "text": "Welcome to our radio station!"
       }
     }
   ],
@@ -91,11 +91,14 @@
         "bearerToken": "your_secret_api_key_here",
         "payloadMapping": {
           "item": {
-            "title": "title",
-            "artist": "artist"
+            "title": "{{.title}}",
+            "artist": "{{.artist}}"
           },
-          "expires_at": "expires_at"
-        }
+          "expires_at": "{{.expires_at}}",
+          "station": "My Radio Station",
+          "channel": "FM 101.5"
+        },
+        "omitEmpty": true
       }
     }
   ]
