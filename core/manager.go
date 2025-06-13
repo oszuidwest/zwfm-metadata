@@ -537,6 +537,10 @@ func (m *MetadataRouter) checkForExpirations() {
 					utils.LogDebug("Scheduled expiration fallback for output %s at %v (delay: %ds)", outputName, executeAt.Format("15:04:05"), int(delay.Seconds()))
 				}
 			}
+		} else if fallbackMetadata == nil {
+			// No fallback available - clear the current input
+			m.currentInputs[outputName] = ""
+			utils.LogInfo("Output %s has no available inputs - cleared current input", outputName)
 		}
 	}
 }
