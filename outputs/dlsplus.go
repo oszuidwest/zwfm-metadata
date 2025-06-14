@@ -86,7 +86,7 @@ func (o *DLSPlusOutput) addDLSPlusTags(content *strings.Builder, formattedText s
 		if pos := strings.Index(formattedText, metadata.Artist); pos >= 0 {
 			length := len(metadata.Artist) - 1
 			if length >= 0 {
-				content.WriteString(fmt.Sprintf("DL_PLUS_TAG=%d %d %d\n", dlsPlusTypeArtist, pos, length))
+				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlsPlusTypeArtist, pos, length)
 			}
 		}
 	}
@@ -96,7 +96,7 @@ func (o *DLSPlusOutput) addDLSPlusTags(content *strings.Builder, formattedText s
 		if pos := strings.Index(formattedText, metadata.Title); pos >= 0 {
 			length := len(metadata.Title) - 1
 			if length >= 0 {
-				content.WriteString(fmt.Sprintf("DL_PLUS_TAG=%d %d %d\n", dlsPlusTypeTitle, pos, length))
+				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlsPlusTypeTitle, pos, length)
 			}
 		}
 	}
