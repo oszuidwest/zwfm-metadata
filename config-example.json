@@ -100,6 +100,16 @@
         },
         "omitEmpty": true
       }
+    },
+    {
+      "type": "dlsplus",
+      "name": "dlsplus-output",
+      "inputs": ["radio-live", "nowplaying-api", "default-text"],
+      "formatters": [],
+      "settings": {
+        "delay": 0,
+        "filename": "/tmp/dlsplus.txt"
+      }
     }
   ]
 }

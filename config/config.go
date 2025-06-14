@@ -85,6 +85,12 @@ type PostOutputConfig struct {
 	OmitEmpty bool `json:"omitEmpty,omitempty"`
 }
 
+// DLSPlusOutputConfig represents configuration for DLS Plus output
+type DLSPlusOutputConfig struct {
+	Delay    int    `json:"delay"`
+	Filename string `json:"filename"`
+}
+
 // LoadConfig loads configuration from a file
 func LoadConfig(filename string) (*Config, error) {
 	file, err := os.Open(filename)

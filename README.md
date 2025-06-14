@@ -264,6 +264,42 @@ With `omitEmpty: true`, empty fields are excluded. For example, if there's no ar
 }
 ```
 
+**DLS Plus Output** - Generate DLS Plus format for DAB/DAB+ transmission
+```json
+{
+  "type": "dlsplus",
+  "name": "dlsplus-output",
+  "inputs": ["radio-live", "nowplaying-api", "default-text"],
+  "formatters": [],
+  "settings": {
+    "delay": 0,
+    "filename": "/tmp/dlsplus.txt"
+  }
+}
+```
+**Settings:**
+- `delay` (required) - Seconds to delay metadata updates
+- `filename` (required) - Full path to output file
+
+**Output Format:**
+Generates ODR-PadEnc compatible DLS Plus files with parameter blocks:
+```
+##### parameters { #####
+DL_PLUS=1
+DL_PLUS_TAG=4 0 5
+DL_PLUS_TAG=1 9 9
+##### parameters } #####
+Artist - Song Title
+```
+
+The output automatically:
+- Detects artist and title positions in the formatted text
+- Generates correct DL_PLUS_TAG entries (type 4 for ARTIST, type 1 for TITLE)
+- Handles prefixes and suffixes correctly
+- Works with any formatters applied to the text
+
+Note: ODR-PadEnc automatically re-reads DLS files before each transmission.
+
 **Output Options (all types):**
 - `inputs` (required) - Array of input names in priority order
 - `formatters` (optional) - Array of formatter names to apply
@@ -305,6 +341,7 @@ Smart processing for RDS compliance:
   4. Removes remix indicators after second hyphen
   5. Removes common suffixes: `Remix`, `Mix`, `Edit`, `Version`, `Instrumental`, `Acoustic`, `Live`, `Remaster`
   6. Truncates at word boundaries with `...` if still too long
+
 
 **Usage:**
 ```json

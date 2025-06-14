@@ -191,6 +191,13 @@ func createOutput(cfg config.OutputConfig) (core.Output, error) {
 		}
 		return outputs.NewPostOutput(cfg.Name, *settings), nil
 
+	case "dlsplus":
+		settings, err := utils.ParseJSONSettings[config.DLSPlusOutputConfig](cfg.Settings)
+		if err != nil {
+			return nil, err
+		}
+		return outputs.NewDLSPlusOutput(cfg.Name, *settings), nil
+
 	default:
 		return nil, &unknownTypeError{Type: cfg.Type}
 	}
