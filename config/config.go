@@ -3,8 +3,8 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
-	"zwfm-metadata/utils"
 )
 
 // Config represents the main configuration
@@ -97,7 +97,11 @@ func LoadConfig(filename string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open config file: %w", err)
 	}
-	defer utils.CloseFile(file)
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Warn("Failed to close config file", "error", err)
+		}
+	}()
 
 	var config Config
 	decoder := json.NewDecoder(file)

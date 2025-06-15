@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"text/template"
 	"time"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
-	"zwfm-metadata/utils"
 )
 
 // PostOutput handles sending complete metadata via HTTP POST requests with bearer token
@@ -32,12 +34,19 @@ type PostPayload struct {
 	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
 }
 
+// bufferPool is a pool of reusable bytes.Buffer objects for template processing
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
 // NewPostOutput creates a new POST output
 func NewPostOutput(name string, settings config.PostOutputConfig) *PostOutput {
 	return &PostOutput{
 		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
-		httpClient: utils.CreateHTTPClient(10 * time.Second),
+		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -93,7 +102,7 @@ func (p *PostOutput) sendPayload(payload PostPayload) {
 	}
 
 	if err := p.sendHTTPRequest(payloadToSend); err != nil {
-		utils.LogError("Failed to send POST request from output %s: %v", p.GetName(), err)
+		slog.Error("Failed to send POST request", "output", p.GetName(), "error", err)
 	}
 }
 
@@ -165,24 +174,60 @@ func (p *PostOutput) mapPayload(payload PostPayload) map[string]interface{} {
 }
 
 // processTemplate processes template strings with {{.field}} syntax
-func (p *PostOutput) processTemplate(template string, payload PostPayload) string {
-	result := template
+func (p *PostOutput) processTemplate(templateStr string, payload PostPayload) string {
+	// Create a template with custom functions
+	tmpl, err := template.New("payload").Funcs(template.FuncMap{
+		"formatTime": func(t time.Time) string {
+			return t.Format(time.RFC3339)
+		},
+		"formatTimePtr": func(t *time.Time) string {
+			if t != nil {
+				return t.Format(time.RFC3339)
+			}
+			return ""
+		},
+	}).Parse(templateStr)
 
-	// Replace {{.field}} patterns with actual values
-	result = strings.ReplaceAll(result, "{{.formatted_metadata}}", payload.FormattedMetadata)
-	result = strings.ReplaceAll(result, "{{.songID}}", payload.SongID)
-	result = strings.ReplaceAll(result, "{{.title}}", payload.Title)
-	result = strings.ReplaceAll(result, "{{.artist}}", payload.Artist)
-	result = strings.ReplaceAll(result, "{{.duration}}", payload.Duration)
-	result = strings.ReplaceAll(result, "{{.updated_at}}", payload.UpdatedAt.Format(time.RFC3339))
-
-	if payload.ExpiresAt != nil {
-		result = strings.ReplaceAll(result, "{{.expires_at}}", payload.ExpiresAt.Format(time.RFC3339))
-	} else {
-		result = strings.ReplaceAll(result, "{{.expires_at}}", "")
+	if err != nil {
+		slog.Error("Failed to parse template", "error", err)
+		return templateStr
 	}
 
-	return result
+	// Create a data structure that includes formatted times
+	data := struct {
+		FormattedMetadata string
+		SongID            string
+		Title             string
+		Artist            string
+		Duration          string
+		UpdatedAt         string
+		ExpiresAt         string
+	}{
+		FormattedMetadata: payload.FormattedMetadata,
+		SongID:            payload.SongID,
+		Title:             payload.Title,
+		Artist:            payload.Artist,
+		Duration:          payload.Duration,
+		UpdatedAt:         payload.UpdatedAt.Format(time.RFC3339),
+	}
+
+	if payload.ExpiresAt != nil {
+		data.ExpiresAt = payload.ExpiresAt.Format(time.RFC3339)
+	}
+
+	// Get buffer from pool
+	buf := bufferPool.Get().(*bytes.Buffer)
+	defer func() {
+		buf.Reset()
+		bufferPool.Put(buf)
+	}()
+
+	if err := tmpl.Execute(buf, data); err != nil {
+		slog.Error("Failed to execute template", "error", err)
+		return templateStr
+	}
+
+	return buf.String()
 }
 
 // sendHTTPRequest sends the payload to the configured URL with bearer token
@@ -194,7 +239,7 @@ func (p *PostOutput) sendHTTPRequest(payload interface{}) error {
 	}
 
 	// Log the request body for debugging (before any potential failures)
-	utils.LogDebug("Sending POST to %s with payload: %s", p.settings.URL, string(jsonData))
+	slog.Debug("Sending POST request", "url", p.settings.URL, "payload", string(jsonData))
 
 	// Create HTTP request
 	req, err := http.NewRequest("POST", p.settings.URL, bytes.NewBuffer(jsonData))
@@ -216,7 +261,11 @@ func (p *PostOutput) sendHTTPRequest(payload interface{}) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer utils.CloseBody(resp.Body)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Debug("Failed to close response body", "error", err)
+		}
+	}()
 
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -225,7 +274,7 @@ func (p *PostOutput) sendHTTPRequest(payload interface{}) error {
 		return fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	utils.LogDebug("Successfully sent POST to %s (%d)", p.settings.URL, resp.StatusCode)
+	slog.Debug("Successfully sent POST", "url", p.settings.URL, "status", resp.StatusCode)
 
 	return nil
 }

@@ -3,7 +3,7 @@ package outputs
 import (
 	"context"
 	"fmt"
-	"os"
+	"log/slog"
 	"strings"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
@@ -54,11 +54,11 @@ func (o *DLSPlusOutput) SendEnhancedMetadata(formattedText string, metadata *cor
 
 	// Write to file
 	if err := o.writeToFile(content); err != nil {
-		utils.LogError("Failed to write DLS Plus file %s: %v", o.settings.Filename, err)
+		slog.Error("Failed to write DLS Plus file", "filename", o.settings.Filename, "error", err)
 		return
 	}
 
-	utils.LogDebug("Wrote DLS Plus to %s", o.settings.Filename)
+	slog.Debug("Wrote DLS Plus", "filename", o.settings.Filename)
 }
 
 // buildDLSPlusContent creates the DLS Plus formatted content
@@ -104,15 +104,15 @@ func (o *DLSPlusOutput) addDLSPlusTags(content *strings.Builder, formattedText s
 
 // writeToFile writes the content to the configured file
 func (o *DLSPlusOutput) writeToFile(content string) error {
-	return os.WriteFile(o.settings.Filename, []byte(content), 0644)
+	return utils.WriteFile(o.settings.Filename, []byte(content))
 }
 
 // Start initializes the output
 func (o *DLSPlusOutput) Start(ctx context.Context) error {
-	utils.LogInfo("DLS Plus output writing to: %s", o.settings.Filename)
+	slog.Info("DLS Plus output writing to file", "filename", o.settings.Filename)
 
 	// Create initial empty file
-	if err := os.WriteFile(o.settings.Filename, []byte(""), 0644); err != nil {
+	if err := utils.WriteFile(o.settings.Filename, []byte("")); err != nil {
 		return fmt.Errorf("failed to create DLS Plus file: %w", err)
 	}
 
@@ -121,6 +121,6 @@ func (o *DLSPlusOutput) Start(ctx context.Context) error {
 
 // Stop cleans up the output
 func (o *DLSPlusOutput) Stop() error {
-	utils.LogDebug("Stopped DLS Plus output: %s", o.settings.Filename)
+	slog.Debug("Stopped DLS Plus output", "filename", o.settings.Filename)
 	return nil
 }

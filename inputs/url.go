@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
-	"zwfm-metadata/utils"
 )
 
 // URLInput handles URL polling input
@@ -25,7 +26,7 @@ func NewURLInput(name string, settings config.URLInputConfig) *URLInput {
 	return &URLInput{
 		InputBase:  core.NewInputBase(name),
 		settings:   settings,
-		httpClient: utils.CreateHTTPClient(10 * time.Second),
+		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -49,16 +50,33 @@ func (u *URLInput) Start(ctx context.Context) error {
 
 // poll fetches data from the URL
 func (u *URLInput) poll() {
-	resp, err := u.httpClient.Get(u.settings.URL)
+	// Validate URL before making request
+	parsedURL, err := url.Parse(u.settings.URL)
 	if err != nil {
-		utils.LogError("Failed to fetch data from URL input %s: %v", u.GetName(), err)
+		slog.Error("Invalid URL in configuration", "input", u.GetName(), "url", u.settings.URL, "error", err)
 		return
 	}
-	defer utils.CloseBody(resp.Body)
+
+	// Ensure URL has a valid scheme
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		slog.Error("URL must use http or https scheme", "input", u.GetName(), "url", u.settings.URL, "scheme", parsedURL.Scheme)
+		return
+	}
+
+	resp, err := u.httpClient.Get(u.settings.URL)
+	if err != nil {
+		slog.Error("Failed to fetch data from URL input", "input", u.GetName(), "error", err)
+		return
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Debug("Failed to close response body", "error", err)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		utils.LogError("Failed to read response from URL input %s: %v", u.GetName(), err)
+		slog.Error("Failed to read response from URL input", "input", u.GetName(), "error", err)
 		return
 	}
 
@@ -68,25 +86,21 @@ func (u *URLInput) poll() {
 		// Parse JSON and extract key
 		var data interface{}
 		if err := json.Unmarshal(body, &data); err != nil {
-			utils.LogError("Failed to parse JSON response from URL input %s: %v", u.GetName(), err)
+			slog.Error("Failed to parse JSON response", "input", u.GetName(), "error", err)
 			return
 		}
 
 		// Navigate through the JSON using the key path
-		keys := strings.Split(u.settings.JSONKey, ".")
 		current := data
-
-		for _, key := range keys {
-			switch v := current.(type) {
-			case map[string]interface{}:
-				if val, ok := v[key]; ok {
-					current = val
-				} else {
-					utils.LogWarn("JSON key '%s' not found in response from URL input %s", key, u.GetName())
-					return
-				}
-			default:
-				utils.LogWarn("Cannot navigate JSON path '%s' in response from URL input %s", u.settings.JSONKey, u.GetName())
+		for _, key := range strings.Split(u.settings.JSONKey, ".") {
+			m, ok := current.(map[string]interface{})
+			if !ok {
+				slog.Error("Cannot navigate JSON path", "input", u.GetName(), "path", u.settings.JSONKey)
+				return
+			}
+			current, ok = m[key]
+			if !ok {
+				slog.Error("Key not found in JSON", "input", u.GetName(), "key", key)
 				return
 			}
 		}

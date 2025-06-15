@@ -1,14 +1,13 @@
 package outputs
 
 import (
-	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
-	"zwfm-metadata/utils"
 )
 
 // IcecastOutput handles sending metadata to Icecast servers
@@ -24,7 +23,7 @@ func NewIcecastOutput(name string, settings config.IcecastOutputConfig) *Icecast
 	return &IcecastOutput{
 		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
-		httpClient: utils.CreateHTTPClient(10 * time.Second),
+		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -42,7 +41,7 @@ func (i *IcecastOutput) SendFormattedMetadata(formattedText string) {
 
 	// Update Icecast
 	if err := i.sendToIcecast(formattedText); err != nil {
-		utils.LogError("Failed to update Icecast server from output %s: %v", i.GetName(), err)
+		slog.Error("Failed to update Icecast server", "output", i.GetName(), "error", err)
 	}
 }
 
@@ -67,8 +66,7 @@ func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	}
 
 	// Add authentication
-	auth := base64.StdEncoding.EncodeToString([]byte(i.settings.Username + ":" + i.settings.Password))
-	req.Header.Set("Authorization", "Basic "+auth)
+	req.SetBasicAuth(i.settings.Username, i.settings.Password)
 	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
 
 	// Send request
@@ -76,13 +74,17 @@ func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer utils.CloseBody(resp.Body)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Debug("Failed to close response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	utils.LogDebug("Successfully updated Icecast %s with: %s", i.GetName(), metadata)
+	slog.Debug("Successfully updated Icecast", "output", i.GetName(), "metadata", metadata)
 
 	return nil
 }

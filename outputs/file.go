@@ -1,7 +1,7 @@
 package outputs
 
 import (
-	"os"
+	"log/slog"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
@@ -36,19 +36,15 @@ func (f *FileOutput) SendFormattedMetadata(formattedText string) {
 
 	// Write to file
 	if err := f.writeToFile(formattedText); err != nil {
-		utils.LogError("Failed to write metadata to file output %s: %v", f.GetName(), err)
+		slog.Error("Failed to write metadata to file", "output", f.GetName(), "error", err)
 	}
 }
 
 // writeToFile writes the metadata to the file
 func (f *FileOutput) writeToFile(metadata string) error {
-	// Write to file (overwrite)
-	err := os.WriteFile(f.settings.Filename, []byte(metadata), 0644)
-	if err != nil {
+	if err := utils.WriteFile(f.settings.Filename, []byte(metadata)); err != nil {
 		return err
 	}
-
-	utils.LogDebug("Successfully wrote to file %s: %s", f.settings.Filename, metadata)
-
+	slog.Debug("Successfully wrote to file", "filename", f.settings.Filename, "metadata", metadata)
 	return nil
 }

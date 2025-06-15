@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -30,14 +31,22 @@ func main() {
 	// Load configuration
 	cfg, err := config.LoadConfig(*configFile)
 	if err != nil {
-		utils.LogFatal("Failed to load configuration: %v", err)
+		slog.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
 	}
 
-	// Set debug logging based on config
-	utils.SetDebug(cfg.Debug)
+	// Configure slog based on debug setting
+	level := slog.LevelInfo
+	if cfg.Debug {
+		level = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: level,
+	}))
+	slog.SetDefault(logger)
 
 	// Log startup information
-	utils.LogInfo("Starting ZuidWest FM Metadata %s (commit: %s)", Version, Commit)
+	slog.Info("Starting ZuidWest FM Metadata", "version", Version, "commit", Commit)
 
 	// Create metadata router
 	router := core.NewMetadataRouter()
@@ -46,11 +55,13 @@ func main() {
 	for _, inputCfg := range cfg.Inputs {
 		input, err := createInput(inputCfg)
 		if err != nil {
-			utils.LogFatal("Failed to create input %s: %v", inputCfg.Name, err)
+			slog.Error("Failed to create input", "name", inputCfg.Name, "error", err)
+			os.Exit(1)
 		}
 
 		if err := router.AddInput(input); err != nil {
-			utils.LogFatal("Failed to add input %s: %v", inputCfg.Name, err)
+			slog.Error("Failed to add input", "name", inputCfg.Name, "error", err)
+			os.Exit(1)
 		}
 
 		// Store input type for status display
@@ -59,9 +70,9 @@ func main() {
 		// Configure prefix/suffix for this input
 		if inputCfg.Prefix != "" || inputCfg.Suffix != "" {
 			router.SetInputPrefixSuffix(inputCfg.Name, inputCfg.Prefix, inputCfg.Suffix)
-			utils.LogInfo("Added input: %s (type: %s, prefix: %q, suffix: %q)", inputCfg.Name, inputCfg.Type, inputCfg.Prefix, inputCfg.Suffix)
+			slog.Info("Added input", "name", inputCfg.Name, "type", inputCfg.Type, "prefix", inputCfg.Prefix, "suffix", inputCfg.Suffix)
 		} else {
-			utils.LogInfo("Added input: %s (type: %s)", inputCfg.Name, inputCfg.Type)
+			slog.Info("Added input", "name", inputCfg.Name, "type", inputCfg.Type)
 		}
 	}
 
@@ -69,7 +80,8 @@ func main() {
 	for _, outputCfg := range cfg.Outputs {
 		output, err := createOutput(outputCfg)
 		if err != nil {
-			utils.LogFatal("Failed to create output %s: %v", outputCfg.Name, err)
+			slog.Error("Failed to create output", "name", outputCfg.Name, "error", err)
+			os.Exit(1)
 		}
 
 		// Set inputs for output
@@ -77,7 +89,8 @@ func main() {
 		for _, inputName := range outputCfg.Inputs {
 			input, exists := router.GetInput(inputName)
 			if !exists {
-				utils.LogFatal("Input %s not found for output %s", inputName, outputCfg.Name)
+				slog.Error("Input not found for output", "input", inputName, "output", outputCfg.Name)
+				os.Exit(1)
 			}
 			outputInputs = append(outputInputs, input)
 		}
@@ -91,7 +104,8 @@ func main() {
 		for _, formatterName := range outputCfg.Formatters {
 			formatter, err := formatters.GetFormatter(formatterName)
 			if err != nil {
-				utils.LogFatal("Failed to get formatter %s: %v", formatterName, err)
+				slog.Error("Failed to get formatter", "formatter", formatterName, "error", err)
+				os.Exit(1)
 			}
 			outputFormatters = append(outputFormatters, formatter)
 		}
@@ -99,11 +113,12 @@ func main() {
 		router.SetOutputFormatterNames(outputCfg.Name, outputCfg.Formatters)
 
 		if err := router.AddOutput(output); err != nil {
-			utils.LogFatal("Failed to add output %s: %v", outputCfg.Name, err)
+			slog.Error("Failed to add output", "name", outputCfg.Name, "error", err)
+			os.Exit(1)
 		}
 		router.SetOutputType(outputCfg.Name, outputCfg.Type)
 
-		utils.LogInfo("Added output: %s (type: %s, delay: %ds)", outputCfg.Name, outputCfg.Type, output.GetDelay())
+		slog.Info("Added output", "name", outputCfg.Name, "type", outputCfg.Type, "delay", output.GetDelay())
 	}
 
 	// Create context with cancellation
@@ -116,7 +131,7 @@ func main() {
 
 	go func() {
 		<-sigChan
-		utils.LogInfo("Shutdown signal received")
+		slog.Info("Shutdown signal received")
 		cancel()
 	}()
 
@@ -124,18 +139,19 @@ func main() {
 	server := web.NewServer(cfg.WebServerPort, router)
 	go func() {
 		if err := server.Start(ctx); err != nil {
-			utils.LogError("Web server encountered an error: %v", err)
+			slog.Error("Web server encountered an error", "error", err)
 		}
 	}()
 
 	// Start timeline router
 	if err := router.Start(ctx); err != nil {
-		utils.LogFatal("Failed to start timeline router: %v", err)
+		slog.Error("Failed to start timeline router", "error", err)
+		os.Exit(1)
 	}
 
 	// Wait for context cancellation
 	<-ctx.Done()
-	utils.LogInfo("Shutting down...")
+	slog.Info("Shutting down...")
 }
 
 // createInput creates an input based on configuration

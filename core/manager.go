@@ -3,11 +3,11 @@ package core
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"sync"
 	"time"
 	"zwfm-metadata/formatters"
-	"zwfm-metadata/utils"
 )
 
 // InputPrefixSuffix represents prefix/suffix configuration for an input
@@ -321,7 +321,7 @@ func (m *MetadataRouter) Start(ctx context.Context) error {
 		// Start the input
 		go func(n string, i Input) {
 			if err := i.Start(ctx); err != nil {
-				utils.LogError("Failed to start input %s: %v", n, err)
+				slog.Error("Failed to start input", "name", n, "error", err)
 			}
 		}(name, input)
 
@@ -338,12 +338,12 @@ func (m *MetadataRouter) Start(ctx context.Context) error {
 	for name, output := range m.outputs {
 		go func(n string, o Output) {
 			if err := o.Start(ctx); err != nil {
-				utils.LogError("Failed to start output %s: %v", n, err)
+				slog.Error("Failed to start output", "name", n, "error", err)
 			}
 		}(name, output)
 	}
 
-	utils.LogInfo("Started centralized metadata router")
+	slog.Info("Started centralized metadata router")
 
 	return nil
 }
@@ -419,9 +419,9 @@ func (m *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata *
 		m.timeline.addUpdate(update)
 
 		if delay > 0 {
-			utils.LogDebug("Scheduled update for output %s at %v (delay: %ds)", outputName, executeAt.Format("15:04:05"), int(delay.Seconds()))
+			slog.Debug("Scheduled update for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
 		} else {
-			utils.LogDebug("Scheduled immediate update for output %s", outputName)
+			slog.Debug("Scheduled immediate update for output", "output", outputName)
 		}
 	}
 }
@@ -451,7 +451,7 @@ func (m *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	utils.LogInfo("Started expiration checker (1 second interval)")
+	slog.Info("Started expiration checker (1 second interval)")
 
 	for {
 		select {
@@ -534,13 +534,13 @@ func (m *MetadataRouter) checkForExpirations() {
 					}
 
 					m.timeline.addUpdate(update)
-					utils.LogDebug("Scheduled expiration fallback for output %s at %v (delay: %ds)", outputName, executeAt.Format("15:04:05"), int(delay.Seconds()))
+					slog.Debug("Scheduled expiration fallback for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
 				}
 			}
 		} else if fallbackMetadata == nil {
 			// No fallback available - clear the current input
 			m.currentInputs[outputName] = ""
-			utils.LogInfo("Output %s has no available inputs - cleared current input", outputName)
+			slog.Info("Output has no available inputs - cleared current input", "output", outputName)
 		}
 	}
 }
@@ -586,7 +586,7 @@ func (m *MetadataRouter) startTimelineProcessor(ctx context.Context) {
 	ticker := time.NewTicker(100 * time.Millisecond) // Check every 100ms for precision
 	defer ticker.Stop()
 
-	utils.LogInfo("Started timeline processor (100ms interval)")
+	slog.Info("Started timeline processor (100ms interval)")
 
 	for {
 		select {
@@ -647,7 +647,7 @@ func (m *MetadataRouter) executeUpdate(update ScheduledUpdate) {
 	m.mu.Unlock()
 
 	// Execute the update
-	utils.LogDebug("Executing %s update for output %s: %s", update.UpdateType, update.OutputName, formattedText)
+	slog.Debug("Executing update for output", "update_type", update.UpdateType, "output", update.OutputName, "text", formattedText)
 
 	// Check if output supports enhanced metadata processing
 	if enhancedOutput, ok := update.Output.(EnhancedOutput); ok {
@@ -723,7 +723,7 @@ func (t *Timeline) cancelUpdatesForOutput(outputName string) {
 	t.updates = filtered
 
 	if cancelCount > 0 {
-		utils.LogDebug("Cancelled %d pending updates for output %s", cancelCount, outputName)
+		slog.Debug("Cancelled pending updates for output", "count", cancelCount, "output", outputName)
 	}
 }
 

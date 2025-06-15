@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"zwfm-metadata/core"
 	"zwfm-metadata/inputs"
-	"zwfm-metadata/utils"
 
 	"github.com/gorilla/mux"
 )
@@ -56,12 +56,12 @@ func (s *Server) Start(ctx context.Context) error {
 		Handler: router,
 	}
 
-	utils.LogInfo("Starting web server on port %d", s.port)
+	slog.Info("Starting web server", "port", s.port)
 
 	// Start server in a goroutine
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			utils.LogError("HTTP server encountered an error: %v", err)
+			slog.Error("HTTP server encountered an error", "error", err)
 		}
 	}()
 
@@ -69,7 +69,7 @@ func (s *Server) Start(ctx context.Context) error {
 	<-ctx.Done()
 
 	// Shutdown gracefully
-	utils.LogInfo("Shutting down web server...")
+	slog.Info("Shutting down web server")
 	return s.server.Shutdown(context.Background())
 }
 
@@ -128,7 +128,7 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	if _, err := fmt.Fprintf(w, "OK"); err != nil {
-		utils.LogWarn("Failed to write HTTP response: %v", err)
+		slog.Warn("Failed to write HTTP response", "error", err)
 	}
 }
 
@@ -137,7 +137,7 @@ func (s *Server) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	if _, err := w.Write([]byte(dashboardHTML())); err != nil {
-		utils.LogError("Failed to write dashboard HTML response: %v", err)
+		slog.Error("Failed to write dashboard HTML response", "error", err)
 	}
 }
 
