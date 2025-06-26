@@ -1,6 +1,8 @@
 {
   "webServerPort": 9000,
   "debug": false,
+  "stationName": "My Radio Station",
+  "brandColor": "#e6007e",
   "inputs": [
     {
       "type": "dynamic",

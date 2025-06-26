@@ -1,22 +1,20 @@
 package web
 
 // dashboardHTML returns the HTML for the dashboard
-func dashboardHTML() string {
+func dashboardHTML(stationName, brandColor string) string {
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZuidWest FM Metadata</title>
+    <title>` + stationName + ` Metadata</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        'brand': '#e6007e',
-                        'brand-light': '#f0d0e4',
-                        'brand-dark': '#b30062',
+                        'brand': '` + brandColor + `',
                         'success': '#10b981',
                         'danger': '#ef4444',
                         'warning': '#f59e0b',
@@ -40,14 +38,14 @@ func dashboardHTML() string {
     <div class="max-w-7xl mx-auto p-5">
         <!-- Header -->
         <div class="mb-8">
-            <h1 class="text-4xl font-bold text-brand mb-2">ZuidWest FM Metadata</h1>
+            <h1 class="text-4xl font-bold text-brand mb-2">` + stationName + ` Metadata</h1>
             <p class="text-muted text-lg">Real-time metadata routing and synchronization</p>
         </div>
         
         <!-- Statistics -->
         <div id="stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 mb-10">
             <div class="bg-white rounded-xl shadow-md p-4 sm:p-6 text-center hover:shadow-xl transform hover:-translate-y-1 transition-all">
-                <div class="text-3xl sm:text-5xl font-bold bg-gradient-to-r from-brand to-brand-dark bg-clip-text text-transparent mb-2" id="total-inputs">-</div>
+                <div class="text-3xl sm:text-5xl font-bold text-brand mb-2" id="total-inputs">-</div>
                 <div class="text-gray-700 text-sm sm:text-lg font-medium">Total Inputs</div>
             </div>
             <div class="bg-white rounded-xl shadow-md p-4 sm:p-6 text-center hover:shadow-xl transform hover:-translate-y-1 transition-all">
@@ -55,11 +53,11 @@ func dashboardHTML() string {
                 <div class="text-gray-700 text-sm sm:text-lg font-medium">Available Inputs</div>
             </div>
             <div class="bg-white rounded-xl shadow-md p-4 sm:p-6 text-center hover:shadow-xl transform hover:-translate-y-1 transition-all">
-                <div class="text-3xl sm:text-5xl font-bold bg-gradient-to-r from-brand to-brand-dark bg-clip-text text-transparent mb-2" id="total-outputs">-</div>
+                <div class="text-3xl sm:text-5xl font-bold text-brand mb-2" id="total-outputs">-</div>
                 <div class="text-gray-700 text-sm sm:text-lg font-medium">Total Outputs</div>
             </div>
             <div class="bg-white rounded-xl shadow-md p-4 sm:p-6 text-center hover:shadow-xl transform hover:-translate-y-1 transition-all">
-                <div class="text-3xl sm:text-5xl font-bold bg-gradient-to-r from-brand to-brand-dark bg-clip-text text-transparent mb-2" id="active-flows">-</div>
+                <div class="text-3xl sm:text-5xl font-bold text-brand mb-2" id="active-flows">-</div>
                 <div class="text-gray-700 text-sm sm:text-lg font-medium">Active Flows</div>
             </div>
         </div>
@@ -218,10 +216,10 @@ func dashboardJS() string {
                 
                 // Build card HTML
                 return '<div class="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-200 overflow-hidden" data-input-name="' + input.name + '" data-changed="' + hasChanged + '">' +
-                    '<div class="bg-gradient-to-r from-brand to-brand-dark p-6 text-white">' +
+                    '<div class="bg-brand p-6 text-white">' +
                         '<div class="flex justify-between items-center">' +
                             '<h3 class="text-xl font-bold">' + input.name + '</h3>' +
-                            '<span class="bg-white bg-opacity-20 backdrop-blur px-3 py-1 rounded-full text-sm font-medium">' + input.type + '</span>' +
+                            '<span class="backdrop-blur-sm bg-white/20 px-4 py-1.5 rounded-full text-sm font-medium text-white ring-1 ring-white/40 shadow-sm">' + input.type + '</span>' +
                         '</div>' +
                     '</div>' +
                     '<div class="p-6">' +
@@ -263,11 +261,11 @@ func dashboardJS() string {
             const html = outputs.map(output => {
                 // Build tags
                 const inputsHtml = output.inputs
-                    .map(input => '<span class="bg-gray-100 border border-gray-300 px-2.5 py-1 rounded-full text-sm text-gray-700">' + input + '</span>')
+                    .map(input => '<span class="bg-gray-100 px-3.5 py-1.5 rounded-full text-sm text-gray-800 font-medium ring-1 ring-gray-300 hover:bg-gray-200 transition-colors">' + input + '</span>')
                     .join(' ');
                 
                 const formattersHtml = output.formatters
-                    .map(formatter => '<span class="bg-brand-light text-brand-dark px-2.5 py-1 rounded-full text-sm font-medium">' + formatter + '</span>')
+                    .map(formatter => '<span class="bg-brand/15 px-3.5 py-1.5 rounded-full text-sm text-brand font-semibold ring-1 ring-brand/30 hover:bg-brand/20 transition-colors">' + formatter + '</span>')
                     .join(' ');
                 
                 // Check for changes
@@ -279,7 +277,7 @@ func dashboardJS() string {
                     '<div class="bg-gradient-to-r from-gray-700 to-gray-900 p-6 text-white">' +
                         '<div class="flex justify-between items-center">' +
                             '<h3 class="text-xl font-bold">' + output.name + '</h3>' +
-                            '<span class="bg-white bg-opacity-20 backdrop-blur px-3 py-1 rounded-full text-sm font-medium">' + output.type + '</span>' +
+                            '<span class="backdrop-blur-sm bg-white/20 px-4 py-1.5 rounded-full text-sm font-medium text-white ring-1 ring-white/40 shadow-sm">' + output.type + '</span>' +
                         '</div>' +
                     '</div>' +
                     '<div class="p-6">' +

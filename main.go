@@ -46,7 +46,7 @@ func main() {
 	slog.SetDefault(logger)
 
 	// Log startup information
-	slog.Info("Starting ZuidWest FM Metadata", "version", Version, "commit", Commit)
+	slog.Info("Starting metadata router", "station", cfg.StationName, "version", Version, "commit", Commit)
 
 	// Create metadata router
 	router := core.NewMetadataRouter()
@@ -136,7 +136,7 @@ func main() {
 	}()
 
 	// Start web server
-	server := web.NewServer(cfg.WebServerPort, router)
+	server := web.NewServer(cfg.WebServerPort, router, cfg.StationName, cfg.BrandColor)
 	go func() {
 		if err := server.Start(ctx); err != nil {
 			slog.Error("Web server encountered an error", "error", err)

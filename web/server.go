@@ -15,9 +15,11 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	port   int
-	router *core.MetadataRouter
-	server *http.Server
+	port        int
+	router      *core.MetadataRouter
+	server      *http.Server
+	stationName string
+	brandColor  string
 }
 
 // OutputStatus represents the status of an output
@@ -31,10 +33,12 @@ type OutputStatus struct {
 }
 
 // NewServer creates a new server instance
-func NewServer(port int, router *core.MetadataRouter) *Server {
+func NewServer(port int, router *core.MetadataRouter, stationName, brandColor string) *Server {
 	return &Server{
-		port:   port,
-		router: router,
+		port:        port,
+		router:      router,
+		stationName: stationName,
+		brandColor:  brandColor,
 	}
 }
 
@@ -136,7 +140,7 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	if _, err := w.Write([]byte(dashboardHTML())); err != nil {
+	if _, err := w.Write([]byte(dashboardHTML(s.stationName, s.brandColor))); err != nil {
 		slog.Error("Failed to write dashboard HTML response", "error", err)
 	}
 }

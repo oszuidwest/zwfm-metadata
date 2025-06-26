@@ -11,6 +11,8 @@ import (
 type Config struct {
 	WebServerPort int            `json:"webServerPort"`
 	Debug         bool           `json:"debug,omitempty"`
+	StationName   string         `json:"stationName,omitempty"`
+	BrandColor    string         `json:"brandColor,omitempty"`
 	Inputs        []InputConfig  `json:"inputs"`
 	Outputs       []OutputConfig `json:"outputs"`
 	Formatters    []string       `json:"formatters,omitempty"`
@@ -112,6 +114,16 @@ func LoadConfig(filename string) (*Config, error) {
 	// Set default port if not specified
 	if config.WebServerPort == 0 {
 		config.WebServerPort = 9000
+	}
+
+	// Set default station name if not specified
+	if config.StationName == "" {
+		config.StationName = "ZuidWest FM"
+	}
+
+	// Set default brand color if not specified
+	if config.BrandColor == "" {
+		config.BrandColor = "#e6007e"
 	}
 
 	return &config, nil
