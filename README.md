@@ -1,6 +1,6 @@
 # ZWFM Metadata
 
-Metadata routing middleware designed for ZuidWest FM and Radio Rucphen in the Netherlands. Routes metadata from inputs (playout software, APIs, static text) to outputs (Icecast, files, webhooks) with priority-based fallback and configurable delays.
+Metadata routing middleware for radio stations. Routes metadata from inputs (playout software, APIs, static text) to outputs (Icecast, files, webhooks) with priority-based fallback and configurable delays. Originally designed for ZuidWest FM in the Netherlands.
 
 ## Quick Start
 
@@ -12,6 +12,29 @@ cp config-example.json config.json
 ```
 
 Dashboard: http://localhost:9000
+
+## Configuration
+
+The application supports basic styling customization through the configuration file:
+
+```json
+{
+  "webServerPort": 9000,
+  "debug": false,
+  "stationName": "Your Radio Station",
+  "brandColor": "#e6007e",
+  "inputs": [...],
+  "outputs": [...]
+}
+```
+
+**Global Settings:**
+- `webServerPort` (default: 9000) - Port for the web dashboard and API
+- `debug` (default: false) - Enable debug logging
+- `stationName` (default: "ZuidWest FM") - Station name displayed in dashboard and browser title
+- `brandColor` (default: "#e6007e") - Brand color (hex) used throughout the dashboard UI
+
+The dashboard automatically adapts to your brand colors, using them for headers, badges, and accent elements throughout the interface.
 
 ## Inputs
 
