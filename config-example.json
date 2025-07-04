@@ -1,7 +1,7 @@
 {
   "webServerPort": 9000,
   "debug": false,
-  "stationName": "My Radio Station",
+  "stationName": "Your Radio Station",
   "brandColor": "#e6007e",
   "inputs": [
     {
@@ -17,6 +17,19 @@
       }
     },
     {
+      "type": "dynamic",
+      "name": "radio-automation",
+      "prefix": "",
+      "suffix": "",
+      "settings": {
+        "secret": "automation-secret",
+        "expiration": {
+          "type": "fixed",
+          "minutes": 5
+        }
+      }
+    },
+    {
       "type": "url",
       "name": "nowplaying-api",
       "prefix": "From API: ",
@@ -24,7 +37,7 @@
       "settings": {
         "url": "https://api.example.com/nowplaying",
         "jsonParsing": true,
-        "jsonKey": "radio.programs.current",
+        "jsonKey": "data.current.title",
         "pollingInterval": 30
       }
     },
@@ -32,7 +45,7 @@
       "type": "text",
       "name": "default-text",
       "settings": {
-        "text": "Welcome to our radio station!"
+        "text": "Welcome to Your Radio Station!"
       }
     }
   ],
@@ -40,8 +53,8 @@
     {
       "type": "icecast",
       "name": "main-stream",
-      "inputs": ["radio-live", "nowplaying-api", "default-text"],
-      "formatters": ["ucwords"],
+      "inputs": ["radio-live", "radio-automation", "nowplaying-api", "default-text"],
+      "formatters": ["ucwords", "rds"],
       "settings": {
         "delay": 2,
         "server": "localhost",
@@ -54,7 +67,7 @@
     {
       "type": "file",
       "name": "nowplaying-file",
-      "inputs": ["radio-live", "default-text"],
+      "inputs": ["radio-live", "radio-automation", "default-text"],
       "formatters": ["uppercase"],
       "settings": {
         "delay": 0,
@@ -62,45 +75,40 @@
       }
     },
     {
-      "type": "file",
-      "name": "rds-output",
-      "inputs": ["radio-live", "nowplaying-api", "default-text"],
-      "formatters": ["rds"],
-      "settings": {
-        "delay": 0,
-        "filename": "/tmp/rds.txt"
-      }
-    },
-    {
       "type": "post",
-      "name": "full-webhook",
+      "name": "webhook-default",
       "inputs": ["radio-live", "nowplaying-api", "default-text"],
       "formatters": ["ucwords"],
       "settings": {
         "delay": 1,
-        "url": "https://api.example.com/metadata/full",
+        "url": "https://api.example.com/metadata",
         "bearerToken": "your-bearer-token-here"
       }
     },
     {
       "type": "post",
-      "name": "custom-api",
+      "name": "webhook-custom",
       "inputs": ["radio-live", "nowplaying-api", "default-text"],
-      "formatters": ["ucwords"],
+      "formatters": ["lowercase"],
       "settings": {
         "delay": 0,
-        "url": "http://localhost:8080/track",
-        "bearerToken": "your_secret_api_key_here",
+        "url": "https://api.example.com/custom-metadata",
+        "bearerToken": "your-bearer-token-here",
+        "omitEmpty": true,
         "payloadMapping": {
-          "item": {
-            "title": "{{.title}}",
-            "artist": "{{.artist}}"
+          "station": "Your Radio Station",
+          "now_playing": {
+            "song": "{{.title}}",
+            "artist": "{{.artist}}",
+            "full_text": "{{.formatted_metadata}}"
           },
-          "expires_at": "{{.expires_at}}",
-          "station": "My Radio Station",
-          "channel": "FM 101.5"
-        },
-        "omitEmpty": true
+          "metadata": {
+            "song_id": "{{.songID}}",
+            "duration": "{{.duration}}",
+            "timestamp": "{{.updated_at}}",
+            "expires": "{{.expires_at}}"
+          }
+        }
       }
     },
     {
@@ -111,6 +119,34 @@
       "settings": {
         "delay": 0,
         "filename": "/tmp/dlsplus.txt"
+      }
+    },
+    {
+      "type": "websocket",
+      "name": "websocket-server",
+      "inputs": ["radio-live", "nowplaying-api", "default-text"],
+      "formatters": ["ucwords"],
+      "settings": {
+        "delay": 0,
+        "address": ":8080",
+        "path": "/metadata"
+      }
+    },
+    {
+      "type": "websocket",
+      "name": "websocket-custom",
+      "inputs": ["radio-live", "nowplaying-api", "default-text"],
+      "formatters": ["ucwords"],
+      "settings": {
+        "delay": 0,
+        "address": ":8081",
+        "path": "/ws",
+        "payloadMapping": {
+          "event": "{{.type}}",
+          "station": "Your Radio Station",
+          "message": "Now playing: {{.title}} by {{.artist}}",
+          "timestamp": "{{.updated_at}}"
+        }
       }
     }
   ]
