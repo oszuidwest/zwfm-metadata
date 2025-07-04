@@ -1,0 +1,153 @@
+package utils
+
+import (
+	"bytes"
+	"log/slog"
+	"strings"
+	"sync"
+	"text/template"
+	"time"
+)
+
+// bufferPool is a pool of reusable bytes.Buffer objects for template processing
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
+// PayloadMapper handles custom payload transformation based on configuration
+type PayloadMapper struct {
+	mapping   map[string]interface{}
+	omitEmpty bool
+}
+
+// NewPayloadMapper creates a new payload mapper with the given mapping configuration
+func NewPayloadMapper(mapping map[string]interface{}) *PayloadMapper {
+	return &PayloadMapper{
+		mapping: mapping,
+	}
+}
+
+// WithOmitEmpty creates a new payload mapper that omits empty values
+func NewPayloadMapperWithOmitEmpty(mapping map[string]interface{}, omitEmpty bool) *PayloadMapper {
+	return &PayloadMapper{
+		mapping:   mapping,
+		omitEmpty: omitEmpty,
+	}
+}
+
+// MapPayload transforms the input data according to the configured mapping
+func (pm *PayloadMapper) MapPayload(data interface{}) map[string]interface{} {
+	if pm.mapping == nil {
+		return nil
+	}
+
+	result := make(map[string]interface{})
+	pm.processMapping(pm.mapping, result, data)
+	return result
+}
+
+// processMapping recursively processes the mapping configuration
+func (pm *PayloadMapper) processMapping(mapping map[string]interface{}, result map[string]interface{}, data interface{}) {
+	for key, value := range mapping {
+		switch v := value.(type) {
+		case string:
+			// Check if string contains template syntax
+			if strings.Contains(v, "{{") && strings.Contains(v, "}}") {
+				processedValue := pm.processTemplate(v, data)
+				if !pm.omitEmpty || processedValue != "" {
+					result[key] = processedValue
+				}
+			} else {
+				if !pm.omitEmpty || v != "" {
+					result[key] = v
+				}
+			}
+		case map[string]interface{}:
+			// Handle nested objects
+			nestedResult := make(map[string]interface{})
+			pm.processMapping(v, nestedResult, data)
+			// Only include nested objects if they have values or omitEmpty is false
+			if !pm.omitEmpty || len(nestedResult) > 0 {
+				result[key] = nestedResult
+			}
+		default:
+			// Static values (numbers, booleans, etc.)
+			result[key] = value
+		}
+	}
+}
+
+// processTemplate executes a template string with the provided data
+func (pm *PayloadMapper) processTemplate(templateStr string, data interface{}) string {
+	// Create template with custom functions
+	tmpl, err := template.New("payload").Funcs(template.FuncMap{
+		"formatTime": func(t time.Time) string {
+			return t.Format(time.RFC3339)
+		},
+		"formatTimePtr": func(t *time.Time) string {
+			if t != nil {
+				return t.Format(time.RFC3339)
+			}
+			return ""
+		},
+		// Add more helper functions as needed
+		"lower": strings.ToLower,
+		"upper": strings.ToUpper,
+		"trim":  strings.TrimSpace,
+	}).Parse(templateStr)
+
+	if err != nil {
+		slog.Error("Failed to parse template", "error", err, "template", templateStr)
+		return templateStr
+	}
+
+	// Get buffer from pool
+	buf := bufferPool.Get().(*bytes.Buffer)
+	defer func() {
+		buf.Reset()
+		bufferPool.Put(buf)
+	}()
+
+	// Execute template
+	if err := tmpl.Execute(buf, data); err != nil {
+		slog.Error("Failed to execute template", "error", err, "template", templateStr)
+		return templateStr
+	}
+
+	return buf.String()
+}
+
+// MetadataPayload represents the common metadata structure for payload mapping
+type MetadataPayload struct {
+	Type              string     `json:"type"`
+	FormattedMetadata string     `json:"formatted_metadata"`
+	SongID            string     `json:"songID"`
+	Title             string     `json:"title"`
+	Artist            string     `json:"artist"`
+	Duration          string     `json:"duration"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
+}
+
+// ToTemplateData converts MetadataPayload to a structure suitable for template execution
+func (mp *MetadataPayload) ToTemplateData() map[string]interface{} {
+	data := map[string]interface{}{
+		"type":               mp.Type,
+		"formatted_metadata": mp.FormattedMetadata,
+		"songID":             mp.SongID,
+		"title":              mp.Title,
+		"artist":             mp.Artist,
+		"duration":           mp.Duration,
+		"updated_at":         mp.UpdatedAt.Format(time.RFC3339),
+	}
+
+	if mp.ExpiresAt != nil {
+		data["expires_at"] = mp.ExpiresAt.Format(time.RFC3339)
+	} else {
+		data["expires_at"] = ""
+	}
+
+	return data
+}

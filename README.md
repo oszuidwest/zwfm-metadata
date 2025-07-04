@@ -115,6 +115,25 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 
 ## Outputs
 
+Control where formatted metadata is sent.
+
+### Output Feature Comparison
+
+| Output Type | Purpose | Enhanced Metadata | Custom Payload Mapping | Authentication |
+|-------------|---------|-------------------|------------------------|----------------|
+| **Icecast** | Update streaming server metadata | ❌ | ❌ | Basic Auth |
+| **File** | Write to local filesystem | ❌ | ❌ | N/A |
+| **POST** | Send via HTTP webhooks | ✅ | ✅ | Bearer Token |
+| **DLS Plus** | DAB/DAB+ radio text | ✅ | ❌ | N/A |
+| **WebSocket** | Real-time browser/app updates | ✅ | ✅ | N/A |
+
+**Legend:**
+- **Enhanced Metadata**: Receives full metadata details (title, artist, duration, etc.) not just formatted text
+- **Custom Payload Mapping**: Supports transforming output to match any JSON structure
+- **Authentication**: Security mechanism supported
+
+### Output Configurations
+
 **Icecast Output** - Update streaming server metadata
 ```json
 {
@@ -157,18 +176,18 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 - `delay` (required) - Seconds to delay metadata updates
 - `filename` (required) - Full path to output file
 
-
-**POST Output** - Complete metadata POST with bearer token
+**POST Output** - Send metadata via HTTP webhooks
 ```json
 {
   "type": "post",
-  "name": "full-webhook",
+  "name": "webhook",
   "inputs": ["radio-live", "nowplaying-api", "default-text"],
   "formatters": ["ucwords"],
   "settings": {
     "delay": 1,
     "url": "https://api.example.com/metadata",
-    "bearerToken": "your-bearer-token-here"
+    "bearerToken": "your-bearer-token-here",
+    "payloadMapping": {...}  // See Custom Payload Mapping section
   }
 }
 ```
@@ -176,115 +195,44 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 - `delay` (required) - Seconds to delay metadata updates
 - `url` (required) - Webhook endpoint URL
 - `bearerToken` (optional) - Authorization bearer token
-- `payloadMapping` (optional) - Custom JSON payload structure mapping
-- `omitEmpty` (optional, default: false) - Omit empty fields from custom payload (TODO: Remove when padenc-api supports empty fields)
+- `payloadMapping` (optional) - Custom JSON payload structure (see [Custom Payload Mapping](#custom-payload-mapping))
+- `omitEmpty` (optional, default: false) - Omit empty fields from custom payload
 
-**Default JSON Payload (when payloadMapping is not specified):**
+**WebSocket Output** - Broadcast metadata to connected clients
 ```json
 {
-  "formatted_metadata": "Artist - Title",
-  "songID": "12345",
-  "title": "Title",
-  "artist": "Artist",
-  "duration": "3:45",
-  "updated_at": "2023-12-01T15:30:00Z",
-  "expires_at": "2023-12-01T15:33:00Z"
-}
-```
-
-**Custom Payload Mapping:**
-Define any JSON structure by mapping internal fields to your API format. The `payloadMapping` supports both static values and dynamic field references using Go template syntax:
-
-- **Static values**: Any string without `{{}}` is used as-is (you can add any custom fields!)
-- **Field references**: Use `{{.fieldname}}` to reference metadata fields
-- **Mixed templates**: Combine static text with fields, e.g., `"Now playing: {{.title}}"`
-
-**Example configuration** (adapt to your needs):
-```json
-{
-  "type": "post",
-  "name": "custom-api",
+  "type": "websocket",
+  "name": "websocket-server",
   "inputs": ["radio-live", "nowplaying-api", "default-text"],
   "formatters": ["ucwords"],
   "settings": {
     "delay": 0,
-    "url": "http://localhost:8080/track",
-    "bearerToken": "your_secret_api_key_here",
-    "payloadMapping": {
-      "item": {
-        "title": "{{.title}}",
-        "artist": "{{.artist}}"
-      },
-      "expires_at": "{{.expires_at}}",
-      "station": "My Radio Station",
-      "channel": "FM 101.5",
-      "custom_field": "any value you want"
-    },
-    "omitEmpty": true
+    "address": ":8080",
+    "path": "/metadata",
+    "payloadMapping": {...}  // See Custom Payload Mapping section
   }
 }
 ```
+**Settings:**
+- `delay` (required) - Seconds to delay metadata updates
+- `address` (required) - Address to bind the WebSocket server (e.g., ":8080", "localhost:8080")
+- `path` (required) - URL path for WebSocket connections (e.g., "/metadata", "/ws")
+- `payloadMapping` (optional) - Custom JSON message structure (see [Custom Payload Mapping](#custom-payload-mapping))
 
-**Example output** (with the above configuration):
-```json
-{
-  "item": {
-    "title": "Viva la Vida",
-    "artist": "Coldplay"
-  },
-  "expires_at": "2023-12-31T23:59:59Z",
-  "station": "My Radio Station",
-  "channel": "FM 101.5",
-  "custom_field": "any value you want"
-}
-```
+**Client Connection Example (JavaScript):**
+```javascript
+const ws = new WebSocket('ws://localhost:8080/metadata');
 
-Note: The fields `station`, `channel`, and `custom_field` are examples of static custom fields you can add. You can name them anything and add as many as your API requires!
+ws.onmessage = (event) => {
+  const metadata = JSON.parse(event.data);
+  console.log('Metadata update:', metadata);
+  // Update your UI with the new metadata
+};
 
-**Static expires_at example:**
-To set a fixed expiration date (e.g., for shows that don't expire):
-```json
-{
-  "payloadMapping": {
-    "item": {
-      "name": "{{.title}}"
-    },
-    "expires_at": "2099-12-31T23:59:59Z"
-  }
-}
-```
-
-With `omitEmpty: true`, empty fields are excluded. For example, if there's no artist:
-```json
-{
-  "item": {
-    "title": "Viva la Vida"
-  },
-  "expires_at": "2023-12-31T23:59:59Z"
-}
-```
-
-**Available fields for mapping:**
-- `{{.formatted_metadata}}` - The formatted text after applying formatters
-- `{{.songID}}` - Song identifier
-- `{{.title}}` - Song title
-- `{{.artist}}` - Artist name
-- `{{.duration}}` - Song duration
-- `{{.updated_at}}` - When the metadata was updated
-- `{{.expires_at}}` - When the metadata expires (null if no expiration)
-
-**More template examples:**
-```json
-{
-  "payloadMapping": {
-    "description": "Now playing: {{.title}} by {{.artist}}",
-    "category": "music",
-    "timestamp": "{{.updated_at}}",
-    "source": "streaming_system",
-    "region": "europe",
-    "any_custom_field": "You can add whatever your API needs!"
-  }
-}
+ws.onopen = () => {
+  console.log('Connected to metadata WebSocket');
+  // You'll immediately receive the current metadata as a "welcome" message
+};
 ```
 
 **DLS Plus Output** - Generate DLS Plus format for DAB/DAB+ transmission
@@ -326,6 +274,151 @@ Note: ODR-PadEnc automatically re-reads DLS files before each transmission.
 **Output Options (all types):**
 - `inputs` (required) - Array of input names in priority order
 - `formatters` (optional) - Array of formatter names to apply
+
+### Custom Payload Mapping
+
+Both **POST** and **WebSocket** outputs support custom payload mapping to transform the output format to match any JSON structure your API expects.
+
+**How it works:**
+- **Static values**: Any string without `{{}}` is used as-is
+- **Field references**: Use `{{.fieldname}}` to reference metadata fields
+- **Nested objects**: Create complex JSON structures with nested mappings
+- **Mixed templates**: Combine static text with fields, e.g., `"Now playing: {{.title}}"`
+
+**Available fields for mapping:**
+- `{{.formatted_metadata}}` - The formatted text after applying formatters
+- `{{.songID}}` - Song identifier
+- `{{.title}}` - Song title
+- `{{.artist}}` - Artist name
+- `{{.duration}}` - Song duration
+- `{{.updated_at}}` - When the metadata was updated (RFC3339 format)
+- `{{.expires_at}}` - When the metadata expires (RFC3339 format, empty if no expiration)
+- `{{.type}}` - Message type (WebSocket only: "metadata_update" or "welcome")
+
+**Default Payloads (when payloadMapping is not specified):**
+
+POST Output:
+```json
+{
+  "formatted_metadata": "Artist - Title",
+  "songID": "12345",
+  "title": "Title",
+  "artist": "Artist",
+  "duration": "3:45",
+  "updated_at": "2023-12-01T15:30:00Z",
+  "expires_at": "2023-12-01T15:33:45Z"
+}
+```
+
+WebSocket Output:
+```json
+{
+  "type": "metadata_update",
+  "formatted_metadata": "Artist - Title",
+  "songID": "12345",
+  "title": "Title",
+  "artist": "Artist",
+  "duration": "3:45",
+  "updated_at": "2023-12-01T15:30:00Z",
+  "expires_at": "2023-12-01T15:33:45Z"
+}
+```
+
+**Example: Custom API Format**
+```json
+{
+  "payloadMapping": {
+    "event": "{{.type}}",
+    "station": "My Radio Station",
+    "now_playing": {
+      "song": "{{.title}}",
+      "artist": "{{.artist}}",
+      "full_text": "{{.formatted_metadata}}"
+    },
+    "metadata": {
+      "song_id": "{{.songID}}",
+      "duration": "{{.duration}}",
+      "timestamp": "{{.updated_at}}",
+      "expires": "{{.expires_at}}"
+    }
+  }
+}
+```
+
+Output:
+```json
+{
+  "event": "metadata_update",
+  "station": "My Radio Station",
+  "now_playing": {
+    "song": "Imagine",
+    "artist": "John Lennon",
+    "full_text": "John Lennon - Imagine"
+  },
+  "metadata": {
+    "song_id": "12345",
+    "duration": "3:04",
+    "timestamp": "2023-12-01T15:30:00Z",
+    "expires": "2023-12-01T15:33:04Z"
+  }
+}
+```
+
+**Example: Simple Format**
+```json
+{
+  "payloadMapping": {
+    "title": "{{.title}}",
+    "artist": "{{.artist}}",
+    "timestamp": "{{.updated_at}}"
+  }
+}
+```
+
+Output:
+```json
+{
+  "title": "Imagine",
+  "artist": "John Lennon",
+  "timestamp": "2023-12-01T15:30:00Z"
+}
+```
+
+**Example: Mixed Static and Dynamic Content**
+```json
+{
+  "payloadMapping": {
+    "message": "Now playing: {{.title}} by {{.artist}}",
+    "station_info": {
+      "name": "My Radio Station",
+      "frequency": "101.5 FM",
+      "region": "Amsterdam"
+    },
+    "expires_at": "{{.expires_at}}"
+  }
+}
+```
+
+**POST Output Specific:** The `omitEmpty` option (default: false) removes empty fields from the output:
+```json
+{
+  "settings": {
+    "omitEmpty": true,
+    "payloadMapping": {
+      "title": "{{.title}}",
+      "artist": "{{.artist}}",
+      "album": "{{.album}}"  // This field doesn't exist
+    }
+  }
+}
+```
+
+With `omitEmpty: true`, if artist is empty, the output would be:
+```json
+{
+  "title": "Imagine"
+}
+```
 
 ## Formatters
 

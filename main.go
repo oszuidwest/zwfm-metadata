@@ -214,6 +214,13 @@ func createOutput(cfg config.OutputConfig) (core.Output, error) {
 		}
 		return outputs.NewDLSPlusOutput(cfg.Name, *settings), nil
 
+	case "websocket":
+		settings, err := utils.ParseJSONSettings[config.WebSocketOutputConfig](cfg.Settings)
+		if err != nil {
+			return nil, err
+		}
+		return outputs.NewWebSocketOutput(cfg.Name, *settings), nil
+
 	default:
 		return nil, &unknownTypeError{Type: cfg.Type}
 	}

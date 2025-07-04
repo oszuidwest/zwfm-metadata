@@ -93,6 +93,14 @@ type DLSPlusOutputConfig struct {
 	Filename string `json:"filename"`
 }
 
+// WebSocketOutputConfig represents configuration for WebSocket output
+type WebSocketOutputConfig struct {
+	Delay          int                    `json:"delay"`
+	Address        string                 `json:"address"`
+	Path           string                 `json:"path"`
+	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
+}
+
 // LoadConfig loads configuration from a file
 func LoadConfig(filename string) (*Config, error) {
 	file, err := os.Open(filename)
