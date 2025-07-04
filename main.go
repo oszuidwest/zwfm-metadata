@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -16,17 +17,17 @@ import (
 	"zwfm-metadata/web"
 )
 
-// Build information (set via ldflags)
-var (
-	Version   = "dev"
-	Commit    = "unknown"
-	BuildTime = "unknown"
-)
-
 func main() {
 	// Parse command line flags
 	configFile := flag.String("config", "config.json", "Path to configuration file")
+	showVersion := flag.Bool("version", false, "Show version information")
 	flag.Parse()
+
+	// Show version if requested
+	if *showVersion {
+		fmt.Printf("zwfm-metadata %s (commit: %s, built: %s)\n", utils.Version, utils.Commit, utils.BuildTime)
+		os.Exit(0)
+	}
 
 	// Load configuration
 	cfg, err := config.LoadConfig(*configFile)
@@ -46,7 +47,7 @@ func main() {
 	slog.SetDefault(logger)
 
 	// Log startup information
-	slog.Info("Starting metadata router", "station", cfg.StationName, "version", Version, "commit", Commit)
+	slog.Info("Starting metadata router", "station", cfg.StationName, "version", utils.Version, "commit", utils.Commit)
 
 	// Create metadata router
 	router := core.NewMetadataRouter()

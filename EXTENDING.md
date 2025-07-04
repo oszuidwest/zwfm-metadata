@@ -1,6 +1,6 @@
-# Extending ZWFM Metadata
+# Extending ZuidWest FM Metadata
 
-This guide covers how to add new inputs, outputs, and formatters to the ZWFM metadata system. The system uses a clean interface-based architecture that makes extending functionality straightforward.
+This guide covers how to add new inputs, outputs, and formatters to the ZuidWest FM metadata system. The system uses a clean interface-based architecture that makes extending functionality straightforward.
 
 ## Table of Contents
 
@@ -50,7 +50,7 @@ This guide covers how to add new inputs, outputs, and formatters to the ZWFM met
 
 ## Architecture Overview
 
-The ZWFM metadata system consists of three main extension points:
+The ZuidWest FM metadata system consists of three main extension points:
 
 - **Inputs** - Source metadata from various systems (APIs, files, static text)
 - **Outputs** - Send formatted metadata to destinations (streaming servers, files, webhooks)  
@@ -708,7 +708,15 @@ func (d *DiscordOutput) sendWebhook(embed map[string]interface{}) error {
         return err
     }
     
-    resp, err := d.httpClient.Post(d.settings.WebhookURL, "application/json", bytes.NewBuffer(jsonData))
+    req, err := http.NewRequest("POST", d.settings.WebhookURL, bytes.NewBuffer(jsonData))
+    if err != nil {
+        return err
+    }
+    
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("User-Agent", utils.UserAgent())
+    
+    resp, err := d.httpClient.Do(req)
     if err != nil {
         return err
     }
@@ -873,6 +881,29 @@ func (o *MyOutput) SendFormattedMetadata(text string) error {
 }
 ```
 
+### HTTP Requests and User-Agent
+
+When making HTTP requests in inputs or outputs, always set a proper User-Agent header:
+
+```go
+import "zwfm-metadata/utils"
+
+// In your HTTP request code:
+req, err := http.NewRequest("POST", url, body)
+if err != nil {
+    return err
+}
+
+// Set headers
+req.Header.Set("Content-Type", "application/json")
+req.Header.Set("User-Agent", utils.UserAgent())  // Returns "zwfm-metadata/{version}"
+```
+
+This ensures:
+- Proper identification of requests in server logs
+- Compliance with API best practices
+- Version tracking for debugging
+
 ### Thread Safety
 
 The base classes handle thread safety for:
@@ -972,4 +1003,4 @@ curl "http://localhost:9000/input/dynamic?input=test-input&title=Test&artist=Art
    }
    ```
 
-This guide should help you create robust extensions for the ZWFM metadata system. Happy coding!
+This guide should help you create robust extensions for the ZuidWest FM metadata system. Happy coding!

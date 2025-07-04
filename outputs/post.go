@@ -134,7 +134,7 @@ func (p *PostOutput) sendHTTPRequest(payload interface{}) error {
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "ZWFM-Metadata/1.0")
+	req.Header.Set("User-Agent", utils.UserAgent())
 
 	// Add bearer token authentication
 	if p.settings.BearerToken != "" {

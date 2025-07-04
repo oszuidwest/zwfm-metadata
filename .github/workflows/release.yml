@@ -61,7 +61,7 @@ jobs:
           if [[ "$VERSION" == "edge" ]]; then
             VERSION="edge-$(git rev-parse --short HEAD)"
           fi
-          LDFLAGS="-w -s -X main.Version=$VERSION -X main.Commit=${{ github.sha }} -X main.BuildTime=$(date -u +%FT%TZ)"
+          LDFLAGS="-w -s -X zwfm-metadata/utils.Version=$VERSION -X zwfm-metadata/utils.Commit=${{ github.sha }} -X zwfm-metadata/utils.BuildTime=$(date -u +%FT%TZ)"
           
           # Function to build
           build() {
