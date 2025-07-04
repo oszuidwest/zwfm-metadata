@@ -1,6 +1,9 @@
-# ZWFM Metadata
+# ZuidWest FM Metadata
 
 Metadata routing middleware for radio stations. Routes metadata from inputs (playout software, APIs, static text) to outputs (Icecast, files, webhooks) with priority-based fallback and configurable delays. Originally designed for ZuidWest FM in the Netherlands.
+
+<img width="1755" alt="Scherm­afbeelding 2025-07-05 om 00 20 05" src="https://github.com/user-attachments/assets/98fd12cb-d74e-4ca2-8224-c13d4f50b397" />
+
 
 ## Quick Start
 
