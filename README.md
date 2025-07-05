@@ -20,6 +20,7 @@ Metadata routing middleware for radio stations. Routes metadata from inputs (pla
     - [Icecast Output](#icecast-output)
     - [File Output](#file-output)
     - [POST Output](#post-output)
+    - [HTTP Output](#http-output)
     - [WebSocket Output](#websocket-output)
     - [DLS Plus Output](#dls-plus-output)
   - [Custom Payload Mapping](#custom-payload-mapping)
@@ -167,6 +168,7 @@ Control where formatted metadata is sent.
 | **Icecast** | Update streaming server metadata | ❌ | ❌ | Basic Auth |
 | **File** | Write to local filesystem | ❌ | ❌ | N/A |
 | **POST** | Send via HTTP webhooks | ✅ | ✅ | Bearer Token |
+| **HTTP** | Serve metadata via GET endpoints | ✅ | ✅ | N/A |
 | **DLS Plus** | DAB/DAB+ radio text | ✅ | ❌ | N/A |
 | **WebSocket** | Real-time browser/app updates | ✅ | ✅ | N/A |
 
@@ -256,6 +258,56 @@ Send metadata via HTTP webhooks
 - `bearerToken` (optional) - Authorization bearer token
 - `payloadMapping` (optional) - Custom JSON payload structure (see [Custom Payload Mapping](#custom-payload-mapping))
 - `omitEmpty` (optional, default: false) - Omit empty fields from custom payload
+
+#### HTTP Output
+
+Serve metadata via GET endpoints with multiple response formats
+
+```json
+{
+  "type": "http",
+  "name": "metadata-api",
+  "inputs": ["radio-live", "nowplaying-api", "default-text"],
+  "formatters": ["ucwords"],
+  "settings": {
+    "delay": 0,
+    "endpoints": [
+      {
+        "path": "/api/nowplaying.json",
+        "responseType": "json"
+      },
+      {
+        "path": "/api/current.txt",
+        "responseType": "plaintext"
+      },
+      {
+        "path": "/api/custom.json",
+        "responseType": "json",
+        "payloadMapping": {
+          "station": "My Radio",
+          "track": "{{.title}}",
+          "artist": "{{.artist}}"
+        }
+      }
+    ]
+  }
+}
+```
+
+##### Settings
+- `delay` (required) - Seconds to delay metadata updates
+- `endpoints` (required) - Array of HTTP endpoints to serve
+
+##### Endpoint Configuration
+- `path` (required) - URL path for the endpoint
+- `responseType` (optional) - Response format: `json` (default), `xml`, `yaml`, or `plaintext`
+- `payloadMapping` (optional) - Custom response structure (see [Custom Payload Mapping](#custom-payload-mapping))
+
+##### Response Types
+- **JSON**: Standard metadata object with all fields
+- **XML**: Well-formed XML with escaped content
+- **YAML**: YAML format for configuration files
+- **Plaintext**: Just the formatted metadata text
 
 #### WebSocket Output
 
