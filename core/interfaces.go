@@ -3,6 +3,8 @@ package core
 import (
 	"context"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 // Metadata represents the metadata for a song
@@ -49,4 +51,10 @@ type EnhancedOutput interface {
 	Output
 	// SendEnhancedMetadata processes metadata with full details
 	SendEnhancedMetadata(formattedText string, metadata *Metadata)
+}
+
+// RouteRegistrar interface for outputs that need to register HTTP routes
+type RouteRegistrar interface {
+	// RegisterRoutes registers HTTP routes on the given router
+	RegisterRoutes(router *mux.Router)
 }

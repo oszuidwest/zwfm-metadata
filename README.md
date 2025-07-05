@@ -575,6 +575,14 @@ go build
 
 Set `"debug": true` in config.json for detailed logging.
 
+### Extending
+
+See `EXTENDING.md` for detailed guidance on adding new inputs, outputs, and formatters. Key patterns:
+
+- Use `utils.ConvertMetadata()` for consistent metadata handling across outputs
+- Embed base types (`core.InputBase`, `core.OutputBase`) for common functionality
+- Use `core.PassiveComponent` for components without background tasks
+
 ## License
 
 MIT

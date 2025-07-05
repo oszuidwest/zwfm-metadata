@@ -1,7 +1,6 @@
 package outputs
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -11,32 +10,21 @@ import (
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
 
+	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
 
 // WebSocketOutput handles broadcasting metadata to WebSocket clients
 type WebSocketOutput struct {
 	*core.OutputBase
+	core.PassiveComponent
 	settings        config.WebSocketOutputConfig
-	server          *http.Server
 	upgrader        websocket.Upgrader
 	clients         map[*websocket.Conn]bool
 	mu              sync.RWMutex
-	currentMetadata *WebSocketMessage
+	currentMetadata *utils.UniversalMetadata
 	metadataMu      sync.RWMutex
 	payloadMapper   *utils.PayloadMapper
-}
-
-// WebSocketMessage represents the message sent to WebSocket clients
-type WebSocketMessage struct {
-	Type              string     `json:"type"`
-	FormattedMetadata string     `json:"formatted_metadata"`
-	SongID            string     `json:"songID,omitempty"`
-	Title             string     `json:"title"`
-	Artist            string     `json:"artist,omitempty"`
-	Duration          string     `json:"duration,omitempty"`
-	UpdatedAt         time.Time  `json:"updated_at"`
-	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
 }
 
 // NewWebSocketOutput creates a new WebSocket output
@@ -61,44 +49,10 @@ func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *Web
 	}
 }
 
-// Start implements the Output interface
-func (w *WebSocketOutput) Start(ctx context.Context) error {
-	// Create HTTP server mux
-	mux := http.NewServeMux()
-	mux.HandleFunc(w.settings.Path, w.handleWebSocket)
-
-	// Create server
-	w.server = &http.Server{
-		Addr:    w.settings.Address,
-		Handler: mux,
-	}
-
-	// Start server in goroutine
-	go func() {
-		slog.Info("WebSocket server starting", "address", w.settings.Address, "path", w.settings.Path)
-		if err := w.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("WebSocket server error", "error", err)
-		}
-	}()
-
-	// Wait for context cancellation
-	<-ctx.Done()
-
-	// Shutdown server gracefully
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	// Close all client connections
-	w.mu.Lock()
-	for client := range w.clients {
-		if err := client.Close(); err != nil {
-			slog.Debug("Failed to close client connection", "error", err)
-		}
-	}
-	w.clients = make(map[*websocket.Conn]bool)
-	w.mu.Unlock()
-
-	return w.server.Shutdown(shutdownCtx)
+// RegisterRoutes implements the RouteRegistrar interface
+func (w *WebSocketOutput) RegisterRoutes(router *mux.Router) {
+	router.HandleFunc(w.settings.Path, w.handleWebSocket).Methods("GET")
+	slog.Info("WebSocket route registered", "output", w.GetName(), "path", w.settings.Path)
 }
 
 // GetDelay implements the Output interface
@@ -114,16 +68,15 @@ func (w *WebSocketOutput) SendFormattedMetadata(formattedText string) {
 	}
 
 	// Create message with basic metadata
-	msg := WebSocketMessage{
-		Type:              "metadata_update",
-		FormattedMetadata: formattedText,
-		Title:             formattedText, // Use formatted text as title fallback
-		UpdatedAt:         time.Now(),
+	minimalMetadata := &core.Metadata{
+		Title:     formattedText, // Use formatted text as title fallback
+		UpdatedAt: time.Now(),
 	}
+	msg := utils.ConvertMetadataWithType(formattedText, minimalMetadata, "metadata_update")
 
 	// Store current metadata
-	w.storeCurrentMetadata(&msg)
-	w.broadcastMessage(msg)
+	w.storeCurrentMetadata(msg)
+	w.broadcastMessage(*msg)
 }
 
 // SendEnhancedMetadata implements the EnhancedOutput interface
@@ -134,20 +87,11 @@ func (w *WebSocketOutput) SendEnhancedMetadata(formattedText string, metadata *c
 	}
 
 	// Create message with full metadata
-	msg := WebSocketMessage{
-		Type:              "metadata_update",
-		FormattedMetadata: formattedText,
-		SongID:            metadata.SongID,
-		Title:             metadata.Title,
-		Artist:            metadata.Artist,
-		Duration:          metadata.Duration,
-		UpdatedAt:         metadata.UpdatedAt,
-		ExpiresAt:         metadata.ExpiresAt,
-	}
+	msg := utils.ConvertMetadataWithType(formattedText, metadata, "metadata_update")
 
 	// Store current metadata
-	w.storeCurrentMetadata(&msg)
-	w.broadcastMessage(msg)
+	w.storeCurrentMetadata(msg)
+	w.broadcastMessage(*msg)
 }
 
 // handleWebSocket handles WebSocket connection upgrades
@@ -182,7 +126,7 @@ func (w *WebSocketOutput) handleWebSocket(rw http.ResponseWriter, r *http.Reques
 		// If custom payload mapping is defined, use it
 		if w.payloadMapper != nil {
 			// Convert to template data
-			templateData := w.messageToTemplateData(welcomeMsg)
+			templateData := welcomeMsg.ToTemplateData()
 			payloadToSend = w.payloadMapper.MapPayload(templateData)
 		} else {
 			// Use default message structure
@@ -235,13 +179,13 @@ func (w *WebSocketOutput) handleWebSocket(rw http.ResponseWriter, r *http.Reques
 }
 
 // broadcastMessage sends a message to all connected WebSocket clients
-func (w *WebSocketOutput) broadcastMessage(msg WebSocketMessage) {
+func (w *WebSocketOutput) broadcastMessage(msg utils.UniversalMetadata) {
 	var payloadToSend interface{}
 
 	// If custom payload mapping is defined, use it
 	if w.payloadMapper != nil {
 		// Convert to template data
-		templateData := w.messageToTemplateData(msg)
+		templateData := msg.ToTemplateData()
 		payloadToSend = w.payloadMapper.MapPayload(templateData)
 	} else {
 		// Use default message structure
@@ -281,14 +225,14 @@ func (w *WebSocketOutput) broadcastMessage(msg WebSocketMessage) {
 }
 
 // storeCurrentMetadata stores the current metadata for new clients
-func (w *WebSocketOutput) storeCurrentMetadata(msg *WebSocketMessage) {
+func (w *WebSocketOutput) storeCurrentMetadata(msg *utils.UniversalMetadata) {
 	w.metadataMu.Lock()
 	defer w.metadataMu.Unlock()
 	w.currentMetadata = msg
 }
 
 // getCurrentMetadata retrieves the current metadata for new clients
-func (w *WebSocketOutput) getCurrentMetadata() *WebSocketMessage {
+func (w *WebSocketOutput) getCurrentMetadata() *utils.UniversalMetadata {
 	w.metadataMu.RLock()
 	defer w.metadataMu.RUnlock()
 	if w.currentMetadata == nil {
@@ -297,25 +241,4 @@ func (w *WebSocketOutput) getCurrentMetadata() *WebSocketMessage {
 	// Return a copy to avoid race conditions
 	msg := *w.currentMetadata
 	return &msg
-}
-
-// messageToTemplateData converts a WebSocketMessage to template data
-func (w *WebSocketOutput) messageToTemplateData(msg WebSocketMessage) map[string]interface{} {
-	data := map[string]interface{}{
-		"type":               msg.Type,
-		"formatted_metadata": msg.FormattedMetadata,
-		"songID":             msg.SongID,
-		"title":              msg.Title,
-		"artist":             msg.Artist,
-		"duration":           msg.Duration,
-		"updated_at":         msg.UpdatedAt.Format(time.RFC3339),
-	}
-
-	if msg.ExpiresAt != nil {
-		data["expires_at"] = msg.ExpiresAt.Format(time.RFC3339)
-	} else {
-		data["expires_at"] = ""
-	}
-
-	return data
 }

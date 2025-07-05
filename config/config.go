@@ -96,8 +96,20 @@ type DLSPlusOutputConfig struct {
 // WebSocketOutputConfig represents configuration for WebSocket output
 type WebSocketOutputConfig struct {
 	Delay          int                    `json:"delay"`
-	Address        string                 `json:"address"`
 	Path           string                 `json:"path"`
+	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
+}
+
+// HTTPOutputConfig represents configuration for HTTP output
+type HTTPOutputConfig struct {
+	Delay     int            `json:"delay"`
+	Endpoints []HTTPEndpoint `json:"endpoints"`
+}
+
+// HTTPEndpoint represents a single HTTP endpoint configuration
+type HTTPEndpoint struct {
+	Path           string                 `json:"path"`
+	ResponseType   string                 `json:"responseType,omitempty"` // json, xml, plaintext, yaml, custom
 	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
 }
 

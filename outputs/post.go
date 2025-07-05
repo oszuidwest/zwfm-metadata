@@ -22,17 +22,6 @@ type PostOutput struct {
 	payloadMapper *utils.PayloadMapper
 }
 
-// PostPayload represents the complete payload sent to the endpoint
-type PostPayload struct {
-	FormattedMetadata string     `json:"formatted_metadata"`
-	SongID            string     `json:"songID,omitempty"`
-	Title             string     `json:"title"`
-	Artist            string     `json:"artist,omitempty"`
-	Duration          string     `json:"duration,omitempty"`
-	UpdatedAt         time.Time  `json:"updated_at"`
-	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
-}
-
 // NewPostOutput creates a new POST output
 func NewPostOutput(name string, settings config.PostOutputConfig) *PostOutput {
 	var mapper *utils.PayloadMapper
@@ -57,13 +46,13 @@ func (p *PostOutput) GetDelay() int {
 // SendFormattedMetadata implements the Output interface (fallback for non-enhanced usage)
 func (p *PostOutput) SendFormattedMetadata(formattedText string) {
 	// For POST output, we need full metadata, so create minimal payload
-	payload := PostPayload{
-		FormattedMetadata: formattedText,
-		Title:             formattedText, // Use formatted text as title fallback
-		UpdatedAt:         time.Now(),
+	minimalMetadata := &core.Metadata{
+		Title:     formattedText, // Use formatted text as title fallback
+		UpdatedAt: time.Now(),
 	}
+	payload := utils.ConvertMetadata(formattedText, minimalMetadata)
 
-	p.sendPayload(payload)
+	p.sendPayload(*payload)
 }
 
 // SendEnhancedMetadata implements the EnhancedOutput interface
@@ -74,37 +63,21 @@ func (p *PostOutput) SendEnhancedMetadata(formattedText string, metadata *core.M
 	}
 
 	// Build complete payload with all metadata fields
-	payload := PostPayload{
-		FormattedMetadata: formattedText,
-		SongID:            metadata.SongID,
-		Title:             metadata.Title,
-		Artist:            metadata.Artist,
-		Duration:          metadata.Duration,
-		UpdatedAt:         metadata.UpdatedAt,
-		ExpiresAt:         metadata.ExpiresAt,
-	}
+	payload := utils.ConvertMetadata(formattedText, metadata)
 
-	p.sendPayload(payload)
+	p.sendPayload(*payload)
 }
 
 // sendPayload sends the complete payload to the configured URL
-func (p *PostOutput) sendPayload(payload PostPayload) {
+func (p *PostOutput) sendPayload(payload utils.UniversalMetadata) {
 	var payloadToSend interface{}
 
 	// If custom payload mapping is defined, use it
 	if p.payloadMapper != nil {
-		// Convert to MetadataPayload for mapping
-		metaPayload := utils.MetadataPayload{
-			Type:              "post", // POST outputs don't have a type field by default
-			FormattedMetadata: payload.FormattedMetadata,
-			SongID:            payload.SongID,
-			Title:             payload.Title,
-			Artist:            payload.Artist,
-			Duration:          payload.Duration,
-			UpdatedAt:         payload.UpdatedAt,
-			ExpiresAt:         payload.ExpiresAt,
-		}
-		payloadToSend = p.payloadMapper.MapPayload(metaPayload.ToTemplateData())
+		// Convert to template data for mapping
+		payloadWithType := payload
+		payloadWithType.Type = "post" // POST outputs don't have a type field by default
+		payloadToSend = p.payloadMapper.MapPayload(payloadWithType.ToTemplateData())
 	} else {
 		// Use default payload structure
 		payloadToSend = payload

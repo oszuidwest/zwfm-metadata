@@ -54,6 +54,9 @@ func (s *Server) Start(ctx context.Context) error {
 	router.HandleFunc("/status", s.statusHandler).Methods("GET")
 	router.HandleFunc("/input/dynamic", s.dynamicInputHandler).Methods("GET")
 
+	// Register WebSocket routes from outputs that implement RouteRegistrar
+	s.registerWebSocketRoutes(router)
+
 	// Create HTTP server
 	s.server = &http.Server{
 		Addr:    ":" + strconv.Itoa(s.port),
@@ -190,5 +193,15 @@ func (s *Server) dashboardAPIHandler(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
+	}
+}
+
+// registerWebSocketRoutes registers WebSocket routes from outputs that implement RouteRegistrar
+func (s *Server) registerWebSocketRoutes(router *mux.Router) {
+	outputs := s.router.GetOutputs()
+	for _, output := range outputs {
+		if routeRegistrar, ok := output.(core.RouteRegistrar); ok {
+			routeRegistrar.RegisterRoutes(router)
+		}
 	}
 }

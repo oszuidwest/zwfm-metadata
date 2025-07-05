@@ -40,6 +40,7 @@ This guide covers how to add new inputs, outputs, and formatters to the ZuidWest
   - [Base Class Embedding](#base-class-embedding)
   - [PassiveComponent](#passivecomponent)
   - [Change Detection](#change-detection)
+  - [Universal Metadata Converter](#universal-metadata-converter)
   - [Error Handling](#error-handling)
   - [Thread Safety](#thread-safety)
 - [Testing](#testing)
@@ -80,6 +81,20 @@ The codebase provides several utilities you can use:
 - **JSON Parsing**: `utils.ParseJSONSettings` for configuration parsing
   ```go
   settings, err := utils.ParseJSONSettings[YourConfigType](cfg.Settings)
+  ```
+
+- **Universal Metadata Converter**: `utils.ConvertMetadata` for consistent metadata handling
+  ```go
+  import "zwfm-metadata/utils"
+  
+  // Convert core.Metadata to universal format
+  universal := utils.ConvertMetadata(formattedText, metadata)
+  
+  // Convert with a specific type field
+  universal := utils.ConvertMetadataWithType(formattedText, metadata, "webhook")
+  
+  // Convert to template data for payload mapping
+  templateData := universal.ToTemplateData()
   ```
 
 ### Common Gotchas
@@ -329,19 +344,28 @@ func (m *MyCustomOutput) SendEnhancedMetadata(formattedText string, metadata *co
         return
     }
     
-    // Access additional metadata fields
-    payload := CustomPayload{
-        FormattedText: formattedText,
-        Title:         metadata.Title,
-        Artist:        metadata.Artist,
-        Duration:      metadata.Duration,
-        UpdatedAt:     metadata.UpdatedAt,
-        ExpiresAt:     metadata.ExpiresAt,
-    }
+    // Use universal metadata converter for consistent field mapping
+    universal := utils.ConvertMetadataWithType(formattedText, metadata, "custom")
     
-    if err := m.sendCustomPayload(payload); err != nil {
+    if err := m.sendUniversalPayload(*universal); err != nil {
         slog.Error("Failed to send enhanced payload", "output", m.GetName(), "error", err)
     }
+}
+
+func (m *MyCustomOutput) sendUniversalPayload(metadata utils.UniversalMetadata) error {
+    // Access all metadata fields without manual mapping
+    payload := map[string]interface{}{
+        "type":         metadata.Type,
+        "title":        metadata.Title,
+        "artist":       metadata.Artist,
+        "duration":     metadata.Duration,
+        "updated_at":   metadata.UpdatedAt,
+        "expires_at":   metadata.ExpiresAt,
+        "formatted":    metadata.FormattedMetadata,
+    }
+    
+    // Send payload...
+    return nil
 }
 ```
 
@@ -659,38 +683,41 @@ func (d *DiscordOutput) SendEnhancedMetadata(formattedText string, metadata *cor
         return
     }
     
+    // Use universal converter for consistent metadata handling
+    universal := utils.ConvertMetadataWithType(formattedText, metadata, "discord")
+    
     fields := []map[string]interface{}{}
     
-    if metadata.Artist != "" {
+    if universal.Artist != "" {
         fields = append(fields, map[string]interface{}{
             "name":   "Artist",
-            "value":  metadata.Artist,
+            "value":  universal.Artist,
             "inline": true,
         })
     }
     
-    if metadata.Title != "" {
+    if universal.Title != "" {
         fields = append(fields, map[string]interface{}{
             "name":   "Title",
-            "value":  metadata.Title,
+            "value":  universal.Title,
             "inline": true,
         })
     }
     
-    if metadata.Duration != "" {
+    if universal.Duration != "" {
         fields = append(fields, map[string]interface{}{
             "name":   "Duration",
-            "value":  metadata.Duration,
+            "value":  universal.Duration,
             "inline": true,
         })
     }
     
     embed := map[string]interface{}{
         "title":       "🎵 Now Playing",
-        "description": formattedText,
+        "description": universal.FormattedMetadata,
         "color":       0x00ff00,
         "fields":      fields,
-        "timestamp":   metadata.UpdatedAt.Format(time.RFC3339),
+        "timestamp":   universal.UpdatedAt.Format(time.RFC3339),
     }
     
     if err := d.sendWebhook(embed); err != nil {
@@ -861,11 +888,60 @@ func (o *MyOutput) SendFormattedMetadata(formattedText string) {
 }
 ```
 
+### Universal Metadata Converter
+
+Use `utils.ConvertMetadata` instead of manually mapping fields from `core.Metadata`. This ensures consistency across all outputs and makes maintenance easier:
+
+```go
+import "zwfm-metadata/utils"
+
+// Instead of manual field mapping:
+// payload := CustomPayload{
+//     FormattedMetadata: formattedText,
+//     SongID:            metadata.SongID,
+//     Title:             metadata.Title,
+//     Artist:            metadata.Artist,
+//     Duration:          metadata.Duration,
+//     UpdatedAt:         metadata.UpdatedAt,
+//     ExpiresAt:         metadata.ExpiresAt,
+// }
+
+// Use the universal converter:
+func (o *MyOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata) {
+    if !o.HasChanged(formattedText) {
+        return
+    }
+    
+    // Convert to universal format
+    universal := utils.ConvertMetadata(formattedText, metadata)
+    
+    // Or with a type field:
+    universal := utils.ConvertMetadataWithType(formattedText, metadata, "myoutput")
+    
+    // Send the universal metadata
+    o.sendMetadata(*universal)
+}
+
+// For payload mapping (templates):
+func (o *MyOutput) processWithMapping(universal utils.UniversalMetadata) {
+    templateData := universal.ToTemplateData()
+    result := o.payloadMapper.MapPayload(templateData)
+    // Use result...
+}
+```
+
+**Benefits:**
+- **Consistency**: All outputs use the same metadata structure
+- **Maintainability**: Adding new metadata fields only requires changes in one place
+- **DRY Principle**: No duplicate field mapping code
+- **Template Compatibility**: Built-in `ToTemplateData()` method for payload mapping
+
 ### Error Handling
 
 1. **Inputs**: Can return errors from Start(), should log errors during operation
 2. **Outputs**: Should NEVER return errors from Send methods, only log them
 3. **Formatters**: Should handle errors gracefully and return valid text
+4. **Metadata Conversion**: Use `utils.ConvertMetadata` instead of manual field mapping
 
 ```go
 // Good - Output error handling
@@ -913,6 +989,7 @@ The base classes handle thread safety for:
 
 Your code should:
 - Use the provided SetMetadata/GetMetadata methods
+- Use `utils.ConvertMetadata` for consistent metadata handling
 - Not directly access shared state
 - Use mutexes for any additional shared state you add
 
@@ -1002,5 +1079,7 @@ curl "http://localhost:9000/input/dynamic?input=test-input&title=Test&artist=Art
        return nil, fmt.Errorf("URL is required")
    }
    ```
+8. **Universal Metadata**: Use `utils.ConvertMetadata` instead of manual field mapping
+9. **Payload Mapping**: Use `universal.ToTemplateData()` for template processing
 
 This guide should help you create robust extensions for the ZuidWest FM metadata system. Happy coding!

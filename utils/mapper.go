@@ -118,36 +118,3 @@ func (pm *PayloadMapper) processTemplate(templateStr string, data interface{}) s
 
 	return buf.String()
 }
-
-// MetadataPayload represents the common metadata structure for payload mapping
-type MetadataPayload struct {
-	Type              string     `json:"type"`
-	FormattedMetadata string     `json:"formatted_metadata"`
-	SongID            string     `json:"songID"`
-	Title             string     `json:"title"`
-	Artist            string     `json:"artist"`
-	Duration          string     `json:"duration"`
-	UpdatedAt         time.Time  `json:"updated_at"`
-	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
-}
-
-// ToTemplateData converts MetadataPayload to a structure suitable for template execution
-func (mp *MetadataPayload) ToTemplateData() map[string]interface{} {
-	data := map[string]interface{}{
-		"type":               mp.Type,
-		"formatted_metadata": mp.FormattedMetadata,
-		"songID":             mp.SongID,
-		"title":              mp.Title,
-		"artist":             mp.Artist,
-		"duration":           mp.Duration,
-		"updated_at":         mp.UpdatedAt.Format(time.RFC3339),
-	}
-
-	if mp.ExpiresAt != nil {
-		data["expires_at"] = mp.ExpiresAt.Format(time.RFC3339)
-	} else {
-		data["expires_at"] = ""
-	}
-
-	return data
-}

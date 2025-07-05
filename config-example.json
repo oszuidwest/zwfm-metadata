@@ -128,8 +128,7 @@
       "formatters": ["ucwords"],
       "settings": {
         "delay": 0,
-        "address": ":8080",
-        "path": "/metadata"
+        "path": "/ws/metadata"
       }
     },
     {
@@ -139,14 +138,54 @@
       "formatters": ["ucwords"],
       "settings": {
         "delay": 0,
-        "address": ":8081",
-        "path": "/ws",
+        "path": "/ws/custom",
         "payloadMapping": {
           "event": "{{.type}}",
           "station": "Your Radio Station",
           "message": "Now playing: {{.title}} by {{.artist}}",
           "timestamp": "{{.updated_at}}"
         }
+      }
+    },
+    {
+      "type": "http",
+      "name": "metadata-api",
+      "inputs": ["radio-live", "nowplaying-api", "default-text"],
+      "formatters": ["ucwords"],
+      "settings": {
+        "delay": 0,
+        "endpoints": [
+          {
+            "path": "/api/nowplaying.json",
+            "responseType": "json"
+          },
+          {
+            "path": "/api/nowplaying.xml",
+            "responseType": "xml"
+          },
+          {
+            "path": "/api/current.txt",
+            "responseType": "plaintext"
+          },
+          {
+            "path": "/api/nowplaying.yaml",
+            "responseType": "yaml"
+          },
+          {
+            "path": "/api/custom.json",
+            "responseType": "json",
+            "payloadMapping": {
+              "station": "Your Radio Station",
+              "current_track": {
+                "title": "{{.title}}",
+                "artist": "{{.artist}}",
+                "duration": "{{.duration}}"
+              },
+              "last_updated": "{{.updated_at}}",
+              "status": "live"
+            }
+          }
+        ]
       }
     }
   ]

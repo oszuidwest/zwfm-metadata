@@ -222,6 +222,13 @@ func createOutput(cfg config.OutputConfig) (core.Output, error) {
 		}
 		return outputs.NewWebSocketOutput(cfg.Name, *settings), nil
 
+	case "http":
+		settings, err := utils.ParseJSONSettings[config.HTTPOutputConfig](cfg.Settings)
+		if err != nil {
+			return nil, err
+		}
+		return outputs.NewHTTPOutput(cfg.Name, *settings), nil
+
 	default:
 		return nil, &unknownTypeError{Type: cfg.Type}
 	}
