@@ -297,21 +297,18 @@ type MyCustomOutput struct {
 
 // NewMyCustomOutput creates a new custom output
 func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCustomOutput {
-    return &MyCustomOutput{
+    output := &MyCustomOutput{
         OutputBase: core.NewOutputBase(name),
         settings:   settings,
     }
+    output.SetDelay(settings.Delay)
+    return output
 }
 ```
 
 ### Step 2: Implement Required Methods
 
 ```go
-// GetDelay implements the Output interface
-func (m *MyCustomOutput) GetDelay() int {
-    return m.settings.Delay
-}
-
 // SendFormattedMetadata implements the Output interface
 func (m *MyCustomOutput) SendFormattedMetadata(formattedText string) {
     // IMPORTANT: Check if value changed to avoid unnecessary operations
@@ -650,15 +647,13 @@ type DiscordOutput struct {
 }
 
 func NewDiscordOutput(name string, settings config.DiscordOutputConfig) *DiscordOutput {
-    return &DiscordOutput{
+    output := &DiscordOutput{
         OutputBase: core.NewOutputBase(name),
         settings:   settings,
         httpClient: &http.Client{Timeout: 10 * time.Second},
     }
-}
-
-func (d *DiscordOutput) GetDelay() int {
-    return d.settings.Delay
+    output.SetDelay(settings.Delay)
+    return output
 }
 
 func (d *DiscordOutput) SendFormattedMetadata(formattedText string) {
@@ -964,7 +959,10 @@ When making HTTP requests in inputs or outputs, always set a proper User-Agent h
 ```go
 import "zwfm-metadata/utils"
 
-// In your HTTP request code:
+// Create HTTP client with timeout
+httpClient := &http.Client{Timeout: 10 * time.Second}
+
+// Make request
 req, err := http.NewRequest("POST", url, body)
 if err != nil {
     return err
@@ -973,6 +971,13 @@ if err != nil {
 // Set headers
 req.Header.Set("Content-Type", "application/json")
 req.Header.Set("User-Agent", utils.UserAgent())  // Returns "zwfm-metadata/{version}"
+
+// Send request
+resp, err := httpClient.Do(req)
+if err != nil {
+    return err
+}
+defer resp.Body.Close()
 ```
 
 This ensures:

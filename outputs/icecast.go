@@ -20,16 +20,13 @@ type IcecastOutput struct {
 
 // NewIcecastOutput creates a new Icecast output
 func NewIcecastOutput(name string, settings config.IcecastOutputConfig) *IcecastOutput {
-	return &IcecastOutput{
+	output := &IcecastOutput{
 		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
-}
-
-// GetDelay implements the Output interface
-func (i *IcecastOutput) GetDelay() int {
-	return i.settings.Delay
+	output.SetDelay(settings.Delay)
+	return output
 }
 
 // SendFormattedMetadata implements the Output interface (called by metadata router)
@@ -74,11 +71,7 @@ func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			slog.Debug("Failed to close response body", "error", err)
-		}
-	}()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)

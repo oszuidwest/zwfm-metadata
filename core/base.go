@@ -161,6 +161,7 @@ type OutputBase struct {
 	name           string
 	inputs         []Input
 	changeDetector ChangeDetector
+	delay          int
 }
 
 // NewOutputBase creates a new OutputBase
@@ -193,4 +194,14 @@ func (b *OutputBase) SetCurrentValue(value string) {
 // HasChanged checks if the value has changed
 func (b *OutputBase) HasChanged(newValue string) bool {
 	return b.changeDetector.HasChanged(newValue)
+}
+
+// SetDelay sets the delay for this output
+func (b *OutputBase) SetDelay(delay int) {
+	b.delay = delay
+}
+
+// GetDelay returns the delay for this output
+func (b *OutputBase) GetDelay() int {
+	return b.delay
 }

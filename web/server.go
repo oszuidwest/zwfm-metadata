@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 	"zwfm-metadata/core"
 	"zwfm-metadata/inputs"
 
@@ -59,8 +60,12 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Create HTTP server
 	s.server = &http.Server{
-		Addr:    ":" + strconv.Itoa(s.port),
-		Handler: router,
+		Addr:              ":" + strconv.Itoa(s.port),
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	slog.Info("Starting web server", "port", s.port)
@@ -82,27 +87,27 @@ func (s *Server) Start(ctx context.Context) error {
 
 // noIndexMiddleware adds headers to prevent search engine indexing on all routes
 func (s *Server) noIndexMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet, noimageindex")
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, req)
 	})
 }
 
 // statusHandler handles the /status endpoint - consolidated with dashboard data
-func (s *Server) statusHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) statusHandler(w http.ResponseWriter, req *http.Request) {
 	// Use the same handler as dashboard API for consistency
-	s.dashboardAPIHandler(w, r)
+	s.dashboardAPIHandler(w, req)
 }
 
 // dynamicInputHandler handles the /input/dynamic endpoint
-func (s *Server) dynamicInputHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 	// Get parameters from query string
-	inputName := r.URL.Query().Get("input")
-	title := r.URL.Query().Get("title")
-	artist := r.URL.Query().Get("artist")
-	songID := r.URL.Query().Get("songID")
-	duration := r.URL.Query().Get("duration")
-	secret := r.URL.Query().Get("secret")
+	inputName := req.URL.Query().Get("input")
+	title := req.URL.Query().Get("title")
+	artist := req.URL.Query().Get("artist")
+	songID := req.URL.Query().Get("songID")
+	duration := req.URL.Query().Get("duration")
+	secret := req.URL.Query().Get("secret")
 
 	// Validate required parameters
 	if inputName == "" {
@@ -140,7 +145,7 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // dashboardHandler serves the HTML dashboard
-func (s *Server) dashboardHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) dashboardHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	if _, err := w.Write([]byte(dashboardHTML(s.stationName, s.brandColor))); err != nil {
@@ -149,7 +154,7 @@ func (s *Server) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // dashboardAPIHandler provides comprehensive JSON data for both dashboard and status endpoint
-func (s *Server) dashboardAPIHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) dashboardAPIHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// Get input statuses

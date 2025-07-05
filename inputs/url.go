@@ -68,11 +68,7 @@ func (u *URLInput) poll() {
 		slog.Error("Failed to fetch data from URL input", "input", u.GetName(), "error", err)
 		return
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			slog.Debug("Failed to close response body", "error", err)
-		}
-	}()
+	defer resp.Body.Close() //nolint:errcheck
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -30,17 +30,14 @@ func NewPostOutput(name string, settings config.PostOutputConfig) *PostOutput {
 		mapper = utils.NewPayloadMapperWithOmitEmpty(settings.PayloadMapping, settings.OmitEmpty)
 	}
 
-	return &PostOutput{
+	output := &PostOutput{
 		OutputBase:    core.NewOutputBase(name),
 		settings:      settings,
 		httpClient:    &http.Client{Timeout: 10 * time.Second},
 		payloadMapper: mapper,
 	}
-}
-
-// GetDelay implements the Output interface
-func (p *PostOutput) GetDelay() int {
-	return p.settings.Delay
+	output.SetDelay(settings.Delay)
+	return output
 }
 
 // SendFormattedMetadata implements the Output interface (fallback for non-enhanced usage)
@@ -119,11 +116,7 @@ func (p *PostOutput) sendHTTPRequest(payload interface{}) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			slog.Debug("Failed to close response body", "error", err)
-		}
-	}()
+	defer resp.Body.Close() //nolint:errcheck
 
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

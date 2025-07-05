@@ -44,6 +44,7 @@ func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 		}
 	}
 
+	output.SetDelay(settings.Delay)
 	return output
 }
 
@@ -51,18 +52,13 @@ func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 func (h *HTTPOutput) RegisterRoutes(router *mux.Router) {
 	for _, endpoint := range h.settings.Endpoints {
 		// Capture endpoint in closure to avoid loop variable issues
-		ep := endpoint
-		router.HandleFunc(ep.Path, func(w http.ResponseWriter, r *http.Request) {
-			h.handleEndpoint(w, r, ep)
+		endpoint := endpoint
+		router.HandleFunc(endpoint.Path, func(w http.ResponseWriter, req *http.Request) {
+			h.handleEndpoint(w, req, endpoint)
 		}).Methods("GET")
 
-		slog.Info("HTTP endpoint registered", "output", h.GetName(), "path", ep.Path, "type", ep.ResponseType)
+		slog.Info("HTTP endpoint registered", "output", h.GetName(), "path", endpoint.Path, "type", endpoint.ResponseType)
 	}
-}
-
-// GetDelay implements the Output interface
-func (h *HTTPOutput) GetDelay() int {
-	return h.settings.Delay
 }
 
 // SendFormattedMetadata implements the Output interface
@@ -94,7 +90,7 @@ func (h *HTTPOutput) SendEnhancedMetadata(formattedText string, metadata *core.M
 }
 
 // handleEndpoint handles individual endpoint requests
-func (h *HTTPOutput) handleEndpoint(w http.ResponseWriter, r *http.Request, endpoint config.HTTPEndpoint) {
+func (h *HTTPOutput) handleEndpoint(w http.ResponseWriter, _ *http.Request, endpoint config.HTTPEndpoint) {
 	// Get current metadata
 	metadata := h.getCurrentMetadata()
 	if metadata == nil {

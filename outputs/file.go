@@ -16,15 +16,12 @@ type FileOutput struct {
 
 // NewFileOutput creates a new file output
 func NewFileOutput(name string, settings config.FileOutputConfig) *FileOutput {
-	return &FileOutput{
+	output := &FileOutput{
 		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
 	}
-}
-
-// GetDelay implements the Output interface
-func (f *FileOutput) GetDelay() int {
-	return f.settings.Delay
+	output.SetDelay(settings.Delay)
+	return output
 }
 
 // SendFormattedMetadata implements the Output interface (called by metadata router)

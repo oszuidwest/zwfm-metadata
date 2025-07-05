@@ -11,10 +11,10 @@ func WriteFile(filename string, content []byte) error {
 
 	// Ensure directory exists
 	if dir := filepath.Dir(cleanPath); dir != "." {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0750); err != nil {
 			return err
 		}
 	}
 
-	return os.WriteFile(cleanPath, content, 0644)
+	return os.WriteFile(cleanPath, content, 0600)
 }

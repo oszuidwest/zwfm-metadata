@@ -21,24 +21,24 @@ func (r *RDSFormatter) Format(text string) string {
 	}
 
 	// Try progressive simplification strategies
-	simplified := text
+	processedText := text
 
 	// 1. Remove content in parentheses (e.g., "(Radio Edit)", "(2024 Remaster)")
-	simplified = regexp.MustCompile(`\s*\([^)]+\)`).ReplaceAllString(simplified, "")
-	if len(simplified) <= 64 {
-		return strings.TrimSpace(simplified)
+	processedText = regexp.MustCompile(`\s*\([^)]+\)`).ReplaceAllString(processedText, "")
+	if len(processedText) <= 64 {
+		return strings.TrimSpace(processedText)
 	}
 
 	// 2. Remove content in brackets (e.g., "[Live]", "[Explicit]")
-	simplified = regexp.MustCompile(`\s*\[[^\]]+\]`).ReplaceAllString(simplified, "")
-	if len(simplified) <= 64 {
-		return strings.TrimSpace(simplified)
+	processedText = regexp.MustCompile(`\s*\[[^\]]+\]`).ReplaceAllString(processedText, "")
+	if len(processedText) <= 64 {
+		return strings.TrimSpace(processedText)
 	}
 
 	// 3. Remove featured artists (various patterns)
 	// Check if we have artist - title format
-	if strings.Contains(simplified, " - ") {
-		parts := strings.SplitN(simplified, " - ", 2)
+	if strings.Contains(processedText, " - ") {
+		parts := strings.SplitN(processedText, " - ", 2)
 		if len(parts) == 2 {
 			// Remove featured artists from artist name
 			parts[0] = regexp.MustCompile(`(?i)\s+(feat\.|ft\.|featuring|with)\s+.+$`).ReplaceAllString(parts[0], "")
@@ -47,30 +47,30 @@ func (r *RDSFormatter) Format(text string) string {
 			// Remove featured artists from title
 			parts[1] = regexp.MustCompile(`(?i)\s+(feat\.|ft\.|featuring|with)\s+.+$`).ReplaceAllString(parts[1], "")
 
-			simplified = strings.TrimSpace(parts[0]) + " - " + strings.TrimSpace(parts[1])
-			if len(simplified) <= 64 {
-				return simplified
+			processedText = strings.TrimSpace(parts[0]) + " - " + strings.TrimSpace(parts[1])
+			if len(processedText) <= 64 {
+				return processedText
 			}
 		}
 	} else {
 		// No separator, remove featured artists from whole string
-		simplified = regexp.MustCompile(`(?i)\s+(feat\.|ft\.|featuring|with)\s+.+$`).ReplaceAllString(simplified, "")
-		if len(simplified) <= 64 {
-			return strings.TrimSpace(simplified)
+		processedText = regexp.MustCompile(`(?i)\s+(feat\.|ft\.|featuring|with)\s+.+$`).ReplaceAllString(processedText, "")
+		if len(processedText) <= 64 {
+			return strings.TrimSpace(processedText)
 		}
 	}
 
 	// 4. Remove remix/version indicators
 	// First try to remove everything after a second hyphen (common for remixes)
-	if strings.Count(simplified, " - ") >= 2 {
+	if strings.Count(processedText, " - ") >= 2 {
 		// Find the second " - " and remove everything after it
-		firstDash := strings.Index(simplified, " - ")
+		firstDash := strings.Index(processedText, " - ")
 		if firstDash >= 0 {
-			secondDash := strings.Index(simplified[firstDash+3:], " - ")
+			secondDash := strings.Index(processedText[firstDash+3:], " - ")
 			if secondDash >= 0 {
-				testSimplified := simplified[:firstDash+3+secondDash]
-				if len(testSimplified) <= 64 {
-					return strings.TrimSpace(testSimplified)
+				testProcessed := processedText[:firstDash+3+secondDash]
+				if len(testProcessed) <= 64 {
+					return strings.TrimSpace(testProcessed)
 				}
 			}
 		}
@@ -78,20 +78,20 @@ func (r *RDSFormatter) Format(text string) string {
 
 	// Try removing common suffixes
 	remixPattern := regexp.MustCompile(`(?i)\s*[-–]\s*.*(Remix|Mix|Edit|Version|Instrumental|Acoustic|Live|Remaster|Radio).*$`)
-	testSimplified := remixPattern.ReplaceAllString(simplified, "")
-	if len(testSimplified) <= 64 && len(testSimplified) > 0 {
-		return strings.TrimSpace(testSimplified)
+	testProcessed := remixPattern.ReplaceAllString(processedText, "")
+	if len(testProcessed) <= 64 && len(testProcessed) > 0 {
+		return strings.TrimSpace(testProcessed)
 	}
 
 	// 5. If still too long, truncate intelligently
 	// Try to cut at a natural boundary (space, hyphen, comma)
-	if len(simplified) > 64 {
-		truncated := simplified[:61] + "..."
+	if len(processedText) > 64 {
+		truncated := processedText[:61] + "..."
 
 		// Look for a better cut point
 		for i := 60; i >= 50; i-- {
-			if simplified[i] == ' ' || simplified[i] == '-' || simplified[i] == ',' {
-				truncated = strings.TrimSpace(simplified[:i]) + "..."
+			if processedText[i] == ' ' || processedText[i] == '-' || processedText[i] == ',' {
+				truncated = strings.TrimSpace(processedText[:i]) + "..."
 				break
 			}
 		}
@@ -99,7 +99,7 @@ func (r *RDSFormatter) Format(text string) string {
 		return truncated
 	}
 
-	return simplified
+	return processedText
 }
 
 // stripHTMLTags removes all HTML tags and decodes entities

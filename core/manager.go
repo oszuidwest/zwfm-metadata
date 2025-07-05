@@ -91,98 +91,98 @@ func NewMetadataRouter() *MetadataRouter {
 }
 
 // AddInput adds an input to the manager
-func (m *MetadataRouter) AddInput(input Input) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (mr *MetadataRouter) AddInput(input Input) error {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
 
 	name := input.GetName()
-	if _, exists := m.inputs[name]; exists {
+	if _, exists := mr.inputs[name]; exists {
 		return fmt.Errorf("input with name %s already exists", name)
 	}
 
-	m.inputs[name] = input
+	mr.inputs[name] = input
 	return nil
 }
 
 // AddOutput adds an output to the manager
-func (m *MetadataRouter) AddOutput(output Output) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (mr *MetadataRouter) AddOutput(output Output) error {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
 
 	name := output.GetName()
-	if _, exists := m.outputs[name]; exists {
+	if _, exists := mr.outputs[name]; exists {
 		return fmt.Errorf("output with name %s already exists", name)
 	}
 
-	m.outputs[name] = output
+	mr.outputs[name] = output
 	return nil
 }
 
 // SetOutputInputs sets which inputs an output uses
-func (m *MetadataRouter) SetOutputInputs(outputName string, inputNames []string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.outputInputs[outputName] = inputNames
+func (mr *MetadataRouter) SetOutputInputs(outputName string, inputNames []string) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	mr.outputInputs[outputName] = inputNames
 }
 
 // SetOutputFormatters sets which formatters an output uses
-func (m *MetadataRouter) SetOutputFormatters(outputName string, formatters []formatters.Formatter) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.outputFormatters[outputName] = formatters
+func (mr *MetadataRouter) SetOutputFormatters(outputName string, formatters []formatters.Formatter) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	mr.outputFormatters[outputName] = formatters
 }
 
 // SetOutputFormatterNames sets the formatter names for an output
-func (m *MetadataRouter) SetOutputFormatterNames(outputName string, formatterNames []string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.outputFormatterNames[outputName] = formatterNames
+func (mr *MetadataRouter) SetOutputFormatterNames(outputName string, formatterNames []string) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	mr.outputFormatterNames[outputName] = formatterNames
 }
 
 // SetInputPrefixSuffix sets the prefix and suffix for an input
-func (m *MetadataRouter) SetInputPrefixSuffix(inputName string, prefix, suffix string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.inputPrefixSuffix[inputName] = InputPrefixSuffix{
+func (mr *MetadataRouter) SetInputPrefixSuffix(inputName string, prefix, suffix string) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	mr.inputPrefixSuffix[inputName] = InputPrefixSuffix{
 		Prefix: prefix,
 		Suffix: suffix,
 	}
 }
 
 // SetInputType sets the type for an input (used for status display)
-func (m *MetadataRouter) SetInputType(inputName string, inputType string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.inputTypes[inputName] = inputType
+func (mr *MetadataRouter) SetInputType(inputName string, inputType string) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	mr.inputTypes[inputName] = inputType
 }
 
 // SetOutputType sets the type for an output (used for status display)
-func (m *MetadataRouter) SetOutputType(outputName string, outputType string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.outputTypes[outputName] = outputType
+func (mr *MetadataRouter) SetOutputType(outputName string, outputType string) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	mr.outputTypes[outputName] = outputType
 }
 
 // GetOutputType returns the type for an output
-func (m *MetadataRouter) GetOutputType(outputName string) string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if outputType, exists := m.outputTypes[outputName]; exists {
+func (mr *MetadataRouter) GetOutputType(outputName string) string {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+	if outputType, exists := mr.outputTypes[outputName]; exists {
 		return outputType
 	}
 	return "unknown"
 }
 
 // GetInputStatus returns the status of all inputs including prefix/suffix
-func (m *MetadataRouter) GetInputStatus() []InputStatus {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (mr *MetadataRouter) GetInputStatus() []InputStatus {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 
-	var statuses []InputStatus
-	for name, input := range m.inputs {
+	statuses := make([]InputStatus, 0, len(mr.inputs))
+	for name, input := range mr.inputs {
 		metadata := input.GetMetadata()
-		prefixSuffix := m.inputPrefixSuffix[name]
-		inputType := m.inputTypes[name]
+		prefixSuffix := mr.inputPrefixSuffix[name]
+		inputType := mr.inputTypes[name]
 
 		status := InputStatus{
 			Name:      name,
@@ -230,33 +230,33 @@ func (m *MetadataRouter) GetInputStatus() []InputStatus {
 }
 
 // GetInput retrieves an input by name
-func (m *MetadataRouter) GetInput(name string) (Input, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (mr *MetadataRouter) GetInput(name string) (Input, bool) {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 
-	input, exists := m.inputs[name]
+	input, exists := mr.inputs[name]
 	return input, exists
 }
 
 // GetInputs returns all inputs
-func (m *MetadataRouter) GetInputs() []Input {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (mr *MetadataRouter) GetInputs() []Input {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 
-	inputs := make([]Input, 0, len(m.inputs))
-	for _, input := range m.inputs {
+	inputs := make([]Input, 0, len(mr.inputs))
+	for _, input := range mr.inputs {
 		inputs = append(inputs, input)
 	}
 	return inputs
 }
 
 // GetOutputs returns all outputs sorted by name
-func (m *MetadataRouter) GetOutputs() []Output {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (mr *MetadataRouter) GetOutputs() []Output {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 
-	outputs := make([]Output, 0, len(m.outputs))
-	for _, output := range m.outputs {
+	outputs := make([]Output, 0, len(mr.outputs))
+	for _, output := range mr.outputs {
 		outputs = append(outputs, output)
 	}
 
@@ -269,55 +269,55 @@ func (m *MetadataRouter) GetOutputs() []Output {
 }
 
 // GetOutputInputs returns the input names for an output
-func (m *MetadataRouter) GetOutputInputs(outputName string) []string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (mr *MetadataRouter) GetOutputInputs(outputName string) []string {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 
-	if inputs, exists := m.outputInputs[outputName]; exists {
+	if inputs, exists := mr.outputInputs[outputName]; exists {
 		return inputs
 	}
 	return []string{}
 }
 
 // GetOutputFormatterNames returns the formatter names for an output
-func (m *MetadataRouter) GetOutputFormatterNames(outputName string) []string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (mr *MetadataRouter) GetOutputFormatterNames(outputName string) []string {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 
-	if formatterNames, exists := m.outputFormatterNames[outputName]; exists {
+	if formatterNames, exists := mr.outputFormatterNames[outputName]; exists {
 		return formatterNames
 	}
 	return []string{}
 }
 
 // GetCurrentInputForOutput returns the current active input for an output
-func (m *MetadataRouter) GetCurrentInputForOutput(outputName string) string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (mr *MetadataRouter) GetCurrentInputForOutput(outputName string) string {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 
-	if currentInput, exists := m.currentInputs[outputName]; exists {
+	if currentInput, exists := mr.currentInputs[outputName]; exists {
 		return currentInput
 	}
 	return ""
 }
 
 // Start starts all inputs and outputs with centralized timeline scheduling
-func (m *MetadataRouter) Start(ctx context.Context) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (mr *MetadataRouter) Start(ctx context.Context) error {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
 
-	if len(m.inputs) == 0 {
+	if len(mr.inputs) == 0 {
 		return fmt.Errorf("cannot start: no inputs configured")
 	}
 
 	// Start timeline processor
-	go m.startTimelineProcessor(ctx)
+	go mr.startTimelineProcessor(ctx)
 
 	// Start expiration checker
-	go m.startExpirationChecker(ctx)
+	go mr.startExpirationChecker(ctx)
 
 	// Start all inputs and subscribe to their metadata updates
-	for name, input := range m.inputs {
+	for name, input := range mr.inputs {
 		// Start the input
 		go func(n string, i Input) {
 			if err := i.Start(ctx); err != nil {
@@ -326,16 +326,16 @@ func (m *MetadataRouter) Start(ctx context.Context) error {
 		}(name, input)
 
 		// Subscribe to input metadata updates
-		ch := make(chan *Metadata, 10)
-		m.inputSubscriptions[name] = ch
-		input.Subscribe(ch)
+		metadataChannel := make(chan *Metadata, 10)
+		mr.inputSubscriptions[name] = metadataChannel
+		input.Subscribe(metadataChannel)
 
 		// Handle metadata updates for this input
-		go m.handleInputMetadata(ctx, name, ch)
+		go mr.handleInputMetadata(ctx, name, metadataChannel)
 	}
 
 	// Start all outputs
-	for name, output := range m.outputs {
+	for name, output := range mr.outputs {
 		go func(n string, o Output) {
 			if err := o.Start(ctx); err != nil {
 				slog.Error("Failed to start output", "name", n, "error", err)
@@ -349,31 +349,31 @@ func (m *MetadataRouter) Start(ctx context.Context) error {
 }
 
 // handleInputMetadata handles metadata updates from inputs
-func (m *MetadataRouter) handleInputMetadata(ctx context.Context, inputName string, ch chan *Metadata) {
+func (mr *MetadataRouter) handleInputMetadata(ctx context.Context, inputName string, metadataChannel chan *Metadata) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case metadata := <-ch:
+		case metadata := <-metadataChannel:
 			// Schedule updates for all outputs that use this input
-			m.scheduleInputChangeUpdates(inputName, metadata)
+			mr.scheduleInputChangeUpdates(inputName, metadata)
 		}
 	}
 }
 
 // scheduleInputChangeUpdates schedules updates for outputs when input metadata changes
-func (m *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata *Metadata) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata *Metadata) {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 
-	for outputName, output := range m.outputs {
+	for outputName, output := range mr.outputs {
 		// Check if this output uses this input
-		if !m.outputUsesInput(outputName, inputName) {
+		if !mr.outputUsesInput(outputName, inputName) {
 			continue
 		}
 
 		// Get output's inputs in priority order
-		inputNames, exists := m.outputInputs[outputName]
+		inputNames, exists := mr.outputInputs[outputName]
 		if !exists {
 			continue
 		}
@@ -381,7 +381,7 @@ func (m *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata *
 		// Check if this input is the highest priority available input
 		isHighestPriority := false
 		for _, name := range inputNames {
-			if input, exists := m.inputs[name]; exists {
+			if input, exists := mr.inputs[name]; exists {
 				inputMetadata := input.GetMetadata()
 				if inputMetadata != nil && inputMetadata.IsAvailable() {
 					// Found an available input
@@ -401,7 +401,7 @@ func (m *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata *
 
 		// Cancel any existing updates for this output
 		cancelToken := fmt.Sprintf("%s_%d", outputName, time.Now().UnixNano())
-		m.cancelScheduledUpdates(outputName)
+		mr.cancelScheduledUpdates(outputName)
 
 		// Schedule new update with delay
 		delay := time.Duration(output.GetDelay()) * time.Second
@@ -416,7 +416,7 @@ func (m *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata *
 			CancelToken: cancelToken,
 		}
 
-		m.timeline.addUpdate(update)
+		mr.timeline.addUpdate(update)
 
 		if delay > 0 {
 			slog.Debug("Scheduled update for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
@@ -427,8 +427,8 @@ func (m *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata *
 }
 
 // outputUsesInput checks if an output uses a specific input
-func (m *MetadataRouter) outputUsesInput(outputName string, inputName string) bool {
-	inputNames, exists := m.outputInputs[outputName]
+func (mr *MetadataRouter) outputUsesInput(outputName string, inputName string) bool {
+	inputNames, exists := mr.outputInputs[outputName]
 	if !exists {
 		return false
 	}
@@ -442,12 +442,12 @@ func (m *MetadataRouter) outputUsesInput(outputName string, inputName string) bo
 }
 
 // cancelScheduledUpdates cancels all pending updates for an output
-func (m *MetadataRouter) cancelScheduledUpdates(outputName string) {
-	m.timeline.cancelUpdatesForOutput(outputName)
+func (mr *MetadataRouter) cancelScheduledUpdates(outputName string) {
+	mr.timeline.cancelUpdatesForOutput(outputName)
 }
 
 // startExpirationChecker checks for expired metadata and schedules fallback updates
-func (m *MetadataRouter) startExpirationChecker(ctx context.Context) {
+func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -458,31 +458,31 @@ func (m *MetadataRouter) startExpirationChecker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			m.checkForExpirations()
+			mr.checkForExpirations()
 		}
 	}
 }
 
 // checkForExpirations finds expired inputs and schedules fallback updates (with delays)
-func (m *MetadataRouter) checkForExpirations() {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (mr *MetadataRouter) checkForExpirations() {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
 
-	for outputName, output := range m.outputs {
+	for outputName, output := range mr.outputs {
 		// Skip if there are already pending updates for this output
-		if m.timeline.hasScheduledUpdatesForOutput(outputName) {
+		if mr.timeline.hasScheduledUpdatesForOutput(outputName) {
 			continue
 		}
 
 		// Get the current input for this output
-		currentInputName, hasCurrentInput := m.currentInputs[outputName]
+		currentInputName, hasCurrentInput := mr.currentInputs[outputName]
 		if !hasCurrentInput {
 			// No current input set, skip
 			continue
 		}
 
 		// Check if the current input has expired
-		currentInput, exists := m.inputs[currentInputName]
+		currentInput, exists := mr.inputs[currentInputName]
 		if !exists {
 			continue
 		}
@@ -494,7 +494,7 @@ func (m *MetadataRouter) checkForExpirations() {
 		}
 
 		// Current input has expired, find next available input
-		inputNames, exists := m.outputInputs[outputName]
+		inputNames, exists := mr.outputInputs[outputName]
 		if !exists {
 			continue
 		}
@@ -503,7 +503,7 @@ func (m *MetadataRouter) checkForExpirations() {
 		var fallbackMetadata *Metadata
 		var fallbackInputName string
 		for _, inputName := range inputNames {
-			if input, exists := m.inputs[inputName]; exists {
+			if input, exists := mr.inputs[inputName]; exists {
 				metadata := input.GetMetadata()
 				if metadata != nil && metadata.IsAvailable() {
 					fallbackMetadata = metadata
@@ -515,10 +515,10 @@ func (m *MetadataRouter) checkForExpirations() {
 
 		// Check if we have fallback metadata and if it would be different from what we last sent
 		if fallbackMetadata != nil && fallbackInputName != currentInputName {
-			formattedText := m.formatMetadataForOutput(outputName, fallbackMetadata, fallbackInputName)
+			formattedText := mr.formatMetadataForOutput(outputName, fallbackMetadata, fallbackInputName)
 			if formattedText != "" {
 				// Only schedule if content is different from what we last sent
-				lastSent := m.lastSentContent[outputName]
+				lastSent := mr.lastSentContent[outputName]
 				if formattedText != lastSent {
 					// Schedule fallback with delay
 					delay := time.Duration(output.GetDelay()) * time.Second
@@ -533,20 +533,20 @@ func (m *MetadataRouter) checkForExpirations() {
 						CancelToken: fmt.Sprintf("%s_exp_%d", outputName, time.Now().UnixNano()),
 					}
 
-					m.timeline.addUpdate(update)
+					mr.timeline.addUpdate(update)
 					slog.Debug("Scheduled expiration fallback for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
 				}
 			}
 		} else if fallbackMetadata == nil {
 			// No fallback available - clear the current input
-			m.currentInputs[outputName] = ""
+			mr.currentInputs[outputName] = ""
 			slog.Info("Output has no available inputs - cleared current input", "output", outputName)
 		}
 	}
 }
 
 // formatMetadataForOutput formats metadata for a specific output using its formatters and input prefix/suffix
-func (m *MetadataRouter) formatMetadataForOutput(outputName string, metadata *Metadata, inputName string) string {
+func (mr *MetadataRouter) formatMetadataForOutput(outputName string, metadata *Metadata, inputName string) string {
 	if metadata == nil {
 		return ""
 	}
@@ -558,17 +558,17 @@ func (m *MetadataRouter) formatMetadataForOutput(outputName string, metadata *Me
 	}
 
 	// Apply input-specific prefix/suffix
-	if prefixSuffix, exists := m.inputPrefixSuffix[inputName]; exists {
+	if prefixSuffix, exists := mr.inputPrefixSuffix[inputName]; exists {
 		if prefixSuffix.Prefix != "" {
 			formattedText = prefixSuffix.Prefix + formattedText
 		}
 		if prefixSuffix.Suffix != "" {
-			formattedText = formattedText + prefixSuffix.Suffix
+			formattedText += prefixSuffix.Suffix
 		}
 	}
 
 	// Apply output-specific formatters
-	outputFormatters, exists := m.outputFormatters[outputName]
+	outputFormatters, exists := mr.outputFormatters[outputName]
 	if !exists {
 		return formattedText
 	}
@@ -582,7 +582,7 @@ func (m *MetadataRouter) formatMetadataForOutput(outputName string, metadata *Me
 }
 
 // startTimelineProcessor processes scheduled updates from the timeline
-func (m *MetadataRouter) startTimelineProcessor(ctx context.Context) {
+func (mr *MetadataRouter) startTimelineProcessor(ctx context.Context) {
 	ticker := time.NewTicker(100 * time.Millisecond) // Check every 100ms for precision
 	defer ticker.Stop()
 
@@ -593,15 +593,15 @@ func (m *MetadataRouter) startTimelineProcessor(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			m.processReadyUpdates()
+			mr.processReadyUpdates()
 		}
 	}
 }
 
 // processReadyUpdates executes all updates that are ready to be processed
-func (m *MetadataRouter) processReadyUpdates() {
+func (mr *MetadataRouter) processReadyUpdates() {
 	now := time.Now()
-	readyUpdates := m.timeline.getReadyUpdates(now)
+	readyUpdates := mr.timeline.getReadyUpdates(now)
 
 	// Process all ready updates concurrently (async)
 	var wg sync.WaitGroup
@@ -609,42 +609,42 @@ func (m *MetadataRouter) processReadyUpdates() {
 		wg.Add(1)
 		go func(update ScheduledUpdate) {
 			defer wg.Done()
-			m.executeUpdate(update)
+			mr.executeUpdate(update)
 		}(update)
 	}
 	wg.Wait()
 }
 
 // executeUpdate processes a single scheduled update
-func (m *MetadataRouter) executeUpdate(update ScheduledUpdate) {
+func (mr *MetadataRouter) executeUpdate(update ScheduledUpdate) {
 	// Find which input this metadata came from
 	var inputName string
-	m.mu.RLock()
-	for name, input := range m.inputs {
+	mr.mu.RLock()
+	for name, input := range mr.inputs {
 		if input.GetMetadata() != nil && input.GetMetadata().Name == update.Metadata.Name {
 			inputName = name
 			break
 		}
 	}
-	m.mu.RUnlock()
+	mr.mu.RUnlock()
 
 	// Format metadata for this output
-	formattedText := m.formatMetadataForOutput(update.OutputName, update.Metadata, inputName)
+	formattedText := mr.formatMetadataForOutput(update.OutputName, update.Metadata, inputName)
 	if formattedText == "" {
 		return
 	}
 
 	// Check if content has changed from what we last sent
-	m.mu.Lock()
-	lastSent := m.lastSentContent[update.OutputName]
+	mr.mu.Lock()
+	lastSent := mr.lastSentContent[update.OutputName]
 	if formattedText == lastSent {
-		m.mu.Unlock()
+		mr.mu.Unlock()
 		return // No change, skip update
 	}
 	// Update tracking before unlocking
-	m.lastSentContent[update.OutputName] = formattedText
-	m.currentInputs[update.OutputName] = inputName
-	m.mu.Unlock()
+	mr.lastSentContent[update.OutputName] = formattedText
+	mr.currentInputs[update.OutputName] = inputName
+	mr.mu.Unlock()
 
 	// Execute the update
 	slog.Debug("Executing update for output", "update_type", update.UpdateType, "output", update.OutputName, "text", formattedText)

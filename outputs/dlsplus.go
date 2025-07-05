@@ -26,19 +26,16 @@ type DLSPlusOutput struct {
 
 // NewDLSPlusOutput creates a new DLS Plus output instance
 func NewDLSPlusOutput(name string, settings config.DLSPlusOutputConfig) *DLSPlusOutput {
-	return &DLSPlusOutput{
+	output := &DLSPlusOutput{
 		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
 	}
-}
-
-// GetDelay returns the configured delay for this output
-func (o *DLSPlusOutput) GetDelay() int {
-	return o.settings.Delay
+	output.SetDelay(settings.Delay)
+	return output
 }
 
 // SendFormattedMetadata is not used for DLS Plus output
-func (o *DLSPlusOutput) SendFormattedMetadata(text string) {
+func (o *DLSPlusOutput) SendFormattedMetadata(_ string) {
 	// This won't be called since we implement EnhancedOutput
 }
 
@@ -108,7 +105,7 @@ func (o *DLSPlusOutput) writeToFile(content string) error {
 }
 
 // Start initializes the output
-func (o *DLSPlusOutput) Start(ctx context.Context) error {
+func (o *DLSPlusOutput) Start(_ context.Context) error {
 	slog.Info("DLS Plus output writing to file", "filename", o.settings.Filename)
 
 	// Create initial empty file

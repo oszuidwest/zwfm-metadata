@@ -59,10 +59,8 @@ func (pm *PayloadMapper) processMapping(mapping map[string]interface{}, result m
 				if !pm.omitEmpty || processedValue != "" {
 					result[key] = processedValue
 				}
-			} else {
-				if !pm.omitEmpty || v != "" {
-					result[key] = v
-				}
+			} else if !pm.omitEmpty || v != "" {
+				result[key] = v
 			}
 		case map[string]interface{}:
 			// Handle nested objects
@@ -80,9 +78,9 @@ func (pm *PayloadMapper) processMapping(mapping map[string]interface{}, result m
 }
 
 // processTemplate executes a template string with the provided data
-func (pm *PayloadMapper) processTemplate(templateStr string, data interface{}) string {
+func (pm *PayloadMapper) processTemplate(templateString string, data interface{}) string {
 	// Create template with custom functions
-	tmpl, err := template.New("payload").Funcs(template.FuncMap{
+	template, err := template.New("payload").Funcs(template.FuncMap{
 		"formatTime": func(t time.Time) string {
 			return t.Format(time.RFC3339)
 		},
@@ -96,25 +94,25 @@ func (pm *PayloadMapper) processTemplate(templateStr string, data interface{}) s
 		"lower": strings.ToLower,
 		"upper": strings.ToUpper,
 		"trim":  strings.TrimSpace,
-	}).Parse(templateStr)
+	}).Parse(templateString)
 
 	if err != nil {
-		slog.Error("Failed to parse template", "error", err, "template", templateStr)
-		return templateStr
+		slog.Error("Failed to parse template", "error", err, "template", templateString)
+		return templateString
 	}
 
 	// Get buffer from pool
-	buf := bufferPool.Get().(*bytes.Buffer)
+	templateBuffer := bufferPool.Get().(*bytes.Buffer)
 	defer func() {
-		buf.Reset()
-		bufferPool.Put(buf)
+		templateBuffer.Reset()
+		bufferPool.Put(templateBuffer)
 	}()
 
 	// Execute template
-	if err := tmpl.Execute(buf, data); err != nil {
-		slog.Error("Failed to execute template", "error", err, "template", templateStr)
-		return templateStr
+	if err := template.Execute(templateBuffer, data); err != nil {
+		slog.Error("Failed to execute template", "error", err, "template", templateString)
+		return templateString
 	}
 
-	return buf.String()
+	return templateBuffer.String()
 }
