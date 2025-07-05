@@ -118,23 +118,23 @@ func (w *WebSocketOutput) handleWebSocket(rw http.ResponseWriter, r *http.Reques
 
 	// Send current metadata if available
 	if currentMsg := w.getCurrentMetadata(); currentMsg != nil {
-		// Send as welcome message
-		welcomeMsg := *currentMsg
-		welcomeMsg.Type = "welcome"
+		// Send as metadata update message
+		updateMsg := *currentMsg
+		updateMsg.Type = "metadata_update"
 
 		var payloadToSend interface{}
 		// If custom payload mapping is defined, use it
 		if w.payloadMapper != nil {
 			// Convert to template data
-			templateData := welcomeMsg.ToTemplateData()
+			templateData := updateMsg.ToTemplateData()
 			payloadToSend = w.payloadMapper.MapPayload(templateData)
 		} else {
 			// Use default message structure
-			payloadToSend = welcomeMsg
+			payloadToSend = updateMsg
 		}
 
 		if err := conn.WriteJSON(payloadToSend); err != nil {
-			slog.Debug("Failed to send welcome message", "error", err)
+			slog.Debug("Failed to send initial metadata message", "error", err)
 		}
 	}
 

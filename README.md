@@ -321,7 +321,6 @@ Broadcast metadata to connected clients
   "formatters": ["ucwords"],
   "settings": {
     "delay": 0,
-    "address": ":8080",
     "path": "/metadata",
     "payloadMapping": {...}  // See Custom Payload Mapping section
   }
@@ -330,15 +329,16 @@ Broadcast metadata to connected clients
 
 ##### Settings
 - `delay` (required) - Seconds to delay metadata updates
-- `address` (required) - Address to bind the WebSocket server (e.g., ":8080", "localhost:8080")
 - `path` (required) - URL path for WebSocket connections (e.g., "/metadata", "/ws")
 - `payloadMapping` (optional) - Custom JSON message structure (see [Custom Payload Mapping](#custom-payload-mapping))
+
+**Note**: WebSocket endpoints are served on the main web server port (default: 9000), not on a separate port.
 
 ##### Client Connection Example
 
 JavaScript:
 ```javascript
-const ws = new WebSocket('ws://localhost:8080/metadata');
+const ws = new WebSocket('ws://localhost:9000/metadata');
 
 ws.onmessage = (event) => {
   const metadata = JSON.parse(event.data);
@@ -348,7 +348,7 @@ ws.onmessage = (event) => {
 
 ws.onopen = () => {
   console.log('Connected to metadata WebSocket');
-  // You'll immediately receive the current metadata as a "welcome" message
+  // You'll immediately receive the current metadata
 };
 ```
 
@@ -410,7 +410,7 @@ Both **POST** and **WebSocket** outputs support custom payload mapping to transf
 - `{{.duration}}` - Song duration
 - `{{.updated_at}}` - When the metadata was updated (RFC3339 format)
 - `{{.expires_at}}` - When the metadata expires (RFC3339 format, empty if no expiration)
-- `{{.type}}` - Message type (WebSocket only: "metadata_update" or "welcome")
+- `{{.type}}` - Message type (WebSocket only: "metadata_update")
 
 #### Default Payloads
 
