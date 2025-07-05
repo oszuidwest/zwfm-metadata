@@ -38,7 +38,7 @@ func (o *DLSPlusOutput) GetDelay() int {
 }
 
 // SendFormattedMetadata is not used for DLS Plus output
-func (o *DLSPlusOutput) SendFormattedMetadata(text string) {
+func (o *DLSPlusOutput) SendFormattedMetadata(_ string) {
 	// This won't be called since we implement EnhancedOutput
 }
 
@@ -108,7 +108,7 @@ func (o *DLSPlusOutput) writeToFile(content string) error {
 }
 
 // Start initializes the output
-func (o *DLSPlusOutput) Start(ctx context.Context) error {
+func (o *DLSPlusOutput) Start(_ context.Context) error {
 	slog.Info("DLS Plus output writing to file", "filename", o.settings.Filename)
 
 	// Create initial empty file
