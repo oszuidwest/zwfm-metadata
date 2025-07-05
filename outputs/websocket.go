@@ -38,7 +38,7 @@ func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *Web
 		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
 		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool {
+			CheckOrigin: func(_ *http.Request) bool {
 				// Allow connections from any origin
 				// In production, you might want to be more restrictive
 				return true
@@ -95,9 +95,9 @@ func (w *WebSocketOutput) SendEnhancedMetadata(formattedText string, metadata *c
 }
 
 // handleWebSocket handles WebSocket connection upgrades
-func (w *WebSocketOutput) handleWebSocket(rw http.ResponseWriter, r *http.Request) {
+func (w *WebSocketOutput) handleWebSocket(writer http.ResponseWriter, req *http.Request) {
 	// Upgrade HTTP connection to WebSocket
-	conn, err := w.upgrader.Upgrade(rw, r, nil)
+	conn, err := w.upgrader.Upgrade(writer, req, nil)
 	if err != nil {
 		slog.Error("Failed to upgrade WebSocket connection", "error", err)
 		return
@@ -114,7 +114,7 @@ func (w *WebSocketOutput) handleWebSocket(rw http.ResponseWriter, r *http.Reques
 	clientCount := len(w.clients)
 	w.mu.Unlock()
 
-	slog.Debug("WebSocket client connected", "remote_addr", r.RemoteAddr, "total_clients", clientCount)
+	slog.Debug("WebSocket client connected", "remote_addr", req.RemoteAddr, "total_clients", clientCount)
 
 	// Send current metadata if available
 	if currentMsg := w.getCurrentMetadata(); currentMsg != nil {
@@ -172,7 +172,7 @@ func (w *WebSocketOutput) handleWebSocket(rw http.ResponseWriter, r *http.Reques
 			clientCount := len(w.clients)
 			w.mu.Unlock()
 
-			slog.Debug("WebSocket client disconnected", "remote_addr", r.RemoteAddr, "total_clients", clientCount)
+			slog.Debug("WebSocket client disconnected", "remote_addr", req.RemoteAddr, "total_clients", clientCount)
 			break
 		}
 	}

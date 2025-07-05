@@ -30,7 +30,7 @@ func main() {
 	}
 
 	// Load configuration
-	cfg, err := config.LoadConfig(*configFile)
+	appConfig, err := config.LoadConfig(*configFile)
 	if err != nil {
 		slog.Error("Failed to load configuration", "error", err)
 		os.Exit(1)
@@ -38,7 +38,7 @@ func main() {
 
 	// Configure slog based on debug setting
 	level := slog.LevelInfo
-	if cfg.Debug {
+	if appConfig.Debug {
 		level = slog.LevelDebug
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -47,13 +47,13 @@ func main() {
 	slog.SetDefault(logger)
 
 	// Log startup information
-	slog.Info("Starting metadata router", "station", cfg.StationName, "version", utils.Version, "commit", utils.Commit)
+	slog.Info("Starting metadata router", "station", appConfig.StationName, "version", utils.Version, "commit", utils.Commit)
 
 	// Create metadata router
 	router := core.NewMetadataRouter()
 
 	// Create inputs
-	for _, inputCfg := range cfg.Inputs {
+	for _, inputCfg := range appConfig.Inputs {
 		input, err := createInput(inputCfg)
 		if err != nil {
 			slog.Error("Failed to create input", "name", inputCfg.Name, "error", err)
@@ -78,7 +78,7 @@ func main() {
 	}
 
 	// Create outputs
-	for _, outputCfg := range cfg.Outputs {
+	for _, outputCfg := range appConfig.Outputs {
 		output, err := createOutput(outputCfg)
 		if err != nil {
 			slog.Error("Failed to create output", "name", outputCfg.Name, "error", err)
@@ -124,7 +124,6 @@ func main() {
 
 	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Handle shutdown signals
 	sigChan := make(chan os.Signal, 1)
@@ -137,7 +136,7 @@ func main() {
 	}()
 
 	// Start web server
-	server := web.NewServer(cfg.WebServerPort, router, cfg.StationName, cfg.BrandColor)
+	server := web.NewServer(appConfig.WebServerPort, router, appConfig.StationName, appConfig.BrandColor)
 	go func() {
 		if err := server.Start(ctx); err != nil {
 			slog.Error("Web server encountered an error", "error", err)
@@ -147,6 +146,7 @@ func main() {
 	// Start timeline router
 	if err := router.Start(ctx); err != nil {
 		slog.Error("Failed to start timeline router", "error", err)
+		cancel() // Cancel context before exiting
 		os.Exit(1)
 	}
 

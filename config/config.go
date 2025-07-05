@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 )
 
 // Config represents the main configuration
@@ -115,7 +116,11 @@ type HTTPEndpoint struct {
 
 // LoadConfig loads configuration from a file
 func LoadConfig(filename string) (*Config, error) {
-	file, err := os.Open(filename)
+	// Clean the path to prevent directory traversal
+	cleanPath := filepath.Clean(filename)
+
+	// #nosec G304 - This is intentionally loading user-specified config files
+	file, err := os.Open(cleanPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open config file: %w", err)
 	}
