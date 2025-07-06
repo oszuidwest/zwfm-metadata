@@ -47,20 +47,20 @@ func (p *PostOutput) SendFormattedMetadata(formattedText string) {
 		Title:     formattedText, // Use formatted text as title fallback
 		UpdatedAt: time.Now(),
 	}
-	payload := utils.ConvertMetadata(formattedText, minimalMetadata)
+	payload := utils.ConvertMetadata(formattedText, minimalMetadata, "", "")
 
 	p.sendPayload(*payload)
 }
 
 // SendEnhancedMetadata implements the EnhancedOutput interface
-func (p *PostOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata) {
+func (p *PostOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
 	// Check if value changed to avoid unnecessary HTTP requests
 	if !p.HasChanged(formattedText) {
 		return
 	}
 
 	// Build complete payload with all metadata fields
-	payload := utils.ConvertMetadata(formattedText, metadata)
+	payload := utils.ConvertMetadata(formattedText, metadata, inputName, inputType)
 
 	p.sendPayload(*payload)
 }

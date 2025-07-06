@@ -15,10 +15,12 @@ type UniversalMetadata struct {
 	Duration          string     `json:"duration,omitempty" xml:"duration,omitempty" yaml:"duration,omitempty"`
 	UpdatedAt         time.Time  `json:"updated_at" xml:"updated_at" yaml:"updated_at"`
 	ExpiresAt         *time.Time `json:"expires_at,omitempty" xml:"expires_at,omitempty" yaml:"expires_at,omitempty"`
+	Source            string     `json:"source,omitempty" xml:"source,omitempty" yaml:"source,omitempty"`
+	SourceType        string     `json:"source_type,omitempty" xml:"source_type,omitempty" yaml:"source_type,omitempty"`
 }
 
-// ConvertMetadata converts core.Metadata to UniversalMetadata with formatted text
-func ConvertMetadata(formattedText string, metadata *core.Metadata) *UniversalMetadata {
+// ConvertMetadata converts core.Metadata to UniversalMetadata
+func ConvertMetadata(formattedText string, metadata *core.Metadata, source, sourceType string) *UniversalMetadata {
 	return &UniversalMetadata{
 		FormattedMetadata: formattedText,
 		SongID:            metadata.SongID,
@@ -27,12 +29,14 @@ func ConvertMetadata(formattedText string, metadata *core.Metadata) *UniversalMe
 		Duration:          metadata.Duration,
 		UpdatedAt:         metadata.UpdatedAt,
 		ExpiresAt:         metadata.ExpiresAt,
+		Source:            source,
+		SourceType:        sourceType,
 	}
 }
 
 // ConvertMetadataWithType converts core.Metadata to UniversalMetadata with a specific type
-func ConvertMetadataWithType(formattedText string, metadata *core.Metadata, metadataType string) *UniversalMetadata {
-	universal := ConvertMetadata(formattedText, metadata)
+func ConvertMetadataWithType(formattedText string, metadata *core.Metadata, metadataType, source, sourceType string) *UniversalMetadata {
+	universal := ConvertMetadata(formattedText, metadata, source, sourceType)
 	universal.Type = metadataType
 	return universal
 }
@@ -50,6 +54,14 @@ func (um *UniversalMetadata) ToTemplateData() map[string]interface{} {
 
 	if um.Type != "" {
 		data["type"] = um.Type
+	}
+
+	if um.Source != "" {
+		data["source"] = um.Source
+	}
+
+	if um.SourceType != "" {
+		data["source_type"] = um.SourceType
 	}
 
 	if um.ExpiresAt != nil {

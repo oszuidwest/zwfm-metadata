@@ -619,10 +619,12 @@ func (mr *MetadataRouter) processReadyUpdates() {
 func (mr *MetadataRouter) executeUpdate(update ScheduledUpdate) {
 	// Find which input this metadata came from
 	var inputName string
+	var inputType string
 	mr.mu.RLock()
 	for name, input := range mr.inputs {
 		if input.GetMetadata() != nil && input.GetMetadata().Name == update.Metadata.Name {
 			inputName = name
+			inputType = mr.inputTypes[name]
 			break
 		}
 	}
@@ -651,7 +653,7 @@ func (mr *MetadataRouter) executeUpdate(update ScheduledUpdate) {
 
 	// Check if output supports enhanced metadata processing
 	if enhancedOutput, ok := update.Output.(EnhancedOutput); ok {
-		enhancedOutput.SendEnhancedMetadata(formattedText, update.Metadata)
+		enhancedOutput.SendEnhancedMetadata(formattedText, update.Metadata, inputName, inputType)
 	} else {
 		update.Output.SendFormattedMetadata(formattedText)
 	}

@@ -69,7 +69,7 @@ func (w *WebSocketOutput) SendFormattedMetadata(formattedText string) {
 		Title:     formattedText, // Use formatted text as title fallback
 		UpdatedAt: time.Now(),
 	}
-	msg := utils.ConvertMetadataWithType(formattedText, minimalMetadata, "metadata_update")
+	msg := utils.ConvertMetadataWithType(formattedText, minimalMetadata, "metadata_update", "", "")
 
 	// Store current metadata
 	w.storeCurrentMetadata(msg)
@@ -77,14 +77,14 @@ func (w *WebSocketOutput) SendFormattedMetadata(formattedText string) {
 }
 
 // SendEnhancedMetadata implements the EnhancedOutput interface
-func (w *WebSocketOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata) {
+func (w *WebSocketOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
 	// Check if value changed to avoid unnecessary broadcasts
 	if !w.HasChanged(formattedText) {
 		return
 	}
 
 	// Create message with full metadata
-	msg := utils.ConvertMetadataWithType(formattedText, metadata, "metadata_update")
+	msg := utils.ConvertMetadataWithType(formattedText, metadata, "metadata_update", inputName, inputType)
 
 	// Store current metadata
 	w.storeCurrentMetadata(msg)

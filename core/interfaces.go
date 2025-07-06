@@ -50,7 +50,7 @@ type Output interface {
 type EnhancedOutput interface {
 	Output
 	// SendEnhancedMetadata processes metadata with full details
-	SendEnhancedMetadata(formattedText string, metadata *Metadata)
+	SendEnhancedMetadata(formattedText string, metadata *Metadata, inputName, inputType string)
 }
 
 // RouteRegistrar interface for outputs that need to register HTTP routes

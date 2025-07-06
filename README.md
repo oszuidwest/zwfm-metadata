@@ -411,6 +411,8 @@ Both **POST** and **WebSocket** outputs support custom payload mapping to transf
 - `{{.updated_at}}` - When the metadata was updated (RFC3339 format)
 - `{{.expires_at}}` - When the metadata expires (RFC3339 format, empty if no expiration)
 - `{{.type}}` - Message type (WebSocket only: "metadata_update")
+- `{{.source}}` - Name of the input that provided this metadata
+- `{{.source_type}}` - Type of the input (e.g., "dynamic", "url", "text")
 
 #### Default Payloads
 
@@ -425,7 +427,9 @@ POST Output:
   "artist": "Artist",
   "duration": "3:45",
   "updated_at": "2023-12-01T15:30:00Z",
-  "expires_at": "2023-12-01T15:33:45Z"
+  "expires_at": "2023-12-01T15:33:45Z",
+  "source": "radio-live",
+  "source_type": "dynamic"
 }
 ```
 
@@ -439,7 +443,9 @@ WebSocket Output:
   "artist": "Artist",
   "duration": "3:45",
   "updated_at": "2023-12-01T15:30:00Z",
-  "expires_at": "2023-12-01T15:33:45Z"
+  "expires_at": "2023-12-01T15:33:45Z",
+  "source": "radio-live",
+  "source_type": "dynamic"
 }
 ```
 
@@ -516,6 +522,21 @@ Output:
       "region": "Amsterdam"
     },
     "expires_at": "{{.expires_at}}"
+  }
+}
+```
+
+##### Source Tracking
+```json
+{
+  "payloadMapping": {
+    "title": "{{.title}}",
+    "artist": "{{.artist}}",
+    "metadata_source": {
+      "input_name": "{{.source}}",
+      "input_type": "{{.source_type}}",
+      "reliability": "{{if eq .source_type \"dynamic\"}}live{{else if eq .source_type \"url\"}}automated{{else}}static{{end}}"
+    }
   }
 }
 ```

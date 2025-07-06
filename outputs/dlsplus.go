@@ -40,7 +40,7 @@ func (o *DLSPlusOutput) SendFormattedMetadata(_ string) {
 }
 
 // SendEnhancedMetadata writes the metadata in DLS Plus format
-func (o *DLSPlusOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata) {
+func (o *DLSPlusOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
 	// Check if value changed to avoid unnecessary file writes
 	if !o.HasChanged(formattedText) {
 		return

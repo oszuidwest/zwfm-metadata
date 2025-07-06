@@ -74,18 +74,18 @@ func (h *HTTPOutput) SendFormattedMetadata(formattedText string) {
 		UpdatedAt: time.Now(),
 	}
 
-	httpMetadata := utils.ConvertMetadata(formattedText, minimalMetadata)
+	httpMetadata := utils.ConvertMetadata(formattedText, minimalMetadata, "", "")
 	h.storeCurrentMetadata(httpMetadata)
 }
 
 // SendEnhancedMetadata implements the EnhancedOutput interface
-func (h *HTTPOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata) {
+func (h *HTTPOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
 	// Check if value changed to avoid unnecessary processing
 	if !h.HasChanged(formattedText) {
 		return
 	}
 
-	httpMetadata := utils.ConvertMetadata(formattedText, metadata)
+	httpMetadata := utils.ConvertMetadata(formattedText, metadata, inputName, inputType)
 	h.storeCurrentMetadata(httpMetadata)
 }
 
