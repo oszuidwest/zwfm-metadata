@@ -18,8 +18,7 @@ var bufferPool = sync.Pool{
 
 // PayloadMapper handles custom payload transformation based on configuration
 type PayloadMapper struct {
-	mapping   map[string]interface{}
-	omitEmpty bool
+	mapping map[string]interface{}
 }
 
 // NewPayloadMapper creates a new payload mapper with the given mapping configuration
@@ -30,10 +29,9 @@ func NewPayloadMapper(mapping map[string]interface{}) *PayloadMapper {
 }
 
 // WithOmitEmpty creates a new payload mapper that omits empty values
-func NewPayloadMapperWithOmitEmpty(mapping map[string]interface{}, omitEmpty bool) *PayloadMapper {
+func NewPayloadMapperWithOmitEmpty(mapping map[string]interface{}) *PayloadMapper {
 	return &PayloadMapper{
-		mapping:   mapping,
-		omitEmpty: omitEmpty,
+		mapping: mapping,
 	}
 }
 
@@ -56,20 +54,15 @@ func (pm *PayloadMapper) processMapping(mapping map[string]interface{}, result m
 			// Check if string contains template syntax
 			if strings.Contains(v, "{{") && strings.Contains(v, "}}") {
 				processedValue := pm.processTemplate(v, data)
-				if !pm.omitEmpty || processedValue != "" {
-					result[key] = processedValue
-				}
-			} else if !pm.omitEmpty || v != "" {
+				result[key] = processedValue
+			} else {
 				result[key] = v
 			}
 		case map[string]interface{}:
 			// Handle nested objects
 			nestedResult := make(map[string]interface{})
 			pm.processMapping(v, nestedResult, data)
-			// Only include nested objects if they have values or omitEmpty is false
-			if !pm.omitEmpty || len(nestedResult) > 0 {
-				result[key] = nestedResult
-			}
+			result[key] = nestedResult
 		default:
 			// Static values (numbers, booleans, etc.)
 			result[key] = value

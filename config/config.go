@@ -81,11 +81,6 @@ type PostOutputConfig struct {
 	URL            string                 `json:"url"`
 	BearerToken    string                 `json:"bearerToken,omitempty"`
 	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
-	// TODO: Remove OmitEmpty when padenc-api properly handles empty fields
-	// This is a temporary workaround to exclude empty fields from the payload
-	// Once padenc-api can handle empty string values correctly, this field and all
-	// related logic in outputs/post.go should be removed
-	OmitEmpty bool `json:"omitEmpty,omitempty"`
 }
 
 // DLSPlusOutputConfig represents configuration for DLS Plus output
