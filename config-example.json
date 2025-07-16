@@ -186,6 +186,17 @@
           }
         ]
       }
+    },
+    {
+      "type": "stereotool",
+      "name": "stereotool-main",
+      "inputs": ["radio-live", "nowplaying-api", "default-text"],
+      "formatters": [],
+      "settings": {
+        "delay": 2,
+        "hostname": "localhost",
+        "port": 8080
+      }
     }
   ]
 }
