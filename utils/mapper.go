@@ -18,7 +18,7 @@ var bufferPool = sync.Pool{
 
 // PayloadMapper handles custom payload transformation based on configuration
 type PayloadMapper struct {
-	mapping   map[string]interface{}
+	mapping map[string]interface{}
 }
 
 // NewPayloadMapper creates a new payload mapper with the given mapping configuration
