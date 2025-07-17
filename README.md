@@ -133,7 +133,7 @@ Poll external APIs
 - `pollingInterval` (required) - Seconds between HTTP requests
 - `jsonParsing` (optional, default: false) - Parse response as JSON
 - `jsonKey` (required if jsonParsing=true) - Dot notation path to extract value (e.g., `"data.song.title"`)
-- `expiryKey`: (optional) Dot-separated path to the expiry value in the JSON response. If set, the expiry will be parsed and used for metadata expiration.
+- `expiryKey`: (optional) Dot-separated path to the expiry value in the JSON response. If set, the expiry will be parsed and used for metadata expiration. When the expiry is reached, polling will occur immediately, in addition to regular interval polling.
 - `expiryFormat`: (optional) Format string for parsing the expiry value (e.g., RFC3339). Defaults to RFC3339 if not specified.
 
 ### Text Input

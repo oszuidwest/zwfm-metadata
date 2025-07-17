@@ -19,6 +19,7 @@ type URLInput struct {
 	*core.InputBase
 	settings   config.URLInputConfig
 	httpClient *http.Client
+	expiresAt  *time.Time
 }
 
 // NewURLInput creates a new URL input
@@ -35,8 +36,11 @@ func (u *URLInput) Start(ctx context.Context) error {
 	ticker := time.NewTicker(time.Duration(u.settings.PollingInterval) * time.Second)
 	defer ticker.Stop()
 
+	var expiryTimer *time.Timer
+
 	// Poll immediately on start
 	u.poll()
+	u.updateExpiryTimer(&expiryTimer)
 
 	for {
 		select {
@@ -44,8 +48,34 @@ func (u *URLInput) Start(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			u.poll()
+			u.updateExpiryTimer(&expiryTimer)
+		case <-u.expiryTimerChan(expiryTimer):
+			u.poll()
+			u.updateExpiryTimer(&expiryTimer)
 		}
 	}
+}
+
+// Helper to update expiry timer
+func (u *URLInput) updateExpiryTimer(timer **time.Timer) {
+	if u.expiresAt != nil {
+		duration := time.Until(*u.expiresAt)
+		if duration > 0 {
+			if *timer != nil {
+				(*timer).Reset(duration)
+			} else {
+				*timer = time.NewTimer(duration)
+			}
+		}
+	}
+}
+
+// Helper to get channel for expiry timer
+func (u *URLInput) expiryTimerChan(timer *time.Timer) <-chan time.Time {
+	if timer != nil {
+		return timer.C
+	}
+	return make(chan time.Time) // never fires
 }
 
 // poll fetches data from the URL
@@ -126,7 +156,8 @@ func (u *URLInput) poll() {
 		ExpiresAt: expiresAt,
 	}
 
-	// Set metadata (SetMetadata will handle change detection)
+	u.expiresAt = expiresAt
+
 	u.SetMetadata(metadata)
 }
 
