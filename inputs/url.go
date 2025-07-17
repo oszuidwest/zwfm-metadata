@@ -77,6 +77,7 @@ func (u *URLInput) poll() {
 	}
 
 	var content string
+	var expiresAt *time.Time
 
 	if u.settings.JSONParsing && u.settings.JSONKey != "" {
 		// Parse JSON and extract key
@@ -86,22 +87,34 @@ func (u *URLInput) poll() {
 			return
 		}
 
-		// Navigate through the JSON using the key path
-		current := data
-		for _, key := range strings.Split(u.settings.JSONKey, ".") {
-			m, ok := current.(map[string]interface{})
+		// Extract main content
+		contentVal, ok := extractJSONValue(data, u.settings.JSONKey)
+		if !ok {
+			slog.Error("Cannot navigate JSON path", "input", u.GetName(), "path", u.settings.JSONKey)
+			return
+		}
+		content = fmt.Sprintf("%v", contentVal)
+
+		// Extract expiry if configured
+		if u.settings.ExpiryKey != "" {
+			expVal, ok := extractJSONValue(data, u.settings.ExpiryKey)
 			if !ok {
-				slog.Error("Cannot navigate JSON path", "input", u.GetName(), "path", u.settings.JSONKey)
-				return
-			}
-			current, ok = m[key]
-			if !ok {
-				slog.Error("Key not found in JSON", "input", u.GetName(), "key", key)
-				return
+				slog.Error("Cannot navigate expiry JSON path", "input", u.GetName(), "path", u.settings.ExpiryKey)
+			} else if expStr, ok := expVal.(string); ok {
+				var t time.Time
+				var err error
+				if u.settings.ExpiryFormat != "" {
+					t, err = time.Parse(u.settings.ExpiryFormat, expStr)
+				} else {
+					t, err = time.Parse(time.RFC3339, expStr)
+				}
+				if err != nil {
+					slog.Error("Failed to parse expiry time", "input", u.GetName(), "value", expStr, "error", err)
+				} else {
+					expiresAt = &t
+				}
 			}
 		}
-
-		content = fmt.Sprintf("%v", current)
 	} else {
 		content = string(body)
 	}
@@ -110,8 +123,25 @@ func (u *URLInput) poll() {
 		Name:      u.GetName(),
 		Title:     content,
 		UpdatedAt: time.Now(),
+		ExpiresAt: expiresAt,
 	}
 
 	// Set metadata (SetMetadata will handle change detection)
 	u.SetMetadata(metadata)
+}
+
+// extractJSONValue navigates a JSON structure using a dot-separated key path
+func extractJSONValue(data interface{}, keyPath string) (interface{}, bool) {
+	current := data
+	for _, key := range strings.Split(keyPath, ".") {
+		m, ok := current.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+		current, ok = m[key]
+		if !ok {
+			return nil, false
+		}
+	}
+	return current, true
 }
