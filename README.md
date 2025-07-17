@@ -257,7 +257,6 @@ Send metadata via HTTP webhooks
 - `url` (required) - Webhook endpoint URL
 - `bearerToken` (optional) - Authorization bearer token
 - `payloadMapping` (optional) - Custom JSON payload structure (see [Custom Payload Mapping](#custom-payload-mapping))
-- `omitEmpty` (optional, default: false) - Omit empty fields from custom payload
 
 #### HTTP Output
 
@@ -538,29 +537,6 @@ Output:
       "reliability": "{{if eq .source_type \"dynamic\"}}live{{else if eq .source_type \"url\"}}automated{{else}}static{{end}}"
     }
   }
-}
-```
-
-##### POST Output Specific
-
-The `omitEmpty` option (default: false) removes empty fields from the output:
-```json
-{
-  "settings": {
-    "omitEmpty": true,
-    "payloadMapping": {
-      "title": "{{.title}}",
-      "artist": "{{.artist}}",
-      "album": "{{.album}}"  // This field doesn't exist
-    }
-  }
-}
-```
-
-With `omitEmpty: true`, if artist is empty, the output would be:
-```json
-{
-  "title": "Imagine"
 }
 ```
 

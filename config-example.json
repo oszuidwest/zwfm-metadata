@@ -94,7 +94,6 @@
         "delay": 0,
         "url": "https://api.example.com/custom-metadata",
         "bearerToken": "your-bearer-token-here",
-        "omitEmpty": true,
         "payloadMapping": {
           "station": "Your Radio Station",
           "now_playing": {
