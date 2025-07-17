@@ -74,7 +74,7 @@ HTTP API for live updates
 
 ```json
 {
-  "type": "dynamic", 
+  "type": "dynamic",
   "name": "radio-live",
   "prefix": "🎵 Now Playing: ",
   "suffix": " 🎵",
@@ -103,7 +103,7 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 
 #### Parameters
 - `input` (required) - Input name from config
-- `title` (required) - Song/track title  
+- `title` (required) - Song/track title
 - `songID` (optional) - Unique song identifier
 - `artist` (optional) - Artist name
 - `duration` (optional) - Song duration (MM:SS or HH:MM:SS format, leading zeros optional: `3:45` or `03:45`)
@@ -133,6 +133,8 @@ Poll external APIs
 - `pollingInterval` (required) - Seconds between HTTP requests
 - `jsonParsing` (optional, default: false) - Parse response as JSON
 - `jsonKey` (required if jsonParsing=true) - Dot notation path to extract value (e.g., `"data.song.title"`)
+- `expiryKey`: (optional) Dot-separated path to the expiry value in the JSON response. If set, the expiry will be parsed and used for metadata expiration. When the expiry is reached, polling will occur immediately, in addition to regular interval polling.
+- `expiryFormat`: (optional) Format string for parsing the expiry value (e.g., RFC3339). Defaults to RFC3339 if not specified.
 
 ### Text Input
 
@@ -218,7 +220,7 @@ Write to filesystem
 
 ```json
 {
-  "type": "file", 
+  "type": "file",
   "name": "nowplaying-file",
   "inputs": ["radio-live", "default-text"],
   "formatters": ["uppercase"],
@@ -257,7 +259,6 @@ Send metadata via HTTP webhooks
 - `url` (required) - Webhook endpoint URL
 - `bearerToken` (optional) - Authorization bearer token
 - `payloadMapping` (optional) - Custom JSON payload structure (see [Custom Payload Mapping](#custom-payload-mapping))
-- `omitEmpty` (optional, default: false) - Omit empty fields from custom payload
 
 #### HTTP Output
 
@@ -391,6 +392,38 @@ The output automatically:
 - Works with any formatters applied to the text
 
 Note: ODR-PadEnc automatically re-reads DLS files before each transmission.
+
+#### StereoTool Output
+The StereoTool output sends metadata to StereoTool's RadioText endpoint using a custom JSON format appended directly to the URL.
+
+**Type:** `stereotool`
+
+**Example configuration:**
+```json
+{
+  "type": "stereotool",
+  "name": "stereotool-main",
+  "inputs": ["radio-live"],
+  "formatters": [],
+  "settings": {
+    "delay": 2,
+    "hostname": "localhost",
+    "port": 8080
+  }
+}
+```
+
+##### Settings
+- `delay` - Delay in seconds between updates
+- `hostname` - StereoTool server hostname
+- `port` - StereoTool server port
+
+##### Output Format
+The metadata is sent as a GET request to:
+```
+http://<hostname>:<port>/json-1/lis{"9985":{"forced":"1", "new_value":"<title>"}}
+```
+where `<title>` is replaced with the current metadata title. 9985 is the ID of the setting for RadioText in StereoTool.
 
 ### Custom Payload Mapping
 
@@ -541,29 +574,6 @@ Output:
 }
 ```
 
-##### POST Output Specific
-
-The `omitEmpty` option (default: false) removes empty fields from the output:
-```json
-{
-  "settings": {
-    "omitEmpty": true,
-    "payloadMapping": {
-      "title": "{{.title}}",
-      "artist": "{{.artist}}",
-      "album": "{{.album}}"  // This field doesn't exist
-    }
-  }
-}
-```
-
-With `omitEmpty: true`, if artist is empty, the output would be:
-```json
-{
-  "title": "Imagine"
-}
-```
-
 ## Formatters
 
 Apply text transformations to metadata before sending to outputs.
@@ -577,7 +587,7 @@ Convert to uppercase
 ```
 
 #### lowercase
-Convert to lowercase  
+Convert to lowercase
 ```
 "Artist - Song Title" → "artist - song title"
 ```
@@ -591,7 +601,7 @@ Convert to title case
 #### rds
 Radio Data System (64 character limit)
 ```
-"<b>Very&shy;Long Artist Name</b> feat. Someone - Very Long Song Title (Extended Remix Version)" 
+"<b>Very&shy;Long Artist Name</b> feat. Someone - Very Long Song Title (Extended Remix Version)"
 → "VeryLong Artist Name - Very Long Song Title"
 ```
 
@@ -611,7 +621,7 @@ Smart processing for RDS compliance:
 ```json
 {
   "type": "icecast",
-  "name": "main-stream", 
+  "name": "main-stream",
   "formatters": ["ucwords", "rds"],
   "settings": {...}
 }
@@ -621,7 +631,7 @@ Formatters are applied in order: `ucwords` first, then `rds`.
 ## Features
 
 - **Priority fallback** - Outputs use first available input in priority list
-- **Configurable delays** - Sync timing across different outputs  
+- **Configurable delays** - Sync timing across different outputs
 - **Input expiration** - Dynamic inputs expire automatically
 - **Prefix/suffix** - Add station branding to inputs
 - **Web dashboard** - Real-time status at http://localhost:9000
