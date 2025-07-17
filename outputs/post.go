@@ -26,8 +26,7 @@ type PostOutput struct {
 func NewPostOutput(name string, settings config.PostOutputConfig) *PostOutput {
 	var mapper *utils.PayloadMapper
 	if settings.PayloadMapping != nil {
-		// TODO: Remove OmitEmpty when padenc-api properly handles empty fields
-		mapper = utils.NewPayloadMapperWithOmitEmpty(settings.PayloadMapping, settings.OmitEmpty)
+		mapper = utils.NewPayloadMapperWithOmitEmpty(settings.PayloadMapping)
 	}
 
 	output := &PostOutput{
