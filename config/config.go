@@ -51,6 +51,8 @@ type URLInputConfig struct {
 	URL             string `json:"url"`
 	JSONParsing     bool   `json:"jsonParsing"`
 	JSONKey         string `json:"jsonKey,omitempty"`
+	ExpiryKey       string `json:"expiryKey,omitempty"`
+	ExpiryFormat    string `json:"expiryFormat,omitempty"`
 	PollingInterval int    `json:"pollingInterval"`
 }
 

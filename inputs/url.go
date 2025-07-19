@@ -19,6 +19,7 @@ type URLInput struct {
 	*core.InputBase
 	settings   config.URLInputConfig
 	httpClient *http.Client
+	expiresAt  *time.Time
 }
 
 // NewURLInput creates a new URL input
@@ -35,8 +36,11 @@ func (u *URLInput) Start(ctx context.Context) error {
 	ticker := time.NewTicker(time.Duration(u.settings.PollingInterval) * time.Second)
 	defer ticker.Stop()
 
+	var expiryTimer *time.Timer
+
 	// Poll immediately on start
 	u.poll()
+	u.updateExpiryTimer(&expiryTimer)
 
 	for {
 		select {
@@ -44,8 +48,34 @@ func (u *URLInput) Start(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			u.poll()
+			u.updateExpiryTimer(&expiryTimer)
+		case <-u.expiryTimerChan(expiryTimer):
+			u.poll()
+			u.updateExpiryTimer(&expiryTimer)
 		}
 	}
+}
+
+// Helper to update expiry timer
+func (u *URLInput) updateExpiryTimer(timer **time.Timer) {
+	if u.expiresAt != nil {
+		duration := time.Until(*u.expiresAt)
+		if duration > 0 {
+			if *timer != nil {
+				(*timer).Reset(duration)
+			} else {
+				*timer = time.NewTimer(duration)
+			}
+		}
+	}
+}
+
+// Helper to get channel for expiry timer
+func (u *URLInput) expiryTimerChan(timer *time.Timer) <-chan time.Time {
+	if timer != nil {
+		return timer.C
+	}
+	return make(chan time.Time) // never fires
 }
 
 // poll fetches data from the URL
@@ -77,6 +107,7 @@ func (u *URLInput) poll() {
 	}
 
 	var content string
+	var expiresAt *time.Time
 
 	if u.settings.JSONParsing && u.settings.JSONKey != "" {
 		// Parse JSON and extract key
@@ -86,22 +117,34 @@ func (u *URLInput) poll() {
 			return
 		}
 
-		// Navigate through the JSON using the key path
-		current := data
-		for _, key := range strings.Split(u.settings.JSONKey, ".") {
-			m, ok := current.(map[string]interface{})
+		// Extract main content
+		contentVal, ok := extractJSONValue(data, u.settings.JSONKey)
+		if !ok {
+			slog.Error("Cannot navigate JSON path", "input", u.GetName(), "path", u.settings.JSONKey)
+			return
+		}
+		content = fmt.Sprintf("%v", contentVal)
+
+		// Extract expiry if configured
+		if u.settings.ExpiryKey != "" {
+			expVal, ok := extractJSONValue(data, u.settings.ExpiryKey)
 			if !ok {
-				slog.Error("Cannot navigate JSON path", "input", u.GetName(), "path", u.settings.JSONKey)
-				return
-			}
-			current, ok = m[key]
-			if !ok {
-				slog.Error("Key not found in JSON", "input", u.GetName(), "key", key)
-				return
+				slog.Error("Cannot navigate expiry JSON path", "input", u.GetName(), "path", u.settings.ExpiryKey)
+			} else if expStr, ok := expVal.(string); ok {
+				var t time.Time
+				var err error
+				if u.settings.ExpiryFormat != "" {
+					t, err = time.Parse(u.settings.ExpiryFormat, expStr)
+				} else {
+					t, err = time.Parse(time.RFC3339, expStr)
+				}
+				if err != nil {
+					slog.Error("Failed to parse expiry time", "input", u.GetName(), "value", expStr, "error", err)
+				} else {
+					expiresAt = &t
+				}
 			}
 		}
-
-		content = fmt.Sprintf("%v", current)
 	} else {
 		content = string(body)
 	}
@@ -110,8 +153,26 @@ func (u *URLInput) poll() {
 		Name:      u.GetName(),
 		Title:     content,
 		UpdatedAt: time.Now(),
+		ExpiresAt: expiresAt,
 	}
 
-	// Set metadata (SetMetadata will handle change detection)
+	u.expiresAt = expiresAt
+
 	u.SetMetadata(metadata)
+}
+
+// extractJSONValue navigates a JSON structure using a dot-separated key path
+func extractJSONValue(data interface{}, keyPath string) (interface{}, bool) {
+	current := data
+	for _, key := range strings.Split(keyPath, ".") {
+		m, ok := current.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+		current, ok = m[key]
+		if !ok {
+			return nil, false
+		}
+	}
+	return current, true
 }
