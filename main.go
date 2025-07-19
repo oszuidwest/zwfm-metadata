@@ -229,6 +229,13 @@ func createOutput(cfg config.OutputConfig) (core.Output, error) {
 		}
 		return outputs.NewHTTPOutput(cfg.Name, *settings), nil
 
+	case "stereotool":
+		settings, err := utils.ParseJSONSettings[config.StereoToolOutputConfig](cfg.Settings)
+		if err != nil {
+			return nil, err
+		}
+		return outputs.NewStereoToolOutput(cfg.Name, *settings), nil
+
 	default:
 		return nil, &unknownTypeError{Type: cfg.Type}
 	}

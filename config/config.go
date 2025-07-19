@@ -109,6 +109,13 @@ type HTTPEndpoint struct {
 	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
 }
 
+// StereoToolOutputConfig represents configuration for HTTP output
+type StereoToolOutputConfig struct {
+	Delay    int    `json:"delay"`
+	Hostname string `json:"hostname"`
+	Port     int    `json:"port"`
+}
+
 // LoadConfig loads configuration from a file
 func LoadConfig(filename string) (*Config, error) {
 	// Clean the path to prevent directory traversal
