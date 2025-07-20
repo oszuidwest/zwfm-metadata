@@ -23,6 +23,7 @@ Metadata routing middleware for radio stations. Routes metadata from inputs (pla
     - [HTTP Output](#http-output)
     - [WebSocket Output](#websocket-output)
     - [DLS Plus Output](#dls-plus-output)
+    - [StereoTool Output](#stereotool-output)
   - [Custom Payload Mapping](#custom-payload-mapping)
 - [Formatters](#formatters)
   - [Available Formatters](#available-formatters)
@@ -67,6 +68,20 @@ The application supports basic styling customization through the configuration f
 The dashboard automatically adapts to your brand colors, using them for headers, badges, and accent elements throughout the interface.
 
 ## Inputs
+
+Configure metadata sources in priority order.
+
+### Input Feature Comparison
+
+| Input Type | Purpose | Update Method | Authentication | Expiration Support | Polling |
+|------------|---------|---------------|----------------|--------------------|---------|
+| **Dynamic** | Live playout updates | HTTP API | Secret | ✅ (Dynamic/Fixed/None) | ❌ |
+| **URL** | External API integration | HTTP polling | N/A | ✅ (via JSON field) | ✅ |
+| **Text** | Static fallback | Config file | N/A | ❌ | ❌ |
+
+**Legend:**
+- **Expiration Support**: Whether metadata can automatically expire (Dynamic: based on song duration, Fixed: after set time, None: never expires)
+- **Polling**: Whether the input actively polls for updates vs receiving them via API
 
 ### Dynamic Input
 
@@ -173,6 +188,7 @@ Control where formatted metadata is sent.
 | **HTTP** | Serve metadata via GET endpoints | ✅ | ✅ | N/A |
 | **DLS Plus** | DAB/DAB+ radio text | ✅ | ❌ | N/A |
 | **WebSocket** | Real-time browser/app updates | ✅ | ✅ | N/A |
+| **StereoTool** | Update RDS RadioText | ❌ | ❌ | N/A |
 
 **Legend:**
 - **Enhanced Metadata**: Receives full metadata details (title, artist, duration, etc.) not just formatted text
@@ -306,7 +322,7 @@ Serve metadata via GET endpoints with multiple response formats
 
 ##### Response Types
 - **JSON**: Standard metadata object with all fields
-- **XML**: Well-formed XML with escaped content
+- **XML**: XML with escaped content
 - **YAML**: YAML format for configuration files
 - **Plaintext**: Just the formatted metadata text
 
@@ -394,17 +410,15 @@ The output automatically:
 Note: ODR-PadEnc automatically re-reads DLS files before each transmission.
 
 #### StereoTool Output
-The StereoTool output sends metadata to StereoTool's RadioText endpoint using a custom JSON format appended directly to the URL.
 
-**Type:** `stereotool`
+Update StereoTool's RDS RadioText
 
-**Example configuration:**
 ```json
 {
   "type": "stereotool",
-  "name": "stereotool-main",
-  "inputs": ["radio-live"],
-  "formatters": [],
+  "name": "stereotool-rds",
+  "inputs": ["radio-live", "nowplaying-api", "default-text"],
+  "formatters": ["rds"],
   "settings": {
     "delay": 2,
     "hostname": "localhost",
@@ -414,16 +428,13 @@ The StereoTool output sends metadata to StereoTool's RadioText endpoint using a 
 ```
 
 ##### Settings
-- `delay` - Delay in seconds between updates
-- `hostname` - StereoTool server hostname
-- `port` - StereoTool server port
+- `delay` (required) - Seconds to delay metadata updates
+- `hostname` (required) - StereoTool server hostname/IP
+- `port` (required) - StereoTool HTTP server port (typically 8080)
 
-##### Output Format
-The metadata is sent as a GET request to:
-```
-http://<hostname>:<port>/json-1/lis{"9985":{"forced":"1", "new_value":"<title>"}}
-```
-where `<title>` is replaced with the current metadata title. 9985 is the ID of the setting for RadioText in StereoTool.
+##### Notes
+- Uses StereoTool's undocumented JSON API to update RadioText (ID: 9985)
+- Recommended to use with RDS formatter for 64-character compliance
 
 ### Custom Payload Mapping
 
