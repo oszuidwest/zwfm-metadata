@@ -28,13 +28,6 @@ func NewPayloadMapper(mapping map[string]interface{}) *PayloadMapper {
 	}
 }
 
-// WithOmitEmpty creates a new payload mapper that omits empty values
-func NewPayloadMapperWithOmitEmpty(mapping map[string]interface{}) *PayloadMapper {
-	return &PayloadMapper{
-		mapping: mapping,
-	}
-}
-
 // MapPayload transforms the input data according to the configured mapping
 func (pm *PayloadMapper) MapPayload(data interface{}) map[string]interface{} {
 	if pm.mapping == nil {

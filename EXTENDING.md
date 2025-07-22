@@ -20,13 +20,18 @@ This guide covers how to add new inputs, outputs, and formatters to the ZuidWest
   - [Step 1: Create Output Structure](#step-1-create-output-structure)
   - [Step 2: Implement Required Methods](#step-2-implement-required-methods-1)
   - [Step 3: Enhanced Output (Optional)](#step-3-enhanced-output-optional)
-  - [Step 4: Add Configuration Support](#step-4-add-configuration-support)
-  - [Step 5: Register Output](#step-5-register-output)
-  - [Step 6: Test Your Output](#step-6-test-your-output)
+  - [Step 4: HTTP Route Registration (Optional)](#step-4-http-route-registration-optional)
+  - [Step 5: Add Configuration Support](#step-5-add-configuration-support)
+  - [Step 6: Register Output](#step-6-register-output)
+  - [Step 7: Test Your Output](#step-7-test-your-output)
 - [Adding a New Formatter](#adding-a-new-formatter)
   - [Step 1: Create Formatter Structure](#step-1-create-formatter-structure)
   - [Step 2: Register Formatter](#step-2-register-formatter)
   - [Step 3: Test Your Formatter](#step-3-test-your-formatter)
+- [Built-in Components](#built-in-components)
+  - [Inputs](#inputs)
+  - [Outputs](#outputs)
+  - [Formatters](#formatters)
 - [Complete Examples](#complete-examples)
   - [Example: Redis Input](#example-redis-input)
   - [Example: Discord Output](#example-discord-output)
@@ -35,12 +40,14 @@ This guide covers how to add new inputs, outputs, and formatters to the ZuidWest
   - [core.Input Interface](#coreinput-interface)
   - [core.Output Interface](#coreoutput-interface)
   - [core.EnhancedOutput Interface](#coreenhancedoutput-interface)
+  - [core.RouteRegistrar Interface](#corerouteregistrar-interface)
   - [formatters.Formatter Interface](#formattersformatter-interface)
 - [Design Patterns](#design-patterns)
   - [Base Class Embedding](#base-class-embedding)
   - [PassiveComponent](#passivecomponent)
   - [Change Detection](#change-detection)
   - [Universal Metadata Converter](#universal-metadata-converter)
+  - [Payload Mapping](#payload-mapping)
   - [Error Handling](#error-handling)
   - [Thread Safety](#thread-safety)
 - [Testing](#testing)
@@ -88,13 +95,19 @@ The codebase provides several utilities you can use:
   import "zwfm-metadata/utils"
   
   // Convert core.Metadata to universal format
-  universal := utils.ConvertMetadata(formattedText, metadata)
+  universal := utils.ConvertMetadata(formattedText, metadata, inputName, inputType)
   
   // Convert with a specific type field
-  universal := utils.ConvertMetadataWithType(formattedText, metadata, "webhook")
+  universal := utils.ConvertMetadataWithType(formattedText, metadata, "webhook", inputName, inputType)
   
   // Convert to template data for payload mapping
   templateData := universal.ToTemplateData()
+  ```
+
+- **Payload Mapping**: `utils.NewPayloadMapper` for custom field mapping
+  ```go
+  mapper := utils.NewPayloadMapper(settings.PayloadMapping)
+  result := mapper.MapPayload(templateData)
   ```
 
 ### Common Gotchas
@@ -104,6 +117,7 @@ The codebase provides several utilities you can use:
 3. **Formatter Registration**: Must use `init()` function to register formatters
 4. **Imports**: Use full import paths like `zwfm-metadata/config`, not just `config`
 5. **Build and Test**: Remember to `go build` before testing your extensions
+6. **HTTP Body Closing**: Always use `defer resp.Body.Close() //nolint:errcheck`
 
 ## Adding a New Input
 
@@ -272,6 +286,7 @@ Outputs implement the `core.Output` interface and typically embed `core.OutputBa
 
 - **Basic Outputs**: Receive only formatted text
 - **Enhanced Outputs**: Receive full metadata details (implement `core.EnhancedOutput`)
+- **HTTP Outputs**: Can register HTTP routes (implement `core.RouteRegistrar`)
 
 ### Step 1: Create Output Structure
 
@@ -336,13 +351,13 @@ If your output needs access to full metadata details:
 
 ```go
 // SendEnhancedMetadata implements the EnhancedOutput interface
-func (m *MyCustomOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata) {
+func (m *MyCustomOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
     if !m.HasChanged(formattedText) {
         return
     }
     
     // Use universal metadata converter for consistent field mapping
-    universal := utils.ConvertMetadataWithType(formattedText, metadata, "custom")
+    universal := utils.ConvertMetadataWithType(formattedText, metadata, "custom", inputName, inputType)
     
     if err := m.sendUniversalPayload(*universal); err != nil {
         slog.Error("Failed to send enhanced payload", "output", m.GetName(), "error", err)
@@ -352,13 +367,15 @@ func (m *MyCustomOutput) SendEnhancedMetadata(formattedText string, metadata *co
 func (m *MyCustomOutput) sendUniversalPayload(metadata utils.UniversalMetadata) error {
     // Access all metadata fields without manual mapping
     payload := map[string]interface{}{
-        "type":         metadata.Type,
-        "title":        metadata.Title,
-        "artist":       metadata.Artist,
-        "duration":     metadata.Duration,
-        "updated_at":   metadata.UpdatedAt,
-        "expires_at":   metadata.ExpiresAt,
-        "formatted":    metadata.FormattedMetadata,
+        "type":             metadata.Type,
+        "title":            metadata.Title,
+        "artist":           metadata.Artist,
+        "duration":         metadata.Duration,
+        "updated_at":       metadata.UpdatedAt,
+        "expires_at":       metadata.ExpiresAt,
+        "formatted":        metadata.FormattedMetadata,
+        "source":           metadata.Source,
+        "source_type":      metadata.SourceType,
     }
     
     // Send payload...
@@ -366,7 +383,31 @@ func (m *MyCustomOutput) sendUniversalPayload(metadata utils.UniversalMetadata) 
 }
 ```
 
-### Step 4: Add Configuration Support
+### Step 4: HTTP Route Registration (Optional)
+
+If your output needs to expose HTTP endpoints:
+
+```go
+import (
+    "net/http"
+    "github.com/gorilla/mux"
+)
+
+// RegisterRoutes implements the RouteRegistrar interface
+func (m *MyCustomOutput) RegisterRoutes(router *mux.Router) {
+    router.HandleFunc("/output/"+m.GetName(), m.handleHTTPRequest).Methods("GET")
+}
+
+func (m *MyCustomOutput) handleHTTPRequest(w http.ResponseWriter, r *http.Request) {
+    // Get current metadata
+    currentMetadata := m.GetCurrentMetadata()
+    
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(currentMetadata)
+}
+```
+
+### Step 5: Add Configuration Support
 
 Add your configuration struct to `config/config.go`:
 
@@ -380,7 +421,7 @@ type MyCustomOutputConfig struct {
 }
 ```
 
-### Step 5: Register Output
+### Step 6: Register Output
 
 In `main.go`, add a case for your new output type in the `createOutput` function:
 
@@ -393,7 +434,7 @@ case "mycustom":
     return outputs.NewMyCustomOutput(cfg.Name, *settings), nil
 ```
 
-### Step 6: Test Your Output
+### Step 7: Test Your Output
 
 Create a test configuration:
 
@@ -478,6 +519,31 @@ Use in configuration:
   ]
 }
 ```
+
+## Built-in Components
+
+### Inputs
+
+- **dynamic** - HTTP API endpoint for live metadata updates with expiration
+- **url** - Polls external URLs/APIs for metadata
+- **text** - Static text fallback
+
+### Outputs
+
+- **icecast** - Updates Icecast streaming server metadata
+- **file** - Writes metadata to local files
+- **post** - Sends metadata via HTTP POST webhooks
+- **http** - Creates HTTP endpoints with multiple response formats
+- **websocket** - Real-time metadata streaming via WebSocket
+- **dlsplus** - DAB/DAB+ radio text format (ODR-PadEnc)
+- **stereotool** - StereoTool RDS RadioText integration
+
+### Formatters
+
+- **uppercase** - Converts text to UPPERCASE
+- **lowercase** - Converts text to lowercase
+- **ucwords** - Capitalizes First Letter Of Each Word
+- **rds** - RDS compliance (64-char limit with smart truncation)
 
 ## Complete Examples
 
@@ -637,6 +703,7 @@ import (
     
     "zwfm-metadata/config"
     "zwfm-metadata/core"
+    "zwfm-metadata/utils"
 )
 
 type DiscordOutput struct {
@@ -673,13 +740,13 @@ func (d *DiscordOutput) SendFormattedMetadata(formattedText string) {
     }
 }
 
-func (d *DiscordOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata) {
+func (d *DiscordOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
     if !d.HasChanged(formattedText) {
         return
     }
     
     // Use universal converter for consistent metadata handling
-    universal := utils.ConvertMetadataWithType(formattedText, metadata, "discord")
+    universal := utils.ConvertMetadataWithType(formattedText, metadata, "discord", inputName, inputType)
     
     fields := []map[string]interface{}{}
     
@@ -703,6 +770,14 @@ func (d *DiscordOutput) SendEnhancedMetadata(formattedText string, metadata *cor
         fields = append(fields, map[string]interface{}{
             "name":   "Duration",
             "value":  universal.Duration,
+            "inline": true,
+        })
+    }
+    
+    if universal.Source != "" {
+        fields = append(fields, map[string]interface{}{
+            "name":   "Source",
+            "value":  universal.Source,
             "inline": true,
         })
     }
@@ -742,7 +817,7 @@ func (d *DiscordOutput) sendWebhook(embed map[string]interface{}) error {
     if err != nil {
         return err
     }
-    defer resp.Body.Close()
+    defer resp.Body.Close() //nolint:errcheck
     
     if resp.StatusCode >= 400 {
         return fmt.Errorf("discord webhook returned status %d", resp.StatusCode)
@@ -830,7 +905,15 @@ type Output interface {
 ```go
 type EnhancedOutput interface {
     Output
-    SendEnhancedMetadata(formattedText string, metadata *Metadata)
+    SendEnhancedMetadata(formattedText string, metadata *Metadata, inputName, inputType string)
+}
+```
+
+### core.RouteRegistrar Interface
+
+```go
+type RouteRegistrar interface {
+    RegisterRoutes(router *mux.Router)    // Register HTTP routes
 }
 ```
 
@@ -902,26 +985,19 @@ import "zwfm-metadata/utils"
 // }
 
 // Use the universal converter:
-func (o *MyOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata) {
+func (o *MyOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
     if !o.HasChanged(formattedText) {
         return
     }
     
     // Convert to universal format
-    universal := utils.ConvertMetadata(formattedText, metadata)
+    universal := utils.ConvertMetadata(formattedText, metadata, inputName, inputType)
     
     // Or with a type field:
-    universal := utils.ConvertMetadataWithType(formattedText, metadata, "myoutput")
+    universal := utils.ConvertMetadataWithType(formattedText, metadata, "myoutput", inputName, inputType)
     
     // Send the universal metadata
     o.sendMetadata(*universal)
-}
-
-// For payload mapping (templates):
-func (o *MyOutput) processWithMapping(universal utils.UniversalMetadata) {
-    templateData := universal.ToTemplateData()
-    result := o.payloadMapper.MapPayload(templateData)
-    // Use result...
 }
 ```
 
@@ -930,6 +1006,62 @@ func (o *MyOutput) processWithMapping(universal utils.UniversalMetadata) {
 - **Maintainability**: Adding new metadata fields only requires changes in one place
 - **DRY Principle**: No duplicate field mapping code
 - **Template Compatibility**: Built-in `ToTemplateData()` method for payload mapping
+
+### Payload Mapping
+
+For outputs that need custom field mapping:
+
+```go
+import "zwfm-metadata/utils"
+
+type MyOutput struct {
+    *core.OutputBase
+    core.PassiveComponent
+    settings      config.MyOutputConfig
+    payloadMapper *utils.PayloadMapper
+}
+
+func NewMyOutput(name string, settings config.MyOutputConfig) *MyOutput {
+    output := &MyOutput{
+        OutputBase:    core.NewOutputBase(name),
+        settings:      settings,
+        payloadMapper: utils.NewPayloadMapper(settings.PayloadMapping),
+    }
+    return output
+}
+
+func (o *MyOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
+    if !o.HasChanged(formattedText) {
+        return
+    }
+    
+    // Convert to universal format
+    universal := utils.ConvertMetadata(formattedText, metadata, inputName, inputType)
+    
+    // Convert to template data and apply mapping
+    templateData := universal.ToTemplateData()
+    mappedPayload := o.payloadMapper.MapPayload(templateData)
+    
+    // Send mapped payload
+    o.sendPayload(mappedPayload)
+}
+```
+
+Configuration example with payload mapping:
+```json
+{
+  "type": "myoutput",
+  "name": "custom-api",
+  "settings": {
+    "payloadMapping": {
+      "song_name": "{{.Title}}",
+      "performer": "{{.Artist}}",
+      "current_time": "{{.UpdatedAt}}",
+      "metadata_source": "{{.Source}}"
+    }
+  }
+}
+```
 
 ### Error Handling
 
@@ -977,7 +1109,7 @@ resp, err := httpClient.Do(req)
 if err != nil {
     return err
 }
-defer resp.Body.Close()
+defer resp.Body.Close() //nolint:errcheck
 ```
 
 This ensures:
@@ -1085,6 +1217,7 @@ curl "http://localhost:9000/input/dynamic?input=test-input&title=Test&artist=Art
    }
    ```
 8. **Universal Metadata**: Use `utils.ConvertMetadata` instead of manual field mapping
-9. **Payload Mapping**: Use `universal.ToTemplateData()` for template processing
+9. **Payload Mapping**: Use `utils.NewPayloadMapper` for template-based mapping
+10. **HTTP Responses**: Always close response bodies with `defer resp.Body.Close() //nolint:errcheck`
 
 This guide should help you create robust extensions for the ZuidWest FM metadata system. Happy coding!

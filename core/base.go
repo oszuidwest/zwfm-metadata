@@ -181,16 +181,6 @@ func (b *OutputBase) SetInputs(inputs []Input) {
 	b.inputs = inputs
 }
 
-// GetCurrentValue returns the current formatted value
-func (b *OutputBase) GetCurrentValue() string {
-	return b.changeDetector.GetCurrentValue()
-}
-
-// SetCurrentValue updates the current formatted value
-func (b *OutputBase) SetCurrentValue(value string) {
-	b.changeDetector.SetCurrentValue(value)
-}
-
 // HasChanged checks if the value has changed
 func (b *OutputBase) HasChanged(newValue string) bool {
 	return b.changeDetector.HasChanged(newValue)
