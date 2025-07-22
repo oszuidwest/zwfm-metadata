@@ -26,7 +26,7 @@ type PostOutput struct {
 func NewPostOutput(name string, settings config.PostOutputConfig) *PostOutput {
 	var mapper *utils.PayloadMapper
 	if settings.PayloadMapping != nil {
-		mapper = utils.NewPayloadMapperWithOmitEmpty(settings.PayloadMapping)
+		mapper = utils.NewPayloadMapper(settings.PayloadMapping)
 	}
 
 	output := &PostOutput{
