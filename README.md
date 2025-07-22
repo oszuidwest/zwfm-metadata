@@ -411,7 +411,7 @@ Note: ODR-PadEnc automatically re-reads DLS files before each transmission.
 
 #### StereoTool Output
 
-Update StereoTool's RDS RadioText
+Update StereoTool's RDS RadioText and Streaming Output Metadata
 
 ```json
 {

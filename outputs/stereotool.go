@@ -46,47 +46,43 @@ func (i *StereoToolOutput) SendFormattedMetadata(formattedText string) {
 
 // sendToStereoTool sends the metadata to StereoTool's RadioText
 func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
-	// Build JSON payload
-	radioTextId := 9985
-	jsonPayload := fmt.Sprintf(`{"%d":{"forced":"1", "new_value":"%s"}}`, radioTextId, metadata)
-
-	// URL-encode the JSON payload
-	encodedPayload := url.QueryEscape(jsonPayload)
-
-	// Build full URL (append encoded JSON)
-	fullURL := fmt.Sprintf("http://%s:%d/json-1/lis%s", i.settings.Hostname, i.settings.Port, encodedPayload)
-
-	slog.Debug("Updating StereoTool's RadioText", "fullurl", fullURL, "metadata", metadata)
-
-	// Create request
-	req, err := http.NewRequest("GET", fullURL, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+	fieldNames := map[int]string{
+		6751: "Streaming Output Song",
+		9985: "FM RDS Radio Text",
 	}
+	for id, fieldName := range fieldNames {
+		jsonPayload := fmt.Sprintf(`{"%d":{"forced":"1", "new_value":"%s"}}`, id, metadata)
+		encodedPayload := url.QueryEscape(jsonPayload)
+		fullURL := fmt.Sprintf("http://%s:%d/json-1/lis%s", i.settings.Hostname, i.settings.Port, encodedPayload)
 
-	// Send request
-	resp, err := i.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
+		slog.Debug("Updating StereoTool field", "id", id, "field", fieldName, "fullurl", fullURL, "metadata", metadata)
+
+		req, err := http.NewRequest("GET", fullURL, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create request for id %d (%s): %w", id, fieldName, err)
+		}
+
+		resp, err := i.httpClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to send request for id %d (%s): %w", id, fieldName, err)
+		}
+		defer resp.Body.Close() //nolint:errcheck
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("unexpected status code for id %d (%s): %d", id, fieldName, resp.StatusCode)
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body for id %d (%s): %w", id, fieldName, err)
+		}
+		bodyStr := string(bodyBytes)
+		expectedValueText := fmt.Sprintf(`"value_text": "%s"`, metadata)
+		if !strings.Contains(bodyStr, expectedValueText) {
+			return fmt.Errorf("response didn't indicate a successful update for id %d (%s)", id, fieldName)
+		}
+
+		slog.Debug("Successfully updated StereoTool field", "id", id, "field", fieldName, "output", i.GetName(), "metadata", metadata)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	// Check response for radioTextId
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-	bodyStr := string(bodyBytes)
-	expectedValueText := fmt.Sprintf(`"value_text": "%s"`, metadata)
-	if !strings.Contains(bodyStr, expectedValueText) {
-		return fmt.Errorf("response didn't indicate a succesfull update")
-	}
-
-	slog.Debug("Successfully updated StereoTool's RadioText", "output", i.GetName(), "metadata", metadata)
-
 	return nil
 }
