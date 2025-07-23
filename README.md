@@ -110,7 +110,7 @@ HTTP API for live updates
 #### API Usage
 ```bash
 # Update with all fields (duration enables auto-expiration for type=dynamic)
-curl "http://localhost:9000/input/dynamic?input=radio-live&songID=123&artist=Artist&title=Song&duration=3:45&secret=supersecret123"
+curl "http://localhost:9000/input/dynamic?input=radio-live&songID=123&artist=Artist&title=Song&duration=03:45&secret=supersecret123"
 
 # Minimal update (only title required)
 curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=supersecret123"
@@ -121,7 +121,7 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 - `title` (required) - Song/track title
 - `songID` (optional) - Unique song identifier
 - `artist` (optional) - Artist name
-- `duration` (optional) - Song duration (MM:SS or HH:MM:SS format, leading zeros optional: `3:45` or `03:45`)
+- `duration` (optional) - Song duration in MM:SS (e.g., `3:45` or `03:45`) or HH:MM:SS (e.g., `1:30:00` or `01:30:00`) format. Leading zeros are optional. Used for auto-expiration when `expiration.type` is `"dynamic"`. Invalid formats cause immediate expiration.
 - `secret` (required if configured) - Authentication secret
 
 ### URL Input
@@ -651,7 +651,7 @@ Formatters are applied in order: `ucwords` first, then `rds`.
 
 ### Update metadata
 ```bash
-curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&artist=Artist&duration=3:45"
+curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&artist=Artist&duration=03:45"
 ```
 
 ### Status

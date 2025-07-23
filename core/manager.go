@@ -304,9 +304,9 @@ func (mr *MetadataRouter) GetCurrentInputForOutput(outputName string) string {
 // Start starts all inputs and outputs with centralized timeline scheduling
 func (mr *MetadataRouter) Start(ctx context.Context) error {
 	mr.mu.Lock()
-	defer mr.mu.Unlock()
 
 	if len(mr.inputs) == 0 {
+		mr.mu.Unlock()
 		return fmt.Errorf("cannot start: no inputs configured")
 	}
 
@@ -343,9 +343,28 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 		}(name, output)
 	}
 
+	// Release lock before processing initial metadata
+	mr.mu.Unlock()
+
+	// Trigger initial metadata processing for inputs that already have metadata (like text inputs)
+	mr.processInitialMetadata()
+
 	slog.Info("Started centralized metadata router")
 
 	return nil
+}
+
+// processInitialMetadata triggers initial updates for inputs that already have metadata
+func (mr *MetadataRouter) processInitialMetadata() {
+	// Process each input that already has metadata available
+	for inputName, input := range mr.inputs {
+		metadata := input.GetMetadata()
+		if metadata != nil && metadata.IsAvailable() {
+			// Schedule initial updates for all outputs that use this input
+			mr.scheduleInputChangeUpdates(inputName, metadata)
+			slog.Debug("Processed initial metadata for input", "input", inputName, "title", metadata.Title)
+		}
+	}
 }
 
 // handleInputMetadata handles metadata updates from inputs
