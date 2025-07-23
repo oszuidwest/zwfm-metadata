@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,17 +9,19 @@ import (
 	"time"
 	"zwfm-metadata/core"
 	"zwfm-metadata/inputs"
+	"zwfm-metadata/utils"
 
 	"github.com/gorilla/mux"
 )
 
 // Server represents the HTTP server
 type Server struct {
-	port        int
-	router      *core.MetadataRouter
-	server      *http.Server
-	stationName string
-	brandColor  string
+	port         int
+	router       *core.MetadataRouter
+	server       *http.Server
+	stationName  string
+	brandColor   string
+	dashboardHub *utils.WebSocketHub
 }
 
 // OutputStatus represents the status of an output
@@ -35,12 +36,24 @@ type OutputStatus struct {
 
 // NewServer creates a new server instance
 func NewServer(port int, router *core.MetadataRouter, stationName, brandColor string) *Server {
-	return &Server{
-		port:        port,
-		router:      router,
-		stationName: stationName,
-		brandColor:  brandColor,
+	s := &Server{
+		port:         port,
+		router:       router,
+		stationName:  stationName,
+		brandColor:   brandColor,
+		dashboardHub: utils.NewWebSocketHub("dashboard"),
 	}
+
+	// Set up dashboard WebSocket callbacks
+	s.dashboardHub.SetOnConnect(func(conn *utils.WebSocketConn) interface{} {
+		// Send initial dashboard state
+		return s.getDashboardData()
+	})
+
+	// Start periodic dashboard updates over WebSocket
+	go s.startPeriodicDashboardUpdates()
+
+	return s
 }
 
 // Start starts the HTTP server
@@ -52,8 +65,8 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Route handlers
 	router.HandleFunc("/", s.dashboardHandler).Methods("GET")
-	router.HandleFunc("/status", s.statusHandler).Methods("GET")
 	router.HandleFunc("/input/dynamic", s.dynamicInputHandler).Methods("GET")
+	router.HandleFunc("/ws/dashboard", s.dashboardHub.HandleConnection).Methods("GET")
 
 	// Register WebSocket routes from outputs that implement RouteRegistrar
 	s.registerWebSocketRoutes(router)
@@ -91,12 +104,6 @@ func (s *Server) noIndexMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet, noimageindex")
 		next.ServeHTTP(w, req)
 	})
-}
-
-// statusHandler handles the /status endpoint - consolidated with dashboard data
-func (s *Server) statusHandler(w http.ResponseWriter, req *http.Request) {
-	// Use the same handler as dashboard API for consistency
-	s.dashboardAPIHandler(w, req)
 }
 
 // dynamicInputHandler handles the /input/dynamic endpoint
@@ -148,15 +155,23 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 func (s *Server) dashboardHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	if _, err := w.Write([]byte(dashboardHTML(s.stationName, s.brandColor))); err != nil {
+	if _, err := w.Write([]byte(dashboardHTML(s.stationName, s.brandColor, utils.Version, utils.GetBuildYear()))); err != nil {
 		slog.Error("Failed to write dashboard HTML response", "error", err)
 	}
 }
 
-// dashboardAPIHandler provides comprehensive JSON data for both dashboard and status endpoint
-func (s *Server) dashboardAPIHandler(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+// registerWebSocketRoutes registers WebSocket routes from outputs that implement RouteRegistrar
+func (s *Server) registerWebSocketRoutes(router *mux.Router) {
+	outputs := s.router.GetOutputs()
+	for _, output := range outputs {
+		if routeRegistrar, ok := output.(core.RouteRegistrar); ok {
+			routeRegistrar.RegisterRoutes(router)
+		}
+	}
+}
 
+// getDashboardData returns the current dashboard data for WebSocket broadcasts
+func (s *Server) getDashboardData() interface{} {
 	// Get input statuses
 	inputStatuses := s.router.GetInputStatus()
 
@@ -184,8 +199,8 @@ func (s *Server) dashboardAPIHandler(w http.ResponseWriter, _ *http.Request) {
 		outputStatuses = append(outputStatuses, outputStatus)
 	}
 
-	// Create response as anonymous struct
-	response := struct {
+	// Return as anonymous struct
+	return struct {
 		Inputs      []core.InputStatus `json:"inputs"`
 		Outputs     []OutputStatus     `json:"outputs"`
 		ActiveFlows int                `json:"activeFlows"`
@@ -194,19 +209,15 @@ func (s *Server) dashboardAPIHandler(w http.ResponseWriter, _ *http.Request) {
 		Outputs:     outputStatuses,
 		ActiveFlows: activeFlows,
 	}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
 }
 
-// registerWebSocketRoutes registers WebSocket routes from outputs that implement RouteRegistrar
-func (s *Server) registerWebSocketRoutes(router *mux.Router) {
-	outputs := s.router.GetOutputs()
-	for _, output := range outputs {
-		if routeRegistrar, ok := output.(core.RouteRegistrar); ok {
-			routeRegistrar.RegisterRoutes(router)
-		}
+// startPeriodicDashboardUpdates sends dashboard status updates every second over WebSocket
+func (s *Server) startPeriodicDashboardUpdates() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		data := s.getDashboardData()
+		s.dashboardHub.Broadcast(data)
 	}
 }
