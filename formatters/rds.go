@@ -23,16 +23,51 @@ func (r *RDSFormatter) Format(text string) string {
 	// Try progressive simplification strategies
 	processedText := text
 
-	// 1. Remove content in parentheses (e.g., "(Radio Edit)", "(2024 Remaster)")
-	processedText = regexp.MustCompile(`\s*\([^)]+\)`).ReplaceAllString(processedText, "")
-	if len(processedText) <= 64 {
-		return strings.TrimSpace(processedText)
+	// 1. Remove content in parentheses progressively from right to left
+	// This preserves more important information that might be in earlier parentheses
+	for {
+		// Find the rightmost parentheses
+		re := regexp.MustCompile(`\s*\([^)]+\)`)
+		matches := re.FindAllStringIndex(processedText, -1)
+		if len(matches) == 0 {
+			break
+		}
+		
+		// Remove the rightmost match
+		lastMatch := matches[len(matches)-1]
+		testText := processedText[:lastMatch[0]] + processedText[lastMatch[1]:]
+		testText = strings.TrimSpace(testText)
+		
+		// If removing this makes it fit, we're done
+		if len(testText) <= 64 {
+			return testText
+		}
+		
+		// Otherwise, remove it and continue
+		processedText = testText
 	}
 
-	// 2. Remove content in brackets (e.g., "[Live]", "[Explicit]")
-	processedText = regexp.MustCompile(`\s*\[[^\]]+\]`).ReplaceAllString(processedText, "")
-	if len(processedText) <= 64 {
-		return strings.TrimSpace(processedText)
+	// 2. Remove content in brackets progressively from right to left
+	for {
+		// Find the rightmost brackets
+		re := regexp.MustCompile(`\s*\[[^\]]+\]`)
+		matches := re.FindAllStringIndex(processedText, -1)
+		if len(matches) == 0 {
+			break
+		}
+		
+		// Remove the rightmost match
+		lastMatch := matches[len(matches)-1]
+		testText := processedText[:lastMatch[0]] + processedText[lastMatch[1]:]
+		testText = strings.TrimSpace(testText)
+		
+		// If removing this makes it fit, we're done
+		if len(testText) <= 64 {
+			return testText
+		}
+		
+		// Otherwise, remove it and continue
+		processedText = testText
 	}
 
 	// 3. Remove featured artists (various patterns)
