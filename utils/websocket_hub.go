@@ -80,9 +80,13 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Setup ping/pong
-	conn.SetReadDeadline(time.Now().Add(h.pongWait))
+	if err := conn.SetReadDeadline(time.Now().Add(h.pongWait)); err != nil {
+		slog.Warn("Failed to set read deadline", "error", err)
+	}
 	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(h.pongWait))
+		if err := conn.SetReadDeadline(time.Now().Add(h.pongWait)); err != nil {
+			slog.Warn("Failed to set read deadline in pong handler", "error", err)
+		}
 		return nil
 	})
 
@@ -113,7 +117,9 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	clientCount = len(h.clients)
 	h.mu.Unlock()
 
-	conn.Close()
+	if err := conn.Close(); err != nil {
+		slog.Warn("Failed to close WebSocket connection", "error", err)
+	}
 
 	if h.onDisconnect != nil {
 		h.onDisconnect(wsConn)
@@ -137,7 +143,9 @@ func (h *WebSocketHub) Broadcast(data interface{}) {
 			h.mu.Lock()
 			delete(h.clients, client)
 			h.mu.Unlock()
-			client.Close()
+			if err := client.Close(); err != nil {
+				slog.Warn("Failed to close disconnected WebSocket client", "error", err)
+			}
 		}
 	}
 }

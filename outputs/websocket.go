@@ -1,8 +1,10 @@
 package outputs
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
@@ -89,10 +91,10 @@ func (w *WebSocketOutput) SendEnhancedMetadata(formattedText string, metadata *c
 // createMetadataMessage creates a metadata message based on available data
 func (w *WebSocketOutput) createMetadataMessage(formattedText string, metadata *core.Metadata, inputName, inputType string) *utils.UniversalMetadata {
 	msg := &utils.UniversalMetadata{
-		FormattedText: formattedText,
-		InputName:     inputName,
-		InputType:     inputType,
-		Timestamp:     utils.GetFormattedTimestamp(),
+		FormattedMetadata: formattedText,
+		Source:            inputName,
+		SourceType:        inputType,
+		UpdatedAt:         time.Now(),
 	}
 
 	// Include detailed metadata if available
@@ -102,8 +104,6 @@ func (w *WebSocketOutput) createMetadataMessage(formattedText string, metadata *
 		msg.SongID = metadata.SongID
 		msg.ExpiresAt = metadata.ExpiresAt
 		msg.Duration = metadata.Duration
-		msg.StartTime = metadata.StartTime
-		msg.EndTime = metadata.EndTime
 	}
 
 	return msg
@@ -126,13 +126,7 @@ func (w *WebSocketOutput) broadcastMessage(msg utils.UniversalMetadata) {
 func (w *WebSocketOutput) preparePayload(msg utils.UniversalMetadata) interface{} {
 	if w.payloadMapper != nil {
 		// Transform using payload mapper
-		payload, err := w.payloadMapper.MapPayload(msg)
-		if err != nil {
-			slog.Error("Failed to map payload for WebSocket",
-				"output", w.GetName(),
-				"error", err)
-			return msg
-		}
+		payload := w.payloadMapper.MapPayload(msg)
 		return payload
 	}
 	return msg
@@ -141,11 +135,5 @@ func (w *WebSocketOutput) preparePayload(msg utils.UniversalMetadata) interface{
 // String returns a string representation of the output
 func (w *WebSocketOutput) String() string {
 	connectedClients := w.hub.ClientCount()
-	return utils.FormatComponent("WebSocketOutput", w.GetName(), map[string]interface{}{
-		"path":        w.settings.Path,
-		"hasChanged":  w.GetChanged(),
-		"connections": connectedClients,
-		"delay":       w.GetDelay(),
-		"hasMapping":  w.payloadMapper != nil,
-	})
+	return fmt.Sprintf("WebSocketOutput: %s (path: %s, connections: %d)", w.GetName(), w.settings.Path, connectedClients)
 }

@@ -51,8 +51,8 @@ func NewServer(port int, router *core.MetadataRouter, stationName, brandColor st
 		return s.getDashboardData()
 	})
 
-	// Subscribe to metadata changes and broadcast to WebSocket clients
-	go s.broadcastDashboardUpdates()
+	// Start periodic dashboard updates
+	go s.periodicDashboardUpdates()
 
 	return s
 }
@@ -272,12 +272,12 @@ func (s *Server) getDashboardData() interface{} {
 	}
 }
 
-// broadcastDashboardUpdates listens for metadata changes and broadcasts to WebSocket clients
-func (s *Server) broadcastDashboardUpdates() {
-	ch := make(chan core.MetadataChangedEvent, 100)
-	s.router.SubscribeToChanges(ch)
+// periodicDashboardUpdates sends dashboard updates periodically
+func (s *Server) periodicDashboardUpdates() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 
-	for range ch {
+	for range ticker.C {
 		// Get updated dashboard data and broadcast
 		data := s.getDashboardData()
 		s.dashboardHub.Broadcast(data)
