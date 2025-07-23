@@ -8,40 +8,52 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>` + stationName + ` Metadata</title>
-    <script src="https://cdn.tailwindcss.com/4.1.0" type="module"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style type="text/tailwindcss">
+        @theme {
+            --color-brand: ` + brandColor + `;
+            --color-success: #10b981;
+            --color-danger: #ef4444;
+            --color-warning: #f59e0b;
+            --color-muted: #6b7280;
+        }
+        
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; transform: scale(0.98); }
+        }
+        
+        .animate-flash {
+            animation: flash 0.5s ease-in-out;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen text-gray-900">
-    <div class="max-w-7xl mx-auto p-5 pb-24">
+<body class="bg-gradient-to-br from-gray-100 to-gray-200 min-h-screen text-gray-900 font-sans">
+    <div class="max-w-7xl mx-auto p-5">
         <!-- Header -->
         <div class="mb-8">
-            <h1 class="text-4xl font-bold mb-2" style="color: ` + brandColor + `;">` + stationName + ` Metadata</h1>
-            <p class="text-gray-700 text-lg flex items-center gap-3">
-                <span>Real-time metadata routing system</span>
-                <span id="connection-status" class="text-xs font-medium flex items-center gap-1.5 text-gray-500">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                    </svg>
-                    <span id="status-text">Connecting...</span>
-                </span>
-            </p>
+            <div>
+                <h1 class="text-4xl font-bold text-brand mb-2">` + stationName + ` Metadata</h1>
+                <p class="text-muted text-lg">Real-time metadata routing and synchronization</p>
+            </div>
         </div>
         
         <!-- Statistics -->
         <div id="stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 mb-10">
-            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-6 text-center">
-                <div class="text-3xl sm:text-5xl font-bold mb-2" style="color: ` + brandColor + `;" id="total-inputs">-</div>
+            <div class="bg-white rounded-xl shadow-md p-4 sm:p-6 text-center hover:shadow-xl transform hover:-translate-y-1 transition-all">
+                <div class="text-3xl sm:text-5xl font-bold text-brand mb-2" id="total-inputs">-</div>
                 <div class="text-gray-700 text-sm sm:text-lg font-medium">Total Inputs</div>
             </div>
-            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-6 text-center">
-                <div class="text-3xl sm:text-5xl font-bold text-green-600 mb-2" id="available-inputs">-</div>
+            <div class="bg-white rounded-xl shadow-md p-4 sm:p-6 text-center hover:shadow-xl transform hover:-translate-y-1 transition-all">
+                <div class="text-3xl sm:text-5xl font-bold text-success mb-2" id="available-inputs">-</div>
                 <div class="text-gray-700 text-sm sm:text-lg font-medium">Available Inputs</div>
             </div>
-            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-6 text-center">
-                <div class="text-3xl sm:text-5xl font-bold mb-2" style="color: ` + brandColor + `;" id="total-outputs">-</div>
+            <div class="bg-white rounded-xl shadow-md p-4 sm:p-6 text-center hover:shadow-xl transform hover:-translate-y-1 transition-all">
+                <div class="text-3xl sm:text-5xl font-bold text-brand mb-2" id="total-outputs">-</div>
                 <div class="text-gray-700 text-sm sm:text-lg font-medium">Total Outputs</div>
             </div>
-            <div class="bg-white rounded-xl shadow-sm p-4 sm:p-6 text-center">
-                <div class="text-3xl sm:text-5xl font-bold mb-2" style="color: ` + brandColor + `;" id="active-flows">-</div>
+            <div class="bg-white rounded-xl shadow-md p-4 sm:p-6 text-center hover:shadow-xl transform hover:-translate-y-1 transition-all">
+                <div class="text-3xl sm:text-5xl font-bold text-brand mb-2" id="active-flows">-</div>
                 <div class="text-gray-700 text-sm sm:text-lg font-medium">Active Flows</div>
             </div>
         </div>
@@ -50,7 +62,7 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
         <div class="mb-10">
             <h2 class="text-2xl font-semibold mb-5 text-gray-800">Inputs</h2>
             <div id="inputs-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-                <div class="text-center py-12 text-gray-500">Loading inputs...</div>
+                <div class="text-center py-12 text-muted">Loading inputs...</div>
             </div>
         </div>
         
@@ -58,73 +70,57 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
         <div class="mb-10">
             <h2 class="text-2xl font-semibold mb-5 text-gray-800">Outputs</h2>
             <div id="outputs-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-                <div class="text-center py-12 text-gray-500">Loading outputs...</div>
+                <div class="text-center py-12 text-muted">Loading outputs...</div>
             </div>
         </div>
+        
+        <!-- Footer -->
+        <footer class="mt-16 border-t border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 py-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
+                    <!-- Left: Branding with Connection Status -->
+                    <div>
+                        <h3 class="font-semibold text-gray-900 mb-1 text-center md:text-left">` + stationName + ` Metadata</h3>
+                        <div id="connection-indicator" class="flex items-center gap-1.5 justify-center md:justify-start">
+                            <svg id="plug-icon" class="w-3 h-3 transition-all duration-300" fill="currentColor" viewBox="0 0 100 100">
+                                <path d="M30,5 L30,25 L40,25 L40,5 L30,5 z M60,5 L60,25 L70,25 L70,5 L60,5 z M25,20 C22.239,20 20,22.239,20,25 L20,70 C20,72.761 22.239,75 25,75 L40,75 L40,95 L60,95 L60,75 L75,75 C77.761,75 80,72.761 80,70 L80,25 C80,22.239 77.761,20 75,20 L70,20 L70,25 L60,25 L60,20 L40,20 L40,25 L30,25 L30,20 L25,20 z"/>
+                            </svg>
+                            <span id="connection-status" class="text-xs text-gray-500">Connecting</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Center spacer -->
+                    <div class="hidden md:block"></div>
+                    
+                    <!-- Right: Links and Version -->
+                    <div class="text-center md:text-right space-y-2">
+                        <div class="flex items-center justify-center md:justify-end gap-3 text-sm">
+                            <a href="https://github.com/oszuidwest/zwfm-metadata" target="_blank" class="inline-flex items-center gap-1.5 text-gray-600 hover:text-brand transition-colors">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path>
+                                </svg>
+                                GitHub
+                            </a>
+                            <span class="text-gray-300">|</span>
+                            <span class="text-gray-500">Version <span id="app-version" class="font-medium">` + version + `</span></span>
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            © ` + buildYear + ` Streekomroep ZuidWest • MIT License
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </footer>
     </div>
     
-    <!-- Footer -->
-    <footer class="bg-white border-t border-gray-200 mt-auto">
-        <div class="max-w-7xl mx-auto px-5 py-6">
-            <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div class="text-gray-600 text-sm flex items-center gap-1.5">
-                    <svg id="connection-icon" class="w-4 h-4 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
-                    </svg>
-                    <span id="connection-text" class="text-green-600">Connected</span>
-                </div>
-                <div class="text-gray-600 text-sm text-center">
-                    © ` + buildYear + ` Streekomroep ZuidWest • MIT License • v` + version + `
-                </div>
-                <div>
-                    <a href="https://github.com/oszuidwest/zwfm-metadata" target="_blank" class="text-gray-600 hover:text-gray-900 transition-colors">
-                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                        </svg>
-                    </a>
-                </div>
-            </div>
-        </div>
-    </footer>
-    
-    <script>` + dashboardJS(brandColor) + `</script>
+    <script>` + dashboardJS() + `</script>
 </body>
 </html>`
 }
 
 // dashboardJS returns the JavaScript for the dashboard
-func dashboardJS(brandColor string) string {
+func dashboardJS() string {
 	return `
-        // Constants for styling
-        const BRAND_COLOR = '` + brandColor + `';
-        
-        const CARD_CLASSES = {
-            container: 'bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden',
-            statusAvailable: 'bg-green-600',
-            statusExpired: 'bg-orange-600',
-            statusUnavailable: 'bg-red-600',
-            headerInput: 'p-6 text-white',
-            headerOutput: 'bg-gray-800 p-6 text-white'
-        };
-        
-        const TAG_CLASSES = {
-            type: 'backdrop-blur-sm bg-white/20 px-4 py-1.5 rounded-full text-sm font-medium text-white ring-1 ring-white/40 shadow-sm',
-            input: 'bg-gray-100 px-3.5 py-1.5 rounded-full text-sm text-gray-800 font-medium ring-1 ring-gray-300',
-            formatter: 'bg-gray-100 px-3.5 py-1.5 rounded-full text-sm text-gray-800 font-medium ring-1 ring-gray-300'
-        };
-        
-        const STATUS_COLORS = {
-            available: { dot: 'bg-green-600', text: 'text-green-600' },
-            expired: { dot: 'bg-orange-600', text: 'text-orange-600' },
-            unavailable: { dot: 'bg-red-600', text: 'text-red-600' }
-        };
-        
-        const STATUS_TEXT = {
-            available: 'Available',
-            expired: 'Expired',
-            unavailable: 'Unavailable'
-        };
-
         // Store previous data to detect changes
         let previousData = {
             inputs: {},
@@ -134,28 +130,23 @@ func dashboardJS(brandColor string) string {
 
         // WebSocket connection
         let ws = null;
-        let reconnectTimer = null;
-        let reconnectAttempts = 0;
+        let reconnectTimeout = null;
+        let reconnectDelay = 1000; // Start with 1 second
+        const maxReconnectDelay = 30000; // Max 30 seconds
 
-        // Helper functions
+        // HTML Generation Helpers
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
 
-        function createBadge(text, className) {
-            return '<span class="' + className + '">' + escapeHtml(text) + '</span>';
+        function createLabeledField(label, value, labelClass = 'text-gray-600', valueClass = 'text-gray-900 font-semibold') {
+            return '<div class="mb-2"><span class="' + labelClass + '">' + label + ':</span> <span class="' + valueClass + '">' + escapeHtml(value) + '</span></div>';
         }
 
-        function createStatusIndicator(status) {
-            const config = STATUS_COLORS[status] || STATUS_COLORS.unavailable;
-            const text = STATUS_TEXT[status] || 'Unavailable';
-            
-            return '<div class="flex items-center mb-3">' +
-                '<span class="inline-block w-3 h-3 rounded-full mr-2 ' + config.dot + '"></span>' +
-                '<span class="font-semibold ' + config.text + '">' + text + '</span>' +
-            '</div>';
+        function createBadge(text, classes) {
+            return '<span class="' + classes + '">' + escapeHtml(text) + '</span>';
         }
 
         function createMetadataCard(name, type, headerClass, content, hasChanged) {
@@ -170,7 +161,129 @@ func dashboardJS(brandColor string) string {
             '</div>';
         }
 
-        function formatTimestamp(timestamp, useRelative = false) {
+        function createStatusBadge(status, statusConfig) {
+            const config = statusConfig[status] || statusConfig.default;
+            return '<div class="flex items-center mb-3">' +
+                '<span class="inline-block w-3 h-3 rounded-full mr-2 ' + config.dot + '"></span>' +
+                '<span class="font-semibold ' + config.text + '">' + config.label + '</span>' +
+            '</div>';
+        }
+
+        // Configuration Constants
+        const STATUS_CONFIG = {
+            available: { dot: 'bg-success', text: 'text-success', label: 'Available' },
+            expired: { dot: 'bg-warning', text: 'text-warning', label: 'Expired' },
+            unavailable: { dot: 'bg-danger', text: 'text-danger', label: 'Unavailable' },
+            default: { dot: 'bg-danger', text: 'text-danger', label: 'Unavailable' }
+        };
+
+        const TAG_CLASSES = {
+            input: 'bg-gray-100 px-3.5 py-1.5 rounded-full text-sm text-gray-800 font-medium ring-1 ring-gray-300 hover:bg-gray-200 transition-colors',
+            formatter: 'bg-brand/15 px-3.5 py-1.5 rounded-full text-sm text-brand font-semibold ring-1 ring-brand/30 hover:bg-brand/20 transition-colors',
+            type: 'backdrop-blur-sm bg-white/20 px-4 py-1.5 rounded-full text-sm font-medium text-white ring-1 ring-white/40 shadow-sm'
+        };
+
+        const CARD_CLASSES = {
+            container: 'bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-200 overflow-hidden',
+            inputHeader: 'bg-brand p-6 text-white',
+            outputHeader: 'bg-gradient-to-r from-gray-700 to-gray-900 p-6 text-white'
+        };
+
+        // Data Management Helpers
+        function updateContainerWithCards(container, html) {
+            container.innerHTML = html;
+            
+            // Flash changed cards
+            container.querySelectorAll('[data-changed="true"]').forEach(card => {
+                animateCardChange(card);
+            });
+        }
+
+        function hasDataChanged(current, previous, compareKeys) {
+            if (!previous) return true;
+            return compareKeys.some(key => {
+                if (typeof current[key] === 'object') {
+                    return JSON.stringify(current[key]) !== JSON.stringify(previous[key]);
+                }
+                return current[key] !== previous[key];
+            });
+        }
+
+        // WebSocket Management
+        function establishWebSocketConnection() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = protocol + '//' + window.location.host + '/ws/dashboard';
+            
+            console.log('Connecting to WebSocket:', wsUrl);
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function() {
+                console.log('WebSocket connected');
+                reconnectDelay = 1000; // Reset delay on successful connection
+                
+                // Update connection indicator
+                updateConnectionStatus('connected');
+            };
+
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    processDashboardUpdate(data);
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onclose = function(event) {
+                console.log('WebSocket disconnected:', event.code, event.reason);
+                
+                // Update connection indicator
+                updateConnectionStatus('disconnected');
+                
+                // Schedule reconnection with exponential backoff
+                if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                reconnectTimeout = setTimeout(() => {
+                    updateConnectionStatus('connecting');
+                    establishWebSocketConnection();
+                    // Increase delay for next attempt (exponential backoff)
+                    reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
+                }, reconnectDelay);
+            };
+        }
+
+        // Update connection status indicator
+        function updateConnectionStatus(status) {
+            const plugIcon = document.getElementById('plug-icon');
+            const statusText = document.getElementById('connection-status');
+            const indicator = document.getElementById('connection-indicator');
+            
+            switch(status) {
+                case 'connected':
+                    plugIcon.className = 'w-3 h-3 transition-all duration-300 text-gray-400';
+                    statusText.textContent = 'Connected';
+                    statusText.className = 'text-xs text-gray-500';
+                    break;
+                    
+                case 'disconnected':
+                    plugIcon.className = 'w-3 h-3 transition-all duration-300 text-gray-300';
+                    statusText.textContent = 'Disconnected';
+                    statusText.className = 'text-xs text-gray-400';
+                    break;
+                    
+                case 'connecting':
+                    plugIcon.className = 'w-3 h-3 transition-all duration-300 text-gray-400 animate-pulse';
+                    statusText.textContent = 'Connecting';
+                    statusText.className = 'text-xs text-gray-500 animate-pulse';
+                    break;
+            }
+        }
+
+        // Format timestamp for display
+        function formatDisplayTime(timestamp, useRelative = false) {
             if (!timestamp) return 'N/A';
             
             const date = new Date(timestamp);
@@ -185,17 +298,16 @@ func dashboardJS(brandColor string) string {
             return date.toLocaleTimeString();
         }
 
-        function flashElement(element) {
-            element.style.transform = 'scale(0.98)';
-            element.style.opacity = '0.7';
+        // Visual feedback for data changes
+        function animateCardChange(element) {
+            element.classList.add('animate-flash');
             setTimeout(() => {
-                element.style.transform = '';
-                element.style.opacity = '';
-            }, 300);
+                element.classList.remove('animate-flash');
+            }, 500);
         }
 
-        // Update functions
-        function updateStats(data) {
+        // Update dashboard statistics
+        function updateStatistics(data) {
             const stats = {
                 'total-inputs': data.inputs.length,
                 'available-inputs': data.inputs.filter(i => i.available).length,
@@ -203,21 +315,21 @@ func dashboardJS(brandColor string) string {
                 'active-flows': data.activeFlows
             };
             
-            Object.keys(stats).forEach(id => {
+            Object.entries(stats).forEach(([id, newValue]) => {
                 const element = document.getElementById(id);
-                const newValue = stats[id];
                 const oldValue = previousData.stats[id];
                 
                 element.textContent = newValue;
                 
                 if (oldValue !== undefined && oldValue !== newValue) {
-                    flashElement(element.parentElement);
+                    animateCardChange(element.parentElement);
                 }
                 
                 previousData.stats[id] = newValue;
             });
         }
 
+        // Update input cards display
         function updateInputCards(inputs) {
             const container = document.getElementById('inputs-grid');
             
@@ -226,21 +338,21 @@ func dashboardJS(brandColor string) string {
                 let metadataHtml = '';
                 if (input.metadata) {
                     const fields = [];
-                    if (input.metadata.artist) {
-                        fields.push('<div class="mb-2"><span class="text-gray-600">Artist:</span> <span class="text-gray-900 font-semibold">' + escapeHtml(input.metadata.artist) + '</span></div>');
-                    }
-                    if (input.metadata.title) {
-                        fields.push('<div class="mb-2"><span class="text-gray-600">Title:</span> <span class="text-gray-900 font-semibold">' + escapeHtml(input.metadata.title) + '</span></div>');
-                    }
-                    if (input.metadata.songID) {
-                        fields.push('<div class="mb-2"><span class="text-gray-600">Song ID:</span> <span class="text-gray-900 font-semibold">' + escapeHtml(input.metadata.songID) + '</span></div>');
-                    }
-                    if (input.metadata.duration) {
-                        fields.push('<div class="mb-2"><span class="text-gray-600">Duration:</span> <span class="text-gray-900 font-semibold">' + escapeHtml(input.metadata.duration) + '</span></div>');
-                    }
+                    const metadataFields = [
+                        { key: 'artist', label: 'Artist' },
+                        { key: 'title', label: 'Title' },
+                        { key: 'songID', label: 'Song ID' },
+                        { key: 'duration', label: 'Duration' }
+                    ];
+                    
+                    metadataFields.forEach(field => {
+                        if (input.metadata[field.key]) {
+                            fields.push(createLabeledField(field.label, input.metadata[field.key]));
+                        }
+                    });
                     
                     if (fields.length > 0) {
-                        metadataHtml = '<div class="bg-gray-50 p-4 rounded-lg mt-4 font-mono text-sm break-all border border-gray-200">' + 
+                        metadataHtml = '<div class="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded-lg mt-4 font-mono text-sm break-all border border-gray-200">' + 
                                       fields.join('') + 
                                       '</div>';
                     }
@@ -248,45 +360,38 @@ func dashboardJS(brandColor string) string {
                 
                 // Build prefix/suffix display
                 let prefixSuffixHtml = '';
-                if ((input.prefix && input.prefix !== 'undefined') || (input.suffix && input.suffix !== 'undefined')) {
-                    const parts = [];
-                    if (input.prefix && input.prefix !== 'undefined') {
-                        parts.push('<div class="text-sm"><span class="text-gray-500">Prefix:</span> <span class="font-mono text-gray-700">' + escapeHtml(input.prefix) + '</span></div>');
-                    }
-                    if (input.suffix && input.suffix !== 'undefined') {
-                        parts.push('<div class="text-sm"><span class="text-gray-500">Suffix:</span> <span class="font-mono text-gray-700">' + escapeHtml(input.suffix) + '</span></div>');
-                    }
-                    if (parts.length > 0) {
-                        prefixSuffixHtml = '<div class="mt-3 space-y-1">' + parts.join('') + '</div>';
-                    }
+                const parts = [];
+                if (input.prefix && input.prefix !== 'undefined') {
+                    parts.push(createLabeledField('Prefix', input.prefix, 'text-gray-500', 'font-mono text-gray-700'));
+                }
+                if (input.suffix && input.suffix !== 'undefined') {
+                    parts.push(createLabeledField('Suffix', input.suffix, 'text-gray-500', 'font-mono text-gray-700'));
+                }
+                if (parts.length > 0) {
+                    prefixSuffixHtml = '<div class="mt-3 space-y-1">' + 
+                        parts.map(p => '<div class="text-sm">' + p + '</div>').join('') + 
+                        '</div>';
                 }
                 
                 // Check for changes
-                const prevInput = previousData.inputs[input.name] || {};
-                const hasChanged = prevInput.status !== input.status || 
-                                 JSON.stringify(prevInput.metadata) !== JSON.stringify(input.metadata);
+                const prevInput = previousData.inputs[input.name];
+                const hasChanged = hasDataChanged(input, prevInput, ['status', 'metadata']);
                 
-                const headerClass = CARD_CLASSES.headerInput + ' ' + (CARD_CLASSES['status' + input.status.charAt(0).toUpperCase() + input.status.slice(1)] || CARD_CLASSES.statusUnavailable);
-                headerClass.replace('undefined', CARD_CLASSES.statusUnavailable);
-                
-                const content = createStatusIndicator(input.status) +
+                // Build content
+                const content = createStatusBadge(input.status, STATUS_CONFIG) +
                     prefixSuffixHtml +
                     metadataHtml +
                     '<div class="text-gray-500 text-sm mt-4 pt-4 border-t border-gray-200">' +
                         '<div>Updated: <span class="' + (input.status === 'available' ? 'text-gray-700 font-medium' : '') + '">' + 
-                        formatTimestamp(input.updatedAt, input.status === 'available') + '</span></div>' +
-                        (input.expiresAt ? '<div>Expires: ' + formatTimestamp(input.expiresAt) + '</div>' : '') +
+                        formatDisplayTime(input.updatedAt, input.status === 'available') + '</span></div>' +
+                        (input.expiresAt ? '<div>Expires: ' + formatDisplayTime(input.expiresAt) + '</div>' : '') +
                     '</div>';
                 
-                return createMetadataCard(input.name, input.type, headerClass, content, hasChanged);
+                const card = createMetadataCard(input.name, input.type, CARD_CLASSES.inputHeader, content, hasChanged);
+                return card.replace('data-changed=', 'data-input-name="' + input.name + '" data-changed=');
             }).join('');
             
-            container.innerHTML = html;
-            
-            // Flash changed cards
-            container.querySelectorAll('[data-changed="true"]').forEach(card => {
-                flashElement(card);
-            });
+            updateContainerWithCards(container, html);
             
             // Store current data
             inputs.forEach(input => {
@@ -297,51 +402,50 @@ func dashboardJS(brandColor string) string {
             });
         }
 
+        // Update output cards display
         function updateOutputCards(outputs) {
             const container = document.getElementById('outputs-grid');
             
             const html = outputs.map(output => {
                 // Build tags
-                const inputsHtml = (output.inputs || [])
+                const inputTags = (output.inputs || [])
                     .map(input => createBadge(input, TAG_CLASSES.input))
                     .join(' ');
                 
-                const formattersHtml = (output.formatters || [])
+                const formatterTags = (output.formatters || [])
                     .map(formatter => createBadge(formatter, TAG_CLASSES.formatter))
                     .join(' ');
                 
                 // Check for changes
-                const prevOutput = previousData.outputs[output.name] || {};
-                const hasChanged = prevOutput.currentInput !== output.currentInput;
+                const prevOutput = previousData.outputs[output.name];
+                const hasChanged = hasDataChanged(output, prevOutput, ['currentInput']);
                 
-                const content = '<div class="grid grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">' +
-                    '<div>' +
-                        '<div class="text-gray-600 text-sm">Delay</div>' +
-                        '<div class="font-bold text-lg">' + output.delay + 's</div>' +
+                // Build content
+                const content = 
+                    '<div class="grid grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">' +
+                        '<div>' +
+                            '<div class="text-gray-600 text-sm">Delay</div>' +
+                            '<div class="font-bold text-lg">' + output.delay + 's</div>' +
+                        '</div>' +
+                        '<div>' +
+                            '<div class="text-gray-600 text-sm">Current Input</div>' +
+                            '<div class="font-bold text-lg ' + (output.currentInput ? 'text-success' : 'text-gray-400') + '">' + 
+                            escapeHtml(output.currentInput || 'None') + '</div>' +
+                        '</div>' +
                     '</div>' +
-                    '<div>' +
-                        '<div class="text-gray-600 text-sm">Current Input</div>' +
-                        '<div class="font-bold text-lg ' + (output.currentInput ? 'text-green-600' : 'text-gray-400') + '">' + 
-                        escapeHtml(output.currentInput || 'None') + '</div>' +
-                    '</div>' +
-                '</div>' +
-                '<div class="space-y-4">' +
-                    '<div>' +
-                        '<div class="text-gray-700 text-sm mb-2 font-semibold">Inputs (priority order)</div>' +
-                        '<div class="flex flex-wrap gap-2">' + inputsHtml + '</div>' +
-                    '</div>' +
-                    (formattersHtml ? '<div><div class="text-gray-700 text-sm mb-2 font-semibold">Formatters</div><div class="flex flex-wrap gap-2">' + formattersHtml + '</div></div>' : '') +
-                '</div>';
+                    '<div class="space-y-4">' +
+                        '<div>' +
+                            '<div class="text-gray-700 text-sm mb-2 font-semibold">Inputs (priority order)</div>' +
+                            '<div class="flex flex-wrap gap-2">' + inputTags + '</div>' +
+                        '</div>' +
+                        (formatterTags ? '<div><div class="text-gray-700 text-sm mb-2 font-semibold">Formatters</div><div class="flex flex-wrap gap-2">' + formatterTags + '</div></div>' : '') +
+                    '</div>';
                 
-                return createMetadataCard(output.name, output.type, CARD_CLASSES.headerOutput, content, hasChanged);
+                const card = createMetadataCard(output.name, output.type, CARD_CLASSES.outputHeader, content, hasChanged);
+                return card.replace('data-changed=', 'data-output-name="' + output.name + '" data-changed=');
             }).join('');
             
-            container.innerHTML = html;
-            
-            // Flash changed cards
-            container.querySelectorAll('[data-changed="true"]').forEach(card => {
-                flashElement(card);
-            });
+            updateContainerWithCards(container, html);
             
             // Store current data
             outputs.forEach(output => {
@@ -351,89 +455,23 @@ func dashboardJS(brandColor string) string {
             });
         }
 
-        function updateConnectionStatus(connected) {
-            const statusText = document.getElementById('status-text');
-            const connectionText = document.getElementById('connection-text');
-            const connectionIcon = document.getElementById('connection-icon');
-            const connectionStatus = document.getElementById('connection-status');
+        // Process and display dashboard data
+        function processDashboardUpdate(data) {
+            if (!data) return;
             
-            if (connected) {
-                statusText.textContent = 'Connected';
-                connectionText.textContent = 'Connected';
-                connectionStatus.classList.remove('text-red-600');
-                connectionStatus.classList.add('text-gray-500');
-                connectionIcon.classList.remove('text-red-600');
-                connectionIcon.classList.add('text-green-600');
-                connectionText.classList.remove('text-red-600');
-                connectionText.classList.add('text-green-600');
-            } else {
-                statusText.textContent = 'Disconnected';
-                connectionText.textContent = 'Disconnected';
-                connectionStatus.classList.remove('text-gray-500');
-                connectionStatus.classList.add('text-red-600');
-                connectionIcon.classList.remove('text-green-600');
-                connectionIcon.classList.add('text-red-600');
-                connectionText.classList.remove('text-green-600');
-                connectionText.classList.add('text-red-600');
-            }
-        }
-
-        // WebSocket functions
-        function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = protocol + '//' + window.location.host + '/ws/dashboard';
-            
-            try {
-                ws = new WebSocket(wsUrl);
-                
-                ws.onopen = function() {
-                    console.log('WebSocket connected');
-                    updateConnectionStatus(true);
-                    reconnectAttempts = 0;
-                };
-                
-                ws.onmessage = function(event) {
-                    try {
-                        const data = JSON.parse(event.data);
-                        updateStats(data);
-                        updateInputCards(data.inputs || []);
-                        updateOutputCards(data.outputs || []);
-                    } catch (err) {
-                        console.error('Error processing WebSocket message:', err);
-                    }
-                };
-                
-                ws.onclose = function() {
-                    console.log('WebSocket disconnected');
-                    updateConnectionStatus(false);
-                    scheduleReconnect();
-                };
-                
-                ws.onerror = function(error) {
-                    console.error('WebSocket error:', error);
-                    updateConnectionStatus(false);
-                };
-                
-            } catch (err) {
-                console.error('Failed to create WebSocket:', err);
-                updateConnectionStatus(false);
-                scheduleReconnect();
-            }
-        }
-
-        function scheduleReconnect() {
-            if (reconnectTimer) return;
-            
-            reconnectAttempts++;
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-            
-            reconnectTimer = setTimeout(() => {
-                reconnectTimer = null;
-                connectWebSocket();
-            }, delay);
+            updateStatistics(data);
+            updateInputCards(data.inputs);
+            updateOutputCards(data.outputs);
         }
 
         // Initialize on page load
-        connectWebSocket();
+        updateConnectionStatus('connecting');
+        establishWebSocketConnection();
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (reconnectTimeout) clearTimeout(reconnectTimeout);
+            if (ws) ws.close();
+        });
     `
 }
