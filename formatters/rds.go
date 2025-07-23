@@ -32,17 +32,17 @@ func (r *RDSFormatter) Format(text string) string {
 		if len(matches) == 0 {
 			break
 		}
-		
+
 		// Remove the rightmost match
 		lastMatch := matches[len(matches)-1]
 		testText := processedText[:lastMatch[0]] + processedText[lastMatch[1]:]
 		testText = strings.TrimSpace(testText)
-		
+
 		// If removing this makes it fit, we're done
 		if len(testText) <= 64 {
 			return testText
 		}
-		
+
 		// Otherwise, remove it and continue
 		processedText = testText
 	}
@@ -55,17 +55,17 @@ func (r *RDSFormatter) Format(text string) string {
 		if len(matches) == 0 {
 			break
 		}
-		
+
 		// Remove the rightmost match
 		lastMatch := matches[len(matches)-1]
 		testText := processedText[:lastMatch[0]] + processedText[lastMatch[1]:]
 		testText = strings.TrimSpace(testText)
-		
+
 		// If removing this makes it fit, we're done
 		if len(testText) <= 64 {
 			return testText
 		}
-		
+
 		// Otherwise, remove it and continue
 		processedText = testText
 	}
