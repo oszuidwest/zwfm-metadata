@@ -1,8 +1,10 @@
 package outputs
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
@@ -63,8 +65,13 @@ func (w *WebSocketOutput) SendFormattedMetadata(formattedText string) {
 		return
 	}
 
-	// Create a message based on our configuration
-	msg := w.createMetadataMessage(formattedText, nil, "", "")
+	// Create a basic message when we don't have full metadata
+	msg := &utils.UniversalMetadata{
+		Type:              "metadata_update",
+		FormattedMetadata: formattedText,
+		Title:             formattedText,
+		UpdatedAt:         time.Now(),
+	}
 
 	// Store current metadata
 	w.storeCurrentMetadata(msg)
@@ -78,35 +85,12 @@ func (w *WebSocketOutput) SendEnhancedMetadata(formattedText string, metadata *c
 		return
 	}
 
-	// Create a message with full metadata
-	msg := w.createMetadataMessage(formattedText, metadata, inputName, inputType)
+	// Use the utility function to convert metadata with type
+	msg := utils.ConvertMetadataWithType(formattedText, metadata, "metadata_update", inputName, inputType)
 
 	// Store current metadata
 	w.storeCurrentMetadata(msg)
 	w.broadcastMessage(*msg)
-}
-
-// createMetadataMessage creates a metadata message based on available data
-func (w *WebSocketOutput) createMetadataMessage(formattedText string, metadata *core.Metadata, inputName, inputType string) *utils.UniversalMetadata {
-	msg := &utils.UniversalMetadata{
-		FormattedText: formattedText,
-		InputName:     inputName,
-		InputType:     inputType,
-		Timestamp:     utils.GetFormattedTimestamp(),
-	}
-
-	// Include detailed metadata if available
-	if metadata != nil {
-		msg.Artist = metadata.Artist
-		msg.Title = metadata.Title
-		msg.SongID = metadata.SongID
-		msg.ExpiresAt = metadata.ExpiresAt
-		msg.Duration = metadata.Duration
-		msg.StartTime = metadata.StartTime
-		msg.EndTime = metadata.EndTime
-	}
-
-	return msg
 }
 
 // storeCurrentMetadata stores the current metadata for new connections
@@ -125,15 +109,13 @@ func (w *WebSocketOutput) broadcastMessage(msg utils.UniversalMetadata) {
 // preparePayload prepares the payload to send
 func (w *WebSocketOutput) preparePayload(msg utils.UniversalMetadata) interface{} {
 	if w.payloadMapper != nil {
-		// Transform using payload mapper
-		payload, err := w.payloadMapper.MapPayload(msg)
-		if err != nil {
-			slog.Error("Failed to map payload for WebSocket",
-				"output", w.GetName(),
-				"error", err)
-			return msg
+		// Transform using payload mapper - need to convert to template data first
+		payload := w.payloadMapper.MapPayload(msg.ToTemplateData())
+		if payload != nil {
+			return payload
 		}
-		return payload
+		// If mapping failed, fall back to original message
+		slog.Debug("PayloadMapper returned nil, using original message", "output", w.GetName())
 	}
 	return msg
 }
@@ -141,11 +123,6 @@ func (w *WebSocketOutput) preparePayload(msg utils.UniversalMetadata) interface{
 // String returns a string representation of the output
 func (w *WebSocketOutput) String() string {
 	connectedClients := w.hub.ClientCount()
-	return utils.FormatComponent("WebSocketOutput", w.GetName(), map[string]interface{}{
-		"path":        w.settings.Path,
-		"hasChanged":  w.GetChanged(),
-		"connections": connectedClients,
-		"delay":       w.GetDelay(),
-		"hasMapping":  w.payloadMapper != nil,
-	})
+	return fmt.Sprintf("WebSocketOutput{name: %s, path: %s, connections: %d, delay: %ds, hasMapping: %t}",
+		w.GetName(), w.settings.Path, connectedClients, w.GetDelay(), w.payloadMapper != nil)
 }
