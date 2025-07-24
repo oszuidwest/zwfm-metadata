@@ -1,6 +1,6 @@
 # ZuidWest FM Metadata
 
-Metadata routing middleware for radio stations. Routes metadata from inputs (playout software, APIs, static text) to outputs (Icecast, files, webhooks) with priority-based fallback and configurable delays. Originally designed for ZuidWest FM in the Netherlands.
+Metadata routing middleware for radio stations that routes metadata from inputs (playout software, APIs, and static text) to outputs (Icecast, files, and webhooks) with priority-based fallback and configurable delays. Originally designed for ZuidWest FM in the Netherlands.
 
 <img width="1755" alt="Scherm­afbeelding 2025-07-05 om 00 20 05" src="https://github.com/user-attachments/assets/98fd12cb-d74e-4ca2-8224-c13d4f50b397" />
 
@@ -45,7 +45,7 @@ Dashboard: http://localhost:9000
 
 ## Configuration
 
-The application supports basic styling customization through the configuration file:
+The application supports styling customization through the configuration file:
 
 ```json
 {
@@ -61,8 +61,8 @@ The application supports basic styling customization through the configuration f
 ### Global Settings
 
 - `webServerPort` (default: 9000) - Port for the web dashboard and API
-- `debug` (default: false) - Enable debug logging
-- `stationName` (default: "ZuidWest FM") - Station name displayed in dashboard and browser title
+- `debug` (default: false) - Enables debug logging
+- `stationName` (default: "ZuidWest FM") - Station name displayed in the dashboard and browser title
 - `brandColor` (default: "#e6007e") - Brand color (hex) used throughout the dashboard UI
 
 The dashboard automatically adapts to your brand colors, using them for headers, badges, and accent elements throughout the interface.
@@ -79,9 +79,8 @@ Configure metadata sources in priority order.
 | **URL** | External API integration | HTTP polling | N/A | ✅ (via JSON field) | ✅ |
 | **Text** | Static fallback | Config file | N/A | ❌ | ❌ |
 
-**Legend:**
-- **Expiration Support**: Whether metadata can automatically expire (Dynamic: based on song duration, Fixed: after set time, None: never expires)
-- **Polling**: Whether the input actively polls for updates vs receiving them via API
+- **Expiration Support**: Whether metadata expires automatically (Dynamic: based on song duration, Fixed: after a set time, None: never expires)
+- **Polling**: Whether the input polls for updates versus receives them via API
 
 ### Dynamic Input
 
@@ -104,8 +103,8 @@ HTTP API for live updates
 
 #### Settings
 - `secret` (optional) - Authentication secret for API calls
-- `expiration.type` - `"dynamic"` (expires based on song duration), `"fixed"` (expires after set minutes), `"none"` (never expires)
-- `expiration.minutes` (required if type=fixed) - Minutes until expiration
+- `expiration.type` - `"dynamic"` (expires based on song duration), `"fixed"` (expires after a set number of minutes), or `"none"` (never expires)
+- `expiration.minutes` (required if type=fixed) - Number of minutes until expiration
 
 #### API Usage
 ```bash
@@ -126,7 +125,7 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 
 ### URL Input
 
-Poll external APIs
+Polls external APIs
 
 ```json
 {
@@ -145,15 +144,15 @@ Poll external APIs
 
 #### Settings
 - `url` (required) - URL to poll for metadata
-- `pollingInterval` (required) - Seconds between HTTP requests
-- `jsonParsing` (optional, default: false) - Parse response as JSON
-- `jsonKey` (required if jsonParsing=true) - Dot notation path to extract value (e.g., `"data.song.title"`)
-- `expiryKey`: (optional) Dot-separated path to the expiry value in the JSON response. If set, the expiry will be parsed and used for metadata expiration. When the expiry is reached, polling will occur immediately, in addition to regular interval polling.
-- `expiryFormat`: (optional) Format string for parsing the expiry value (e.g., RFC3339). Defaults to RFC3339 if not specified.
+- `pollingInterval` (required) - Number of seconds between HTTP requests
+- `jsonParsing` (optional, default: false) - Parses the response as JSON
+- `jsonKey` (required if jsonParsing=true) - Dot-notation path to extract the value (e.g., `"data.song.title"`)
+- `expiryKey` (optional) - Dot-notation path to the expiry value in the JSON response. When set, the expiry is parsed and used for metadata expiration. When the expiry is reached, polling occurs immediately in addition to regular interval polling.
+- `expiryFormat` (optional) - Format string for parsing the expiry value (e.g., RFC3339). Defaults to RFC3339 if not specified.
 
 ### Text Input
 
-Static fallback
+A static fallback
 
 ```json
 {
@@ -171,8 +170,8 @@ Static fallback
 ### Input Options
 
 All input types support:
-- `prefix` (optional) - Text added before metadata
-- `suffix` (optional) - Text added after metadata
+- `prefix` (optional) - Text prepended to metadata
+- `suffix` (optional) - Text appended to metadata
 
 ## Outputs
 
@@ -190,10 +189,9 @@ Control where formatted metadata is sent.
 | **WebSocket** | Real-time browser/app updates | ✅ | ✅ | N/A |
 | **StereoTool** | Update RDS RadioText | ❌ | ❌ | N/A |
 
-**Legend:**
-- **Enhanced Metadata**: Receives full metadata details (title, artist, duration, etc.) not just formatted text
+- **Enhanced Metadata**: Receives full metadata details (title, artist, duration, etc.) rather than just formatted text
 - **Custom Payload Mapping**: Supports transforming output to match any JSON structure
-- **Authentication**: Security mechanism supported
+- **Authentication**: Security mechanisms supported
 
 ### Output Configurations
 
@@ -203,7 +201,7 @@ All output types support:
 
 #### Icecast Output
 
-Update streaming server metadata
+Updates streaming server metadata
 
 ```json
 {
@@ -223,7 +221,7 @@ Update streaming server metadata
 ```
 
 ##### Settings
-- `delay` (required) - Seconds to delay metadata updates
+- `delay` (required) - Number of seconds to delay metadata updates
 - `server` (required) - Icecast server hostname/IP
 - `port` (required) - Icecast server port
 - `username` (required) - Icecast username (usually "source")
@@ -232,7 +230,7 @@ Update streaming server metadata
 
 #### File Output
 
-Write to filesystem
+Writes to the filesystem
 
 ```json
 {
@@ -248,12 +246,12 @@ Write to filesystem
 ```
 
 ##### Settings
-- `delay` (required) - Seconds to delay metadata updates
+- `delay` (required) - Number of seconds to delay metadata updates
 - `filename` (required) - Full path to output file
 
 #### POST Output
 
-Send metadata via HTTP webhooks
+Sends metadata via HTTP webhooks
 
 ```json
 {
@@ -271,14 +269,14 @@ Send metadata via HTTP webhooks
 ```
 
 ##### Settings
-- `delay` (required) - Seconds to delay metadata updates
+- `delay` (required) - Number of seconds to delay metadata updates
 - `url` (required) - Webhook endpoint URL
 - `bearerToken` (optional) - Authorization bearer token
 - `payloadMapping` (optional) - Custom JSON payload structure (see [Custom Payload Mapping](#custom-payload-mapping))
 
 #### HTTP Output
 
-Serve metadata via GET endpoints with multiple response formats
+Serves metadata via GET endpoints with multiple response formats
 
 ```json
 {
@@ -312,7 +310,7 @@ Serve metadata via GET endpoints with multiple response formats
 ```
 
 ##### Settings
-- `delay` (required) - Seconds to delay metadata updates
+- `delay` (required) - Number of seconds to delay metadata updates
 - `endpoints` (required) - Array of HTTP endpoints to serve
 
 ##### Endpoint Configuration
@@ -328,7 +326,7 @@ Serve metadata via GET endpoints with multiple response formats
 
 #### WebSocket Output
 
-Broadcast metadata to connected clients
+Broadcasts metadata to connected clients with real-time updates.
 
 ```json
 {
@@ -345,11 +343,11 @@ Broadcast metadata to connected clients
 ```
 
 ##### Settings
-- `delay` (required) - Seconds to delay metadata updates
+- `delay` (required) - Number of seconds to delay metadata updates
 - `path` (required) - URL path for WebSocket connections (e.g., "/metadata", "/ws")
 - `payloadMapping` (optional) - Custom JSON message structure (see [Custom Payload Mapping](#custom-payload-mapping))
 
-**Note**: WebSocket endpoints are served on the main web server port (default: 9000), not on a separate port.
+**Note**: WebSocket endpoints are served on the main web server port (default: 9000), not on a separate port. All WebSocket operations use write timeouts to prevent hanging connections.
 
 ##### Client Connection Example
 
@@ -371,7 +369,7 @@ ws.onopen = () => {
 
 #### DLS Plus Output
 
-Generate DLS Plus format for DAB/DAB+ transmission
+Generates DLS Plus format for DAB/DAB+ transmission
 
 ```json
 {
@@ -387,7 +385,7 @@ Generate DLS Plus format for DAB/DAB+ transmission
 ```
 
 ##### Settings
-- `delay` (required) - Seconds to delay metadata updates
+- `delay` (required) - Number of seconds to delay metadata updates
 - `filename` (required) - Full path to output file
 
 ##### Output Format
@@ -411,7 +409,7 @@ Note: ODR-PadEnc automatically re-reads DLS files before each transmission.
 
 #### StereoTool Output
 
-Update StereoTool's RDS RadioText and Streaming Output Metadata
+Updates StereoTool's RDS RadioText and Streaming Output Metadata
 
 ```json
 {
@@ -428,25 +426,28 @@ Update StereoTool's RDS RadioText and Streaming Output Metadata
 ```
 
 ##### Settings
-- `delay` (required) - Seconds to delay metadata updates
+- `delay` (required) - Number of seconds to delay metadata updates
 - `hostname` (required) - StereoTool server hostname/IP
 - `port` (required) - StereoTool HTTP server port (typically 8080)
 
 ##### Notes
-- Uses StereoTool's undocumented JSON API to update RadioText (ID: 9985)
-- Recommended to use with RDS formatter for 64-character compliance
+- Updates both FM RDS RadioText (ID: 9985) and Streaming Output Song (ID: 6751)
+- Uses StereoTool's undocumented JSON API
+- Recommended for use with the RDS formatter for 64-character compliance
+- Automatically handles EBU Latin character set (0-255 range) for proper RDS encoding
 
 ### Custom Payload Mapping
 
-Both **POST** and **WebSocket** outputs support custom payload mapping to transform the output format to match any JSON structure your API expects.
+Both **POST** and **WebSocket** outputs support custom payload mapping to transform the output format to match any JSON structure that your API expects.
 
-#### How it works
+#### How It Works
 - **Static values**: Any string without `{{}}` is used as-is
 - **Field references**: Use `{{.fieldname}}` to reference metadata fields
+- **Template functions**: Use pipe syntax for transformations, e.g., `{{.title | upper}}`
 - **Nested objects**: Create complex JSON structures with nested mappings
 - **Mixed templates**: Combine static text with fields, e.g., `"Now playing: {{.title}}"`
 
-#### Available fields
+#### Available Fields
 - `{{.formatted_metadata}}` - The formatted text after applying formatters
 - `{{.songID}}` - Song identifier
 - `{{.title}}` - Song title
@@ -457,6 +458,13 @@ Both **POST** and **WebSocket** outputs support custom payload mapping to transf
 - `{{.type}}` - Message type (WebSocket only: "metadata_update")
 - `{{.source}}` - Name of the input that provided this metadata
 - `{{.source_type}}` - Type of the input (e.g., "dynamic", "url", "text")
+
+#### Available Template Functions
+- `{{.field | upper}}` - Converts to uppercase
+- `{{.field | lower}}` - Converts to lowercase
+- `{{.field | trim}}` - Removes leading/trailing whitespace
+- `{{.field | formatTime}}` - Formats time.Time to RFC3339 (rarely needed as times are pre-formatted)
+- `{{.field | formatTimePtr}}` - Formats *time.Time to RFC3339, returns empty string if nil
 
 #### Default Payloads
 
@@ -585,44 +593,66 @@ Output:
 }
 ```
 
+##### Using Template Functions
+```json
+{
+  "payloadMapping": {
+    "title_upper": "{{.title | upper}}",
+    "artist_lower": "{{.artist | lower}}",
+    "clean_text": "{{.formatted_metadata | trim}}",
+    "display": "NOW PLAYING: {{.title | upper}} BY {{.artist | upper}}"
+  }
+}
+```
+
+Output:
+```json
+{
+  "title_upper": "IMAGINE",
+  "artist_lower": "john lennon",
+  "clean_text": "John Lennon - Imagine",
+  "display": "NOW PLAYING: IMAGINE BY JOHN LENNON"
+}
+```
+
 ## Formatters
 
-Apply text transformations to metadata before sending to outputs.
+Apply text transformations to metadata before sending it to outputs.
 
 ### Available Formatters
 
 #### uppercase
-Convert to uppercase
+Converts to uppercase
 ```
 "Artist - Song Title" → "ARTIST - SONG TITLE"
 ```
 
 #### lowercase
-Convert to lowercase
+Converts to lowercase
 ```
 "Artist - Song Title" → "artist - song title"
 ```
 
 #### ucwords
-Convert to title case
+Converts to title case
 ```
 "artist - song title" → "Artist - Song Title"
 ```
 
 #### rds
-Radio Data System (64 character limit)
+Radio Data System formatter (64-character limit)
 ```
-"<b>Very&shy;Long Artist Name</b> feat. Someone - Very Long Song Title (Extended Remix Version)"
-→ "VeryLong Artist Name - Very Long Song Title"
+"<b>Very Long Artist Name</b> feat. Someone - Very Long Song Title (Extended Remix Version)"
+→ "Very Long Artist Name - Very Long Song Title"
 ```
 
 Smart processing for RDS compliance:
-- **HTML cleaning**: Strips all HTML tags (`<b>`, `<i>`, `<span>`, `<script>`) and decodes entities (`&amp;` → `&`, `&lt;` → `<`, `&quot;` → `"`, `&shy;` → soft hyphen Unicode, `&nbsp;` → non-breaking space)
-- **Invisible characters**: Removes soft hyphens (`\u00AD`), zero-width spaces (`\u200B`, `\u200C`, `\u200D`), and other invisible Unicode characters
-- **Single-line output**: Converts newlines (`\n`, `\r`) to spaces for RDS displays
+- **HTML cleaning**: Strips all HTML tags (`<b>`, `<i>`, `<span>`, `<script>`) and decodes entities (`&amp;` → `&`, `&lt;` → `<`, `&quot;` → `"`, `&shy;` → soft hyphen, `&nbsp;` → non-breaking space)
+- **Character filtering**: Keeps only the EBU Latin character set (0-255 range) for RDS compatibility. Characters outside this range, such as zero-width spaces (`\u200B`, `\u200C`, `\u200D`) and other Unicode characters, are removed
+- **Single-line output**: Converts newlines (`\n`, `\r`) and tabs (`\t`) to spaces for RDS displays
 - **Smart truncation** (applied in order until under 64 chars):
-  1. Removes content in parentheses: `(Radio Edit)`, `(2024 Remaster)`
-  2. Removes content in brackets: `[Live]`, `[Explicit]`
+  1. Progressively removes content in parentheses from right to left: `Artist - Song (Important Info) (Extended Mix)` → `Artist - Song (Important Info)`
+  2. Progressively removes content in brackets from right to left: `Artist - Song [Live] [Remastered]` → `Artist - Song [Live]`
   3. Removes featured artists: `feat.`, `ft.`, `featuring`, `with`, `&`
   4. Removes remix indicators after second hyphen
   5. Removes common suffixes: `Remix`, `Mix`, `Edit`, `Version`, `Instrumental`, `Acoustic`, `Live`, `Remaster`
@@ -641,22 +671,17 @@ Formatters are applied in order: `ucwords` first, then `rds`.
 
 ## Features
 
-- **Priority fallback** - Outputs use first available input in priority list
-- **Configurable delays** - Sync timing across different outputs
-- **Input expiration** - Dynamic inputs expire automatically
-- **Prefix/suffix** - Add station branding to inputs
-- **Web dashboard** - Real-time status at http://localhost:9000
+- **Priority fallback**: Outputs use the first available input in the priority list
+- **Configurable delays**: Synchronizes timing across different outputs
+- **Input expiration**: Dynamic inputs expire automatically
+- **Prefix/suffix support**: Adds station branding to inputs
+- **Web dashboard**: Real-time status at http://localhost:9000 with WebSocket updates and a connection status indicator
 
 ## API
 
-### Update metadata
+### Update Metadata
 ```bash
 curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&artist=Artist&duration=03:45"
-```
-
-### Status
-```bash
-curl http://localhost:9000/status
 ```
 
 ## Development
@@ -667,15 +692,15 @@ go vet ./...
 go build
 ```
 
-Set `"debug": true` in config.json for detailed logging.
+Set `"debug": true` in `config.json` for detailed logging.
 
 ### Extending
 
-See `EXTENDING.md` for detailed guidance on adding new inputs, outputs, and formatters. Key patterns:
+See `EXTENDING.md` for detailed guidance on adding new inputs, outputs, and formatters. Key patterns include:
 
-- Use `utils.ConvertMetadata()` for consistent metadata handling across outputs
-- Embed base types (`core.InputBase`, `core.OutputBase`) for common functionality
-- Use `core.PassiveComponent` for components without background tasks
+- Using `utils.ConvertMetadata()` for consistent metadata handling across outputs
+- Embedding base types (`core.InputBase`, `core.OutputBase`) for common functionality
+- Using `core.PassiveComponent` for components without background tasks
 
 ## License
 
