@@ -4,7 +4,6 @@ import (
 	"golang.org/x/net/html"
 	"regexp"
 	"strings"
-	"unicode"
 )
 
 // RDSFormatter limits text to 64 characters for RDS compliance
@@ -166,19 +165,27 @@ func extractText(n *html.Node) string {
 	return result.String()
 }
 
-// filterVisibleText removes invisible and control characters, keeping only printable text
+// filterVisibleText removes invisible and control characters, keeping only EBU Latin characters
 func filterVisibleText(text string) string {
 	var result strings.Builder
 	for _, r := range text {
-		// Keep printable characters and basic whitespace (space, tab) but exclude newlines
-		if unicode.IsPrint(r) || r == ' ' || r == '\t' {
+		// EBU Latin character set: 0-255 (basic ASCII + extended Latin characters)
+		// But exclude control characters except space
+		if (r >= 32 && r <= 126) || r == ' ' {
+			// Basic ASCII printable characters and space
 			result.WriteRune(r)
-		} else if r == '\n' || r == '\r' {
-			// Convert newlines to spaces for single-line RDS output
+		} else if r >= 128 && r <= 255 {
+			// Extended EBU Latin characters (accented characters, symbols)
+			result.WriteRune(r)
+		} else if r == '\n' || r == '\r' || r == '\t' {
+			// Convert whitespace to spaces for single-line RDS output
 			result.WriteRune(' ')
 		}
 	}
-	return result.String()
+
+	// Normalize multiple spaces to single spaces
+	text = regexp.MustCompile(`\s+`).ReplaceAllString(result.String(), " ")
+	return strings.TrimSpace(text)
 }
 
 func init() {

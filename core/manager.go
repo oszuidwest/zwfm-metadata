@@ -356,6 +356,9 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 
 // processInitialMetadata triggers initial updates for inputs that already have metadata
 func (mr *MetadataRouter) processInitialMetadata() {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
 	// Process each input that already has metadata available
 	for inputName, input := range mr.inputs {
 		metadata := input.GetMetadata()
