@@ -395,6 +395,8 @@ Generates ODR-PadEnc compatible DLS Plus files with parameter blocks:
 DL_PLUS=1
 DL_PLUS_TAG=4 0 5
 DL_PLUS_TAG=1 9 9
+DL_PLUS_ITEM_RUNNING=1
+DL_PLUS_ITEM_TOGGLE=0
 ##### parameters } #####
 Artist - Song Title
 ```
@@ -402,6 +404,8 @@ Artist - Song Title
 The output automatically:
 - Detects artist and title positions in the formatted text
 - Generates correct DL_PLUS_TAG entries (type 4 for ARTIST, type 1 for TITLE)
+- Sets DL_PLUS_ITEM_RUNNING=1 for tracks (with artist+title), 0 for station/program info
+- Alternates DL_PLUS_ITEM_TOGGLE between 0 and 1 on each update to indicate content changes
 - Handles prefixes and suffixes correctly
 - Works with any formatters applied to the text
 
