@@ -238,18 +238,6 @@ func (mr *MetadataRouter) GetInput(name string) (Input, bool) {
 	return input, exists
 }
 
-// GetInputs returns all inputs
-func (mr *MetadataRouter) GetInputs() []Input {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
-
-	inputs := make([]Input, 0, len(mr.inputs))
-	for _, input := range mr.inputs {
-		inputs = append(inputs, input)
-	}
-	return inputs
-}
-
 // GetOutputs returns all outputs sorted by name
 func (mr *MetadataRouter) GetOutputs() []Output {
 	mr.mu.RLock()

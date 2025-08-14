@@ -28,11 +28,3 @@ func GetFormatter(name string) (Formatter, error) {
 	}
 	return factory(), nil
 }
-
-// ApplyFormatters applies a list of formatters to text
-func ApplyFormatters(text string, formatters []Formatter) string {
-	for _, formatter := range formatters {
-		text = formatter.Format(text)
-	}
-	return text
-}

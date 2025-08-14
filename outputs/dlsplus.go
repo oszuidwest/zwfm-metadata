@@ -21,7 +21,8 @@ const (
 type DLSPlusOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
-	settings config.DLSPlusOutputConfig
+	settings    config.DLSPlusOutputConfig
+	toggleValue bool // Alternates between true/false to indicate content changes
 }
 
 // NewDLSPlusOutput creates a new DLS Plus output instance
@@ -66,8 +67,28 @@ func (o *DLSPlusOutput) buildDLSPlusContent(formattedText string, metadata *core
 	content.WriteString("##### parameters { #####\n")
 	content.WriteString("DL_PLUS=1\n")
 
+	// Determine if this is running content (has both artist and title)
+	isRunning := metadata.Artist != "" && metadata.Title != ""
+
+	// Toggle the toggle value on each update
+	o.toggleValue = !o.toggleValue
+	toggleInt := 0
+	if o.toggleValue {
+		toggleInt = 1
+	}
+
 	// Add DLS Plus tags for artist and title if they exist and can be found
 	o.addDLSPlusTags(&content, formattedText, metadata)
+
+	// Add DL_PLUS_ITEM_RUNNING (1 for tracks with artist+title, 0 for station/program info)
+	runningInt := 0
+	if isRunning {
+		runningInt = 1
+	}
+	fmt.Fprintf(&content, "DL_PLUS_ITEM_RUNNING=%d\n", runningInt)
+
+	// Add DL_PLUS_ITEM_TOGGLE (alternates 0/1 to indicate content changes)
+	fmt.Fprintf(&content, "DL_PLUS_ITEM_TOGGLE=%d\n", toggleInt)
 
 	// Write parameter block footer and display text
 	content.WriteString("##### parameters } #####\n")
