@@ -19,7 +19,7 @@ Metadata routing middleware for radio stations that routes metadata from inputs 
   - [Output Configurations](#output-configurations)
     - [Icecast Output](#icecast-output)
     - [File Output](#file-output)
-    - [POST Output](#post-output)
+    - [URL Output](#url-output)
     - [HTTP Output](#http-output)
     - [WebSocket Output](#websocket-output)
     - [DLS Plus Output](#dls-plus-output)
@@ -183,7 +183,7 @@ Control where formatted metadata is sent.
 |-------------|---------|-------------------|------------------------|----------------|
 | **Icecast** | Update streaming server metadata | ❌ | ❌ | Basic Auth |
 | **File** | Write to local filesystem | ❌ | ❌ | N/A |
-| **POST** | Send via HTTP webhooks | ✅ | ✅ | Bearer Token |
+| **URL** | Send via HTTP GET/POST | ✅ | ✅ | Bearer Token |
 | **HTTP** | Serve metadata via GET endpoints | ✅ | ✅ | N/A |
 | **DLS Plus** | DAB/DAB+ radio text | ✅ | ❌ | N/A |
 | **WebSocket** | Real-time browser/app updates | ✅ | ✅ | N/A |
@@ -249,13 +249,14 @@ Writes to the filesystem
 - `delay` (required) - Number of seconds to delay metadata updates
 - `filename` (required) - Full path to output file
 
-#### POST Output
+#### URL Output
 
-Sends metadata via HTTP webhooks
+Sends metadata via HTTP GET or POST requests. Supports both GET requests with URL templates and POST requests with JSON payloads.
 
+##### POST Request Example (Default)
 ```json
 {
-  "type": "post",
+  "type": "url",
   "name": "webhook",
   "inputs": ["radio-live", "nowplaying-api", "default-text"],
   "formatters": ["ucwords"],
@@ -268,11 +269,38 @@ Sends metadata via HTTP webhooks
 }
 ```
 
+##### GET Request Example (TuneIn)
+```json
+{
+  "type": "url",
+  "name": "tunein",
+  "inputs": ["radio-live"],
+  "settings": {
+    "method": "GET",
+    "url": "http://air.radiotime.com/Playing.ashx?partnerId=YOUR_PARTNER_ID&partnerKey=YOUR_PARTNER_KEY&id=YOUR_STATION_ID&title={{.Title}}&artist={{.Artist}}",
+    "delay": 0
+  }
+}
+```
+
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `url` (required) - Webhook endpoint URL
+- `url` (required) - Target URL (supports Go templates for GET requests)
+- `method` (optional) - HTTP method: "GET" or "POST" (default: "POST")
 - `bearerToken` (optional) - Authorization bearer token
-- `payloadMapping` (optional) - Custom JSON payload structure (see [Custom Payload Mapping](#custom-payload-mapping))
+- `payloadMapping` (optional) - Custom JSON payload structure for POST requests (see [Custom Payload Mapping](#custom-payload-mapping))
+
+##### HTTP Methods
+
+**GET Requests:**
+- Use Go template syntax in the URL: `{{.Title}}`, `{{.Artist}}`, `{{.Duration}}`
+- Metadata is URL-encoded and included as query parameters
+- Ideal for services like TuneIn that expect metadata in the URL
+
+**POST Requests (Default):**
+- Send JSON payload in the request body
+- Support custom payload mapping for API compatibility
+- Include bearer token authentication if configured
 
 #### HTTP Output
 
@@ -442,7 +470,7 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 
 ### Custom Payload Mapping
 
-Both **POST** and **WebSocket** outputs support custom payload mapping to transform the output format to match any JSON structure that your API expects.
+Both **URL** (POST method) and **WebSocket** outputs support custom payload mapping to transform the output format to match any JSON structure that your API expects.
 
 #### How It Works
 - **Static values**: Any string without `{{}}` is used as-is
@@ -474,7 +502,7 @@ Both **POST** and **WebSocket** outputs support custom payload mapping to transf
 
 When `payloadMapping` is not specified:
 
-POST Output:
+URL Output (POST method):
 ```json
 {
   "formatted_metadata": "Artist - Title",

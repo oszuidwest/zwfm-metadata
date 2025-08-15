@@ -75,8 +75,9 @@
       }
     },
     {
-      "type": "post",
+      "type": "url",
       "name": "webhook-default",
+      "comment": "POST method is default for url type",
       "inputs": ["radio-live", "nowplaying-api", "default-text"],
       "formatters": ["ucwords"],
       "settings": {
@@ -86,8 +87,9 @@
       }
     },
     {
-      "type": "post",
+      "type": "url",
       "name": "webhook-custom",
+      "comment": "Example with custom payload mapping",
       "inputs": ["radio-live", "nowplaying-api", "default-text"],
       "formatters": ["lowercase"],
       "settings": {

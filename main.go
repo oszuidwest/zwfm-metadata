@@ -201,12 +201,12 @@ func createOutput(cfg config.OutputConfig) (core.Output, error) {
 		}
 		return outputs.NewFileOutput(cfg.Name, *settings), nil
 
-	case "post":
-		settings, err := utils.ParseJSONSettings[config.PostOutputConfig](cfg.Settings)
+	case "url":
+		settings, err := utils.ParseJSONSettings[config.URLOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewPostOutput(cfg.Name, *settings), nil
+		return outputs.NewURLOutput(cfg.Name, *settings), nil
 
 	case "dlsplus":
 		settings, err := utils.ParseJSONSettings[config.DLSPlusOutputConfig](cfg.Settings)

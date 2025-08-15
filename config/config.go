@@ -77,12 +77,13 @@ type FileOutputConfig struct {
 	Filename string `json:"filename"`
 }
 
-// PostOutputConfig represents configuration for POST output with full metadata
-type PostOutputConfig struct {
+// URLOutputConfig represents configuration for flexible URL output (GET or POST)
+type URLOutputConfig struct {
 	Delay          int                    `json:"delay"`
 	URL            string                 `json:"url"`
+	Method         string                 `json:"method,omitempty"` // GET or POST (default: POST)
 	BearerToken    string                 `json:"bearerToken,omitempty"`
-	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
+	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"` // Only for POST
 }
 
 // DLSPlusOutputConfig represents configuration for DLS Plus output
