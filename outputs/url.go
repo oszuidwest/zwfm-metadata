@@ -43,9 +43,17 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 		}
 	}
 
-	// Default to POST if method not specified
+	// Validate method is specified and valid
 	if settings.Method == "" {
-		settings.Method = "POST"
+		slog.Error("Method is required for URL output", "output", name)
+		return nil
+	}
+
+	// Validate method is GET or POST (case-insensitive)
+	method := strings.ToUpper(settings.Method)
+	if method != "GET" && method != "POST" {
+		slog.Error("Invalid method for URL output", "output", name, "method", settings.Method, "valid_methods", "GET, POST")
+		return nil
 	}
 
 	output := &URLOutput{

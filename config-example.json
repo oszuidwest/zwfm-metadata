@@ -77,24 +77,24 @@
     {
       "type": "url",
       "name": "webhook-default",
-      "comment": "POST method is default for url type",
       "inputs": ["radio-live", "nowplaying-api", "default-text"],
       "formatters": ["ucwords"],
       "settings": {
         "delay": 1,
         "url": "https://api.example.com/metadata",
+        "method": "POST",
         "bearerToken": "your-bearer-token-here"
       }
     },
     {
       "type": "url",
       "name": "webhook-custom",
-      "comment": "Example with custom payload mapping",
       "inputs": ["radio-live", "nowplaying-api", "default-text"],
       "formatters": ["lowercase"],
       "settings": {
         "delay": 0,
         "url": "https://api.example.com/custom-metadata",
+        "method": "POST",
         "bearerToken": "your-bearer-token-here",
         "payloadMapping": {
           "station": "Your Radio Station",
@@ -110,6 +110,18 @@
             "expires": "{{.expires_at}}"
           }
         }
+      }
+    },
+    {
+      "type": "url",
+      "name": "webhook-get",
+      "inputs": ["radio-live", "default-text"],
+      "formatters": ["ucwords"],
+      "settings": {
+        "delay": 1,
+        "url": "https://api.example.com/update?title={{.title}}&artist={{.artist}}&updated={{.updated_at}}",
+        "method": "GET",
+        "bearerToken": "your-bearer-token-here"
       }
     },
     {

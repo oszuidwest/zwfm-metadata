@@ -81,7 +81,7 @@ type FileOutputConfig struct {
 type URLOutputConfig struct {
 	Delay          int                    `json:"delay"`
 	URL            string                 `json:"url"`
-	Method         string                 `json:"method,omitempty"` // GET or POST (default: POST)
+	Method         string                 `json:"method,omitempty"` // GET or POST (required)
 	BearerToken    string                 `json:"bearerToken,omitempty"`
 	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"` // Only for POST
 }

@@ -253,7 +253,7 @@ Writes to the filesystem
 
 Sends metadata via HTTP GET or POST requests. Supports both GET requests with URL templates and POST requests with JSON payloads.
 
-##### POST Request Example (Default)
+##### POST Request Example
 ```json
 {
   "type": "url",
@@ -263,6 +263,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
   "settings": {
     "delay": 1,
     "url": "https://api.example.com/metadata",
+    "method": "POST",
     "bearerToken": "your-bearer-token-here",
     "payloadMapping": {...}  // See Custom Payload Mapping section
   }
@@ -286,7 +287,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
 - `url` (required) - Target URL (supports Go templates for GET requests)
-- `method` (optional) - HTTP method: "GET" or "POST" (default: "POST")
+- `method` (required) - HTTP method: "GET" or "POST"
 - `bearerToken` (optional) - Authorization bearer token
 - `payloadMapping` (optional) - Custom JSON payload structure for POST requests (see [Custom Payload Mapping](#custom-payload-mapping))
 
@@ -297,7 +298,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 - Metadata is URL-encoded and included as query parameters
 - Ideal for services like TuneIn that expect metadata in the URL
 
-**POST Requests (Default):**
+**POST Requests:**
 - Send JSON payload in the request body
 - Support custom payload mapping for API compatibility
 - Include bearer token authentication if configured
