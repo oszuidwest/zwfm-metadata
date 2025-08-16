@@ -1,3 +1,5 @@
+// Package config provides configuration management for the metadata router
+// including loading and validation of input, output, and formatter settings.
 package config
 
 import (
@@ -8,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-// Config represents the main configuration
+// Config represents the main configuration.
 type Config struct {
 	WebServerPort int            `json:"webServerPort"`
 	Debug         bool           `json:"debug,omitempty"`
@@ -19,7 +21,7 @@ type Config struct {
 	Formatters    []string       `json:"formatters,omitempty"`
 }
 
-// InputConfig represents input configuration
+// InputConfig represents input configuration.
 type InputConfig struct {
 	Type     string                 `json:"type"`
 	Name     string                 `json:"name"`
@@ -28,7 +30,7 @@ type InputConfig struct {
 	Settings map[string]interface{} `json:"settings"`
 }
 
-// OutputConfig represents output configuration
+// OutputConfig represents output configuration.
 type OutputConfig struct {
 	Type       string                 `json:"type"`
 	Name       string                 `json:"name"`
@@ -37,7 +39,7 @@ type OutputConfig struct {
 	Settings   map[string]interface{} `json:"settings"`
 }
 
-// DynamicInputConfig represents configuration for dynamic input
+// DynamicInputConfig represents configuration for dynamic input.
 type DynamicInputConfig struct {
 	Secret     string `json:"secret"`
 	Expiration struct {
@@ -46,7 +48,7 @@ type DynamicInputConfig struct {
 	} `json:"expiration"`
 }
 
-// URLInputConfig represents configuration for URL input
+// URLInputConfig represents configuration for URL input.
 type URLInputConfig struct {
 	URL             string `json:"url"`
 	JSONParsing     bool   `json:"jsonParsing"`
@@ -56,12 +58,12 @@ type URLInputConfig struct {
 	PollingInterval int    `json:"pollingInterval"`
 }
 
-// TextInputConfig represents configuration for text input
+// TextInputConfig represents configuration for text input.
 type TextInputConfig struct {
 	Text string `json:"text"`
 }
 
-// IcecastOutputConfig represents configuration for Icecast output
+// IcecastOutputConfig represents configuration for Icecast output.
 type IcecastOutputConfig struct {
 	Delay      int    `json:"delay"`
 	Server     string `json:"server"`
@@ -71,13 +73,13 @@ type IcecastOutputConfig struct {
 	Mountpoint string `json:"mountpoint"`
 }
 
-// FileOutputConfig represents configuration for file output
+// FileOutputConfig represents configuration for file output.
 type FileOutputConfig struct {
 	Delay    int    `json:"delay"`
 	Filename string `json:"filename"`
 }
 
-// URLOutputConfig represents configuration for flexible URL output (GET or POST)
+// URLOutputConfig represents configuration for flexible URL output (GET or POST).
 type URLOutputConfig struct {
 	Delay          int                    `json:"delay"`
 	URL            string                 `json:"url"`
@@ -86,40 +88,40 @@ type URLOutputConfig struct {
 	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"` // Only for POST
 }
 
-// DLSPlusOutputConfig represents configuration for DLS Plus output
+// DLSPlusOutputConfig represents configuration for DLS Plus output.
 type DLSPlusOutputConfig struct {
 	Delay    int    `json:"delay"`
 	Filename string `json:"filename"`
 }
 
-// WebSocketOutputConfig represents configuration for WebSocket output
+// WebSocketOutputConfig represents configuration for WebSocket output.
 type WebSocketOutputConfig struct {
 	Delay          int                    `json:"delay"`
 	Path           string                 `json:"path"`
 	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
 }
 
-// HTTPOutputConfig represents configuration for HTTP output
+// HTTPOutputConfig represents configuration for HTTP output.
 type HTTPOutputConfig struct {
 	Delay     int            `json:"delay"`
 	Endpoints []HTTPEndpoint `json:"endpoints"`
 }
 
-// HTTPEndpoint represents a single HTTP endpoint configuration
+// HTTPEndpoint represents a single HTTP endpoint configuration.
 type HTTPEndpoint struct {
 	Path           string                 `json:"path"`
 	ResponseType   string                 `json:"responseType,omitempty"` // json, xml, plaintext, yaml, custom
 	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
 }
 
-// StereoToolOutputConfig represents configuration for HTTP output
+// StereoToolOutputConfig represents configuration for StereoTool output.
 type StereoToolOutputConfig struct {
 	Delay    int    `json:"delay"`
 	Hostname string `json:"hostname"`
 	Port     int    `json:"port"`
 }
 
-// LoadConfig loads configuration from a file
+// LoadConfig loads configuration from a file.
 func LoadConfig(filename string) (*Config, error) {
 	// Clean the path to prevent directory traversal
 	cleanPath := filepath.Clean(filename)

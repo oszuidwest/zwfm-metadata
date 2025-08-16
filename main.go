@@ -1,3 +1,5 @@
+// Package main implements a metadata router for radio stations that manages
+// multiple input sources and distributes formatted metadata to various outputs.
 package main
 
 import (
@@ -241,11 +243,12 @@ func createOutput(cfg config.OutputConfig) (core.Output, error) {
 	}
 }
 
-// unknownTypeError represents an unknown type error
+// unknownTypeError represents an unknown type error.
 type unknownTypeError struct {
 	Type string
 }
 
+// Error returns the error message for unknownTypeError.
 func (e *unknownTypeError) Error() string {
 	return "unknown type: " + e.Type
 }

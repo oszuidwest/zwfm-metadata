@@ -9,12 +9,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// WebSocketConn wraps a WebSocket connection
+// WebSocketConn wraps a WebSocket connection.
 type WebSocketConn struct {
 	*websocket.Conn
 }
 
-// WebSocketHub manages WebSocket connections and broadcasting
+// WebSocketHub manages WebSocket connections and broadcasting.
 type WebSocketHub struct {
 	name         string
 	clients      map[*websocket.Conn]bool
@@ -27,7 +27,7 @@ type WebSocketHub struct {
 	writeTimeout time.Duration
 }
 
-// NewWebSocketHub creates a new WebSocket hub
+// NewWebSocketHub creates a new WebSocket hub.
 func NewWebSocketHub(name string) *WebSocketHub {
 	return &WebSocketHub{
 		name:    name,
@@ -43,17 +43,17 @@ func NewWebSocketHub(name string) *WebSocketHub {
 	}
 }
 
-// SetOnConnect sets the callback for new connections
+// SetOnConnect sets the callback for new connections.
 func (h *WebSocketHub) SetOnConnect(fn func(*WebSocketConn) interface{}) {
 	h.onConnect = fn
 }
 
-// SetOnDisconnect sets the callback for disconnections
+// SetOnDisconnect sets the callback for disconnections.
 func (h *WebSocketHub) SetOnDisconnect(fn func(*WebSocketConn)) {
 	h.onDisconnect = fn
 }
 
-// HandleConnection handles a new WebSocket connection
+// HandleConnection handles a new WebSocket connection.
 func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) {
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -183,7 +183,7 @@ func (h *WebSocketHub) Broadcast(data interface{}) {
 	}
 }
 
-// ClientCount returns the number of connected clients
+// ClientCount returns the number of connected clients.
 func (h *WebSocketHub) ClientCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()

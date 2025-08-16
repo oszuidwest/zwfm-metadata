@@ -1,3 +1,5 @@
+// Package outputs provides various metadata output destinations including
+// files, HTTP endpoints, WebSockets, and radio broadcasting systems.
 package outputs
 
 import (
@@ -7,14 +9,14 @@ import (
 	"zwfm-metadata/utils"
 )
 
-// FileOutput handles writing metadata to files
+// FileOutput handles writing metadata to files.
 type FileOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
 	settings config.FileOutputConfig
 }
 
-// NewFileOutput creates a new file output
+// NewFileOutput creates a new file output.
 func NewFileOutput(name string, settings config.FileOutputConfig) *FileOutput {
 	output := &FileOutput{
 		OutputBase: core.NewOutputBase(name),
@@ -24,7 +26,7 @@ func NewFileOutput(name string, settings config.FileOutputConfig) *FileOutput {
 	return output
 }
 
-// SendFormattedMetadata implements the Output interface (called by metadata router)
+// SendFormattedMetadata implements the Output interface (called by metadata router).
 func (f *FileOutput) SendFormattedMetadata(formattedText string) {
 	// Check if value changed to avoid unnecessary file writes
 	if !f.HasChanged(formattedText) {
@@ -37,7 +39,7 @@ func (f *FileOutput) SendFormattedMetadata(formattedText string) {
 	}
 }
 
-// writeToFile writes the metadata to the file
+// writeToFile writes the metadata to the file.
 func (f *FileOutput) writeToFile(metadata string) error {
 	if err := utils.WriteFile(f.settings.Filename, []byte(metadata)); err != nil {
 		return err

@@ -15,7 +15,7 @@ import (
 	"zwfm-metadata/utils"
 )
 
-// URLOutput handles sending metadata via HTTP GET or POST requests
+// URLOutput handles sending metadata via HTTP GET or POST requests.
 type URLOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
@@ -25,7 +25,7 @@ type URLOutput struct {
 	urlTemplate   *template.Template
 }
 
-// NewURLOutput creates a new URL output
+// NewURLOutput creates a new URL output.
 func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 	var mapper *utils.PayloadMapper
 	if settings.PayloadMapping != nil {
@@ -67,7 +67,7 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 	return output
 }
 
-// SendFormattedMetadata implements the Output interface (fallback for non-enhanced usage)
+// SendFormattedMetadata implements the Output interface (fallback for non-enhanced usage).
 func (u *URLOutput) SendFormattedMetadata(formattedText string) {
 	minimalMetadata := &core.Metadata{
 		Title:     formattedText,
@@ -78,7 +78,7 @@ func (u *URLOutput) SendFormattedMetadata(formattedText string) {
 	u.sendRequest(*payload)
 }
 
-// SendEnhancedMetadata implements the EnhancedOutput interface
+// SendEnhancedMetadata implements the EnhancedOutput interface.
 func (u *URLOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
 	// Check if value changed to avoid unnecessary HTTP requests
 	if !u.HasChanged(formattedText) {
@@ -91,7 +91,7 @@ func (u *URLOutput) SendEnhancedMetadata(formattedText string, metadata *core.Me
 	u.sendRequest(*payload)
 }
 
-// sendRequest sends the request based on configured method
+// sendRequest sends the request based on configured method.
 func (u *URLOutput) sendRequest(payload utils.UniversalMetadata) {
 	if strings.ToUpper(u.settings.Method) == "GET" {
 		u.sendGETRequest(payload)
@@ -100,7 +100,7 @@ func (u *URLOutput) sendRequest(payload utils.UniversalMetadata) {
 	}
 }
 
-// sendGETRequest sends metadata as GET request with query parameters
+// sendGETRequest sends metadata as GET request with query parameters.
 func (u *URLOutput) sendGETRequest(payload utils.UniversalMetadata) {
 	var requestURL string
 
@@ -166,7 +166,7 @@ func (u *URLOutput) sendGETRequest(payload utils.UniversalMetadata) {
 	slog.Debug("Successfully sent GET", "url", finalURL, "status", resp.StatusCode)
 }
 
-// sendPOSTRequest sends metadata as POST request with JSON body
+// sendPOSTRequest sends metadata as POST request with JSON body.
 func (u *URLOutput) sendPOSTRequest(payload utils.UniversalMetadata) {
 	var payloadToSend interface{}
 

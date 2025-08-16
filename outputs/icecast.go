@@ -10,7 +10,7 @@ import (
 	"zwfm-metadata/core"
 )
 
-// IcecastOutput handles sending metadata to Icecast servers
+// IcecastOutput handles sending metadata to Icecast servers.
 type IcecastOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
@@ -18,7 +18,7 @@ type IcecastOutput struct {
 	httpClient *http.Client
 }
 
-// NewIcecastOutput creates a new Icecast output
+// NewIcecastOutput creates a new Icecast output.
 func NewIcecastOutput(name string, settings config.IcecastOutputConfig) *IcecastOutput {
 	output := &IcecastOutput{
 		OutputBase: core.NewOutputBase(name),
@@ -29,7 +29,7 @@ func NewIcecastOutput(name string, settings config.IcecastOutputConfig) *Icecast
 	return output
 }
 
-// SendFormattedMetadata implements the Output interface (called by metadata router)
+// SendFormattedMetadata implements the Output interface (called by metadata router).
 func (i *IcecastOutput) SendFormattedMetadata(formattedText string) {
 	// Check if value changed to avoid unnecessary HTTP requests
 	if !i.HasChanged(formattedText) {
@@ -42,7 +42,7 @@ func (i *IcecastOutput) SendFormattedMetadata(formattedText string) {
 	}
 }
 
-// sendToIcecast sends the metadata to the Icecast server
+// sendToIcecast sends the metadata to the Icecast server.
 func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	// Build URL
 	baseURL := fmt.Sprintf("http://%s:%d/admin/metadata", i.settings.Server, i.settings.Port)

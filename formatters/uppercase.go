@@ -2,10 +2,10 @@ package formatters
 
 import "strings"
 
-// UppercaseFormatter converts text to uppercase
+// UppercaseFormatter converts text to uppercase.
 type UppercaseFormatter struct{}
 
-// Format implements the Formatter interface
+// Format implements the Formatter interface.
 func (u *UppercaseFormatter) Format(text string) string {
 	return strings.ToUpper(text)
 }

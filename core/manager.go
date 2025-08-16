@@ -10,13 +10,13 @@ import (
 	"zwfm-metadata/formatters"
 )
 
-// InputPrefixSuffix represents prefix/suffix configuration for an input
+// InputPrefixSuffix represents prefix/suffix configuration for an input.
 type InputPrefixSuffix struct {
 	Prefix string
 	Suffix string
 }
 
-// CleanMetadata represents user-facing metadata without internal fields
+// CleanMetadata represents user-facing metadata without internal fields.
 type CleanMetadata struct {
 	SongID   string `json:"songID,omitempty"`
 	Artist   string `json:"artist,omitempty"`
@@ -24,7 +24,7 @@ type CleanMetadata struct {
 	Duration string `json:"duration,omitempty"`
 }
 
-// InputStatus represents the status of an input including prefix/suffix
+// InputStatus represents the status of an input including prefix/suffix.
 type InputStatus struct {
 	Name      string         `json:"name"`
 	Type      string         `json:"type"`
@@ -37,7 +37,7 @@ type InputStatus struct {
 	Metadata  *CleanMetadata `json:"metadata,omitempty"`
 }
 
-// ScheduledUpdate represents a future update to be processed
+// ScheduledUpdate represents a future update to be processed.
 type ScheduledUpdate struct {
 	ExecuteAt   time.Time
 	OutputName  string
@@ -47,13 +47,13 @@ type ScheduledUpdate struct {
 	CancelToken string // unique token to allow cancellation
 }
 
-// Timeline manages all scheduled updates in chronological order
+// Timeline manages all scheduled updates in chronological order.
 type Timeline struct {
 	updates []ScheduledUpdate
 	mu      sync.RWMutex
 }
 
-// MetadataRouter manages all inputs and outputs with centralized timeline scheduling
+// MetadataRouter manages all inputs and outputs with centralized timeline scheduling.
 type MetadataRouter struct {
 	inputs               map[string]Input
 	outputs              map[string]Output
@@ -71,7 +71,7 @@ type MetadataRouter struct {
 	mu                   sync.RWMutex
 }
 
-// NewMetadataRouter creates a new metadata router instance
+// NewMetadataRouter creates a new metadata router instance.
 func NewMetadataRouter() *MetadataRouter {
 	return &MetadataRouter{
 		inputs:               make(map[string]Input),
@@ -90,7 +90,7 @@ func NewMetadataRouter() *MetadataRouter {
 	}
 }
 
-// AddInput adds an input to the manager
+// AddInput adds an input to the manager.
 func (mr *MetadataRouter) AddInput(input Input) error {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -104,7 +104,7 @@ func (mr *MetadataRouter) AddInput(input Input) error {
 	return nil
 }
 
-// AddOutput adds an output to the manager
+// AddOutput adds an output to the manager.
 func (mr *MetadataRouter) AddOutput(output Output) error {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -118,28 +118,28 @@ func (mr *MetadataRouter) AddOutput(output Output) error {
 	return nil
 }
 
-// SetOutputInputs sets which inputs an output uses
+// SetOutputInputs sets which inputs an output uses.
 func (mr *MetadataRouter) SetOutputInputs(outputName string, inputNames []string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.outputInputs[outputName] = inputNames
 }
 
-// SetOutputFormatters sets which formatters an output uses
+// SetOutputFormatters sets which formatters an output uses.
 func (mr *MetadataRouter) SetOutputFormatters(outputName string, formatters []formatters.Formatter) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.outputFormatters[outputName] = formatters
 }
 
-// SetOutputFormatterNames sets the formatter names for an output
+// SetOutputFormatterNames sets the formatter names for an output.
 func (mr *MetadataRouter) SetOutputFormatterNames(outputName string, formatterNames []string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.outputFormatterNames[outputName] = formatterNames
 }
 
-// SetInputPrefixSuffix sets the prefix and suffix for an input
+// SetInputPrefixSuffix sets the prefix and suffix for an input.
 func (mr *MetadataRouter) SetInputPrefixSuffix(inputName string, prefix, suffix string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -149,21 +149,21 @@ func (mr *MetadataRouter) SetInputPrefixSuffix(inputName string, prefix, suffix 
 	}
 }
 
-// SetInputType sets the type for an input (used for status display)
+// SetInputType sets the type for an input (used for status display).
 func (mr *MetadataRouter) SetInputType(inputName string, inputType string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.inputTypes[inputName] = inputType
 }
 
-// SetOutputType sets the type for an output (used for status display)
+// SetOutputType sets the type for an output (used for status display).
 func (mr *MetadataRouter) SetOutputType(outputName string, outputType string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.outputTypes[outputName] = outputType
 }
 
-// GetOutputType returns the type for an output
+// GetOutputType returns the type for an output.
 func (mr *MetadataRouter) GetOutputType(outputName string) string {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
@@ -173,7 +173,7 @@ func (mr *MetadataRouter) GetOutputType(outputName string) string {
 	return "unknown"
 }
 
-// GetInputStatus returns the status of all inputs including prefix/suffix
+// GetInputStatus returns the status of all inputs including prefix/suffix.
 func (mr *MetadataRouter) GetInputStatus() []InputStatus {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
@@ -229,7 +229,7 @@ func (mr *MetadataRouter) GetInputStatus() []InputStatus {
 	return statuses
 }
 
-// GetInput retrieves an input by name
+// GetInput retrieves an input by name.
 func (mr *MetadataRouter) GetInput(name string) (Input, bool) {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
@@ -238,7 +238,7 @@ func (mr *MetadataRouter) GetInput(name string) (Input, bool) {
 	return input, exists
 }
 
-// GetOutputs returns all outputs sorted by name
+// GetOutputs returns all outputs sorted by name.
 func (mr *MetadataRouter) GetOutputs() []Output {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
@@ -256,7 +256,7 @@ func (mr *MetadataRouter) GetOutputs() []Output {
 	return outputs
 }
 
-// GetOutputInputs returns the input names for an output
+// GetOutputInputs returns the input names for an output.
 func (mr *MetadataRouter) GetOutputInputs(outputName string) []string {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
@@ -267,7 +267,7 @@ func (mr *MetadataRouter) GetOutputInputs(outputName string) []string {
 	return []string{}
 }
 
-// GetOutputFormatterNames returns the formatter names for an output
+// GetOutputFormatterNames returns the formatter names for an output.
 func (mr *MetadataRouter) GetOutputFormatterNames(outputName string) []string {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
@@ -278,7 +278,7 @@ func (mr *MetadataRouter) GetOutputFormatterNames(outputName string) []string {
 	return []string{}
 }
 
-// GetCurrentInputForOutput returns the current active input for an output
+// GetCurrentInputForOutput returns the current active input for an output.
 func (mr *MetadataRouter) GetCurrentInputForOutput(outputName string) string {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
@@ -289,7 +289,7 @@ func (mr *MetadataRouter) GetCurrentInputForOutput(outputName string) string {
 	return ""
 }
 
-// Start starts all inputs and outputs with centralized timeline scheduling
+// Start starts all inputs and outputs with centralized timeline scheduling.
 func (mr *MetadataRouter) Start(ctx context.Context) error {
 	mr.mu.Lock()
 
@@ -342,7 +342,7 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 	return nil
 }
 
-// processInitialMetadata triggers initial updates for inputs that already have metadata
+// processInitialMetadata triggers initial updates for inputs that already have metadata.
 func (mr *MetadataRouter) processInitialMetadata() {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
@@ -358,7 +358,7 @@ func (mr *MetadataRouter) processInitialMetadata() {
 	}
 }
 
-// handleInputMetadata handles metadata updates from inputs
+// handleInputMetadata handles metadata updates from inputs.
 func (mr *MetadataRouter) handleInputMetadata(ctx context.Context, inputName string, metadataChannel chan *Metadata) {
 	for {
 		select {
@@ -371,7 +371,7 @@ func (mr *MetadataRouter) handleInputMetadata(ctx context.Context, inputName str
 	}
 }
 
-// scheduleInputChangeUpdates schedules updates for outputs when input metadata changes
+// scheduleInputChangeUpdates schedules updates for outputs when input metadata changes.
 func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata *Metadata) {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
@@ -436,7 +436,7 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 	}
 }
 
-// outputUsesInput checks if an output uses a specific input
+// outputUsesInput reports whether an output uses a specific input.
 func (mr *MetadataRouter) outputUsesInput(outputName string, inputName string) bool {
 	inputNames, exists := mr.outputInputs[outputName]
 	if !exists {
@@ -451,12 +451,12 @@ func (mr *MetadataRouter) outputUsesInput(outputName string, inputName string) b
 	return false
 }
 
-// cancelScheduledUpdates cancels all pending updates for an output
+// cancelScheduledUpdates cancels all pending updates for an output.
 func (mr *MetadataRouter) cancelScheduledUpdates(outputName string) {
 	mr.timeline.cancelUpdatesForOutput(outputName)
 }
 
-// startExpirationChecker checks for expired metadata and schedules fallback updates
+// startExpirationChecker checks for expired metadata and schedules fallback updates.
 func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -473,7 +473,7 @@ func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	}
 }
 
-// checkForExpirations finds expired inputs and schedules fallback updates (with delays)
+// checkForExpirations finds expired inputs and schedules fallback updates (with delays).
 func (mr *MetadataRouter) checkForExpirations() {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
@@ -555,7 +555,7 @@ func (mr *MetadataRouter) checkForExpirations() {
 	}
 }
 
-// formatMetadataForOutput formats metadata for a specific output using its formatters and input prefix/suffix
+// formatMetadataForOutput formats metadata for a specific output using its formatters and input prefix/suffix.
 func (mr *MetadataRouter) formatMetadataForOutput(outputName string, metadata *Metadata, inputName string) string {
 	if metadata == nil {
 		return ""
@@ -591,7 +591,7 @@ func (mr *MetadataRouter) formatMetadataForOutput(outputName string, metadata *M
 	return formattedText
 }
 
-// startTimelineProcessor processes scheduled updates from the timeline
+// startTimelineProcessor processes scheduled updates from the timeline.
 func (mr *MetadataRouter) startTimelineProcessor(ctx context.Context) {
 	ticker := time.NewTicker(100 * time.Millisecond) // Check every 100ms for precision
 	defer ticker.Stop()
@@ -608,7 +608,7 @@ func (mr *MetadataRouter) startTimelineProcessor(ctx context.Context) {
 	}
 }
 
-// processReadyUpdates executes all updates that are ready to be processed
+// processReadyUpdates executes all updates that are ready to be processed.
 func (mr *MetadataRouter) processReadyUpdates() {
 	now := time.Now()
 	readyUpdates := mr.timeline.getReadyUpdates(now)
@@ -625,7 +625,7 @@ func (mr *MetadataRouter) processReadyUpdates() {
 	wg.Wait()
 }
 
-// executeUpdate processes a single scheduled update
+// executeUpdate processes a single scheduled update.
 func (mr *MetadataRouter) executeUpdate(update ScheduledUpdate) {
 	// Find which input this metadata came from
 	var inputName string
@@ -671,7 +671,7 @@ func (mr *MetadataRouter) executeUpdate(update ScheduledUpdate) {
 
 // Timeline methods
 
-// addUpdate adds an update to the timeline in chronological order
+// addUpdate adds an update to the timeline in chronological order.
 func (t *Timeline) addUpdate(update ScheduledUpdate) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -687,7 +687,7 @@ func (t *Timeline) addUpdate(update ScheduledUpdate) {
 	t.updates[insertIndex] = update
 }
 
-// getReadyUpdates returns and removes all updates that should be executed now
+// getReadyUpdates returns and removes all updates that should be executed now.
 func (t *Timeline) getReadyUpdates(now time.Time) []ScheduledUpdate {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -715,7 +715,7 @@ func (t *Timeline) getReadyUpdates(now time.Time) []ScheduledUpdate {
 	return ready
 }
 
-// cancelUpdatesForOutput removes all scheduled updates for a specific output
+// cancelUpdatesForOutput removes all scheduled updates for a specific output.
 func (t *Timeline) cancelUpdatesForOutput(outputName string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -739,7 +739,7 @@ func (t *Timeline) cancelUpdatesForOutput(outputName string) {
 	}
 }
 
-// hasScheduledUpdatesForOutput checks if an output has any pending updates
+// hasScheduledUpdatesForOutput reports whether an output has any pending updates.
 func (t *Timeline) hasScheduledUpdatesForOutput(outputName string) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

@@ -1,6 +1,6 @@
 package web
 
-// dashboardHTML returns the HTML for the dashboard
+// dashboardHTML returns the HTML for the dashboard.
 func dashboardHTML(stationName, brandColor, version, buildYear string) string {
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -118,7 +118,7 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
 </html>`
 }
 
-// dashboardJS returns the JavaScript for the dashboard
+// dashboardJS returns the JavaScript for the dashboard.
 func dashboardJS() string {
 	return `
         // Store previous data to detect changes
