@@ -14,7 +14,7 @@ import (
 	"zwfm-metadata/core"
 )
 
-// URLInput handles URL polling input
+// URLInput handles URL polling input.
 type URLInput struct {
 	*core.InputBase
 	settings   config.URLInputConfig
@@ -22,7 +22,7 @@ type URLInput struct {
 	expiresAt  *time.Time
 }
 
-// NewURLInput creates a new URL input
+// NewURLInput creates a new URL input.
 func NewURLInput(name string, settings config.URLInputConfig) *URLInput {
 	return &URLInput{
 		InputBase:  core.NewInputBase(name),
@@ -31,7 +31,7 @@ func NewURLInput(name string, settings config.URLInputConfig) *URLInput {
 	}
 }
 
-// Start implements the Input interface
+// Start implements the Input interface.
 func (u *URLInput) Start(ctx context.Context) error {
 	ticker := time.NewTicker(time.Duration(u.settings.PollingInterval) * time.Second)
 	defer ticker.Stop()
@@ -56,7 +56,7 @@ func (u *URLInput) Start(ctx context.Context) error {
 	}
 }
 
-// Helper to update expiry timer
+// updateExpiryTimer updates the expiry timer.
 func (u *URLInput) updateExpiryTimer(timer **time.Timer) {
 	if u.expiresAt != nil {
 		duration := time.Until(*u.expiresAt)
@@ -70,7 +70,7 @@ func (u *URLInput) updateExpiryTimer(timer **time.Timer) {
 	}
 }
 
-// Helper to get channel for expiry timer
+// expiryTimerChan returns the channel for expiry timer.
 func (u *URLInput) expiryTimerChan(timer *time.Timer) <-chan time.Time {
 	if timer != nil {
 		return timer.C
@@ -78,7 +78,7 @@ func (u *URLInput) expiryTimerChan(timer *time.Timer) <-chan time.Time {
 	return make(chan time.Time) // never fires
 }
 
-// poll fetches data from the URL
+// poll fetches data from the URL.
 func (u *URLInput) poll() {
 	// Validate URL before making request
 	parsedURL, err := url.Parse(u.settings.URL)
@@ -161,7 +161,7 @@ func (u *URLInput) poll() {
 	u.SetMetadata(metadata)
 }
 
-// extractJSONValue navigates a JSON structure using a dot-separated key path
+// extractJSONValue navigates a JSON structure using a dot-separated key path.
 func extractJSONValue(data interface{}, keyPath string) (interface{}, bool) {
 	current := data
 	for _, key := range strings.Split(keyPath, ".") {

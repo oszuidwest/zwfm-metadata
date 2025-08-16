@@ -6,10 +6,10 @@ import (
 	"strings"
 )
 
-// RDSFormatter limits text to 64 characters for RDS compliance
+// RDSFormatter limits text to 64 characters for RDS compliance.
 type RDSFormatter struct{}
 
-// Format implements the Formatter interface with smart truncation
+// Format implements the Formatter interface with smart truncation.
 func (r *RDSFormatter) Format(text string) string {
 	// First strip HTML tags and decode entities for plain text
 	text = stripHTMLTags(text)
@@ -136,7 +136,7 @@ func (r *RDSFormatter) Format(text string) string {
 	return processedText
 }
 
-// stripHTMLTags removes all HTML tags and decodes entities
+// stripHTMLTags removes all HTML tags and decodes entities.
 func stripHTMLTags(text string) string {
 	// Parse HTML and extract text content
 	doc, err := html.Parse(strings.NewReader(text))
@@ -151,7 +151,7 @@ func stripHTMLTags(text string) string {
 	return filterVisibleText(result)
 }
 
-// extractText recursively extracts text content from HTML nodes
+// extractText recursively extracts text content from HTML nodes.
 func extractText(n *html.Node) string {
 	if n.Type == html.TextNode {
 		return n.Data
@@ -165,7 +165,7 @@ func extractText(n *html.Node) string {
 	return result.String()
 }
 
-// filterVisibleText removes invisible and control characters, keeping only EBU Latin characters
+// filterVisibleText removes invisible and control characters, keeping only EBU Latin characters.
 func filterVisibleText(text string) string {
 	var result strings.Builder
 	for _, r := range text {

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 )
 
-// WriteFile writes content to a file, creating directories if needed
+// WriteFile writes content to a file, creating directories if needed.
 func WriteFile(filename string, content []byte) error {
 	cleanPath := filepath.Clean(filename)
 

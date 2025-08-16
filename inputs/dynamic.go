@@ -11,14 +11,14 @@ import (
 	"zwfm-metadata/core"
 )
 
-// DynamicInput handles dynamic HTTP input
+// DynamicInput handles dynamic HTTP input.
 type DynamicInput struct {
 	*core.InputBase
 	core.PassiveComponent
 	settings config.DynamicInputConfig
 }
 
-// NewDynamicInput creates a new dynamic input
+// NewDynamicInput creates a new dynamic input.
 func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicInput {
 	return &DynamicInput{
 		InputBase: core.NewInputBase(name),
@@ -26,14 +26,12 @@ func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicIn
 	}
 }
 
-// Start implements the Input interface
-
-// UpdateMetadata updates the metadata from HTTP request
+// UpdateMetadata updates the metadata from HTTP request.
 // Duration parameter accepts MM:SS or HH:MM:SS formats (leading zeros optional):
 //   - MM:SS format: "3:00" or "03:00" (3 minutes)
 //   - HH:MM:SS format: "1:30:00" or "01:30:00" (1 hour 30 minutes)
 //
-// Invalid formats will cause immediate expiration (no defaults)
+// Invalid formats will cause immediate expiration (no defaults).
 func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret string) error {
 	// Check secret
 	if d.settings.Secret != "" && secret != d.settings.Secret {
@@ -71,9 +69,9 @@ func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret st
 	return nil
 }
 
-// calculateDynamicExpiration calculates expiration based on duration
-// Accepts MM:SS (e.g., "3:00" or "03:00") or HH:MM:SS (e.g., "1:30:00" or "01:30:00") formats
-// Leading zeros are optional. Invalid formats result in immediate expiration (no defaults)
+// calculateDynamicExpiration calculates expiration based on duration.
+// Accepts MM:SS (e.g., "3:00" or "03:00") or HH:MM:SS (e.g., "1:30:00" or "01:30:00") formats.
+// Leading zeros are optional. Invalid formats result in immediate expiration (no defaults).
 func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 	var totalSeconds int
 

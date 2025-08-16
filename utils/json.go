@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// ParseJSONSettings is a generic function to parse JSON settings
+// ParseJSONSettings is a generic function to parse JSON settings.
 func ParseJSONSettings[T any](settings interface{}) (*T, error) {
 	var result T
 

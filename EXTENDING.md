@@ -532,7 +532,7 @@ Use in configuration:
 
 - **icecast** - Updates Icecast streaming server metadata
 - **file** - Writes metadata to local files
-- **post** - Sends metadata via HTTP POST webhooks
+- **url** - Sends metadata via HTTP GET/POST requests
 - **http** - Creates HTTP endpoints with multiple response formats
 - **websocket** - Real-time metadata streaming via WebSocket
 - **dlsplus** - DAB/DAB+ radio text format (ODR-PadEnc)

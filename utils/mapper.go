@@ -16,19 +16,19 @@ var bufferPool = sync.Pool{
 	},
 }
 
-// PayloadMapper handles custom payload transformation based on configuration
+// PayloadMapper handles custom payload transformation based on configuration.
 type PayloadMapper struct {
 	mapping map[string]interface{}
 }
 
-// NewPayloadMapper creates a new payload mapper with the given mapping configuration
+// NewPayloadMapper creates a new payload mapper with the given mapping configuration.
 func NewPayloadMapper(mapping map[string]interface{}) *PayloadMapper {
 	return &PayloadMapper{
 		mapping: mapping,
 	}
 }
 
-// MapPayload transforms the input data according to the configured mapping
+// MapPayload transforms the input data according to the configured mapping.
 func (pm *PayloadMapper) MapPayload(data interface{}) map[string]interface{} {
 	if pm.mapping == nil {
 		return nil
@@ -39,7 +39,7 @@ func (pm *PayloadMapper) MapPayload(data interface{}) map[string]interface{} {
 	return result
 }
 
-// processMapping recursively processes the mapping configuration
+// processMapping recursively processes the mapping configuration.
 func (pm *PayloadMapper) processMapping(mapping map[string]interface{}, result map[string]interface{}, data interface{}) {
 	for key, value := range mapping {
 		switch v := value.(type) {

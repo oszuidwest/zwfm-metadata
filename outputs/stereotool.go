@@ -10,7 +10,7 @@ import (
 	"zwfm-metadata/core"
 )
 
-// StereoToolOutput handles sending metadata to StereoTool's RadioText
+// StereoToolOutput handles sending metadata to StereoTool's RadioText.
 type StereoToolOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
@@ -18,7 +18,7 @@ type StereoToolOutput struct {
 	httpClient *http.Client
 }
 
-// NewStereoToolOutput creates a new StereoTool output
+// NewStereoToolOutput creates a new StereoTool output.
 func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *StereoToolOutput {
 	output := &StereoToolOutput{
 		OutputBase: core.NewOutputBase(name),
@@ -29,7 +29,7 @@ func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *S
 	return output
 }
 
-// SendFormattedMetadata implements the Output interface (called by metadata router)
+// SendFormattedMetadata implements the Output interface (called by metadata router).
 func (i *StereoToolOutput) SendFormattedMetadata(formattedText string) {
 	// Check if value changed to avoid unnecessary HTTP requests
 	if !i.HasChanged(formattedText) {
@@ -42,7 +42,7 @@ func (i *StereoToolOutput) SendFormattedMetadata(formattedText string) {
 	}
 }
 
-// sendToStereoTool sends the metadata to StereoTool's RadioText
+// sendToStereoTool sends the metadata to StereoTool's RadioText.
 func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 	fieldNames := map[int]string{
 		6751: "Streaming Output Song",

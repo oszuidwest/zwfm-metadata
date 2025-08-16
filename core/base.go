@@ -19,13 +19,13 @@ import (
 // They embed PassiveComponent to get this behavior.
 type PassiveComponent struct{}
 
-// Start waits for context cancellation (shutdown signal)
+// Start waits for context cancellation (shutdown signal).
 func (p *PassiveComponent) Start(ctx context.Context) error {
 	<-ctx.Done()
 	return nil
 }
 
-// InputBase provides common fields and methods for all input types
+// InputBase provides common fields and methods for all input types.
 type InputBase struct {
 	name        string
 	metadata    *Metadata
@@ -33,7 +33,7 @@ type InputBase struct {
 	mu          sync.RWMutex
 }
 
-// NewInputBase creates a new InputBase
+// NewInputBase creates a new InputBase.
 func NewInputBase(name string) *InputBase {
 	return &InputBase{
 		name:        name,
@@ -41,12 +41,12 @@ func NewInputBase(name string) *InputBase {
 	}
 }
 
-// GetName returns the input name
+// GetName returns the input name.
 func (b *InputBase) GetName() string {
 	return b.name
 }
 
-// GetMetadata returns the current metadata (including expired metadata)
+// GetMetadata returns the current metadata (including expired metadata).
 func (b *InputBase) GetMetadata() *Metadata {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -57,14 +57,14 @@ func (b *InputBase) GetMetadata() *Metadata {
 	return nil
 }
 
-// Subscribe adds a channel to receive metadata updates
+// Subscribe adds a channel to receive metadata updates.
 func (b *InputBase) Subscribe(ch chan<- *Metadata) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.subscribers = append(b.subscribers, ch)
 }
 
-// Unsubscribe removes a channel from receiving metadata updates
+// Unsubscribe removes a channel from receiving metadata updates.
 func (b *InputBase) Unsubscribe(ch chan<- *Metadata) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -77,7 +77,7 @@ func (b *InputBase) Unsubscribe(ch chan<- *Metadata) {
 	}
 }
 
-// SetMetadata updates the metadata and notifies subscribers
+// SetMetadata updates the metadata and notifies subscribers.
 func (b *InputBase) SetMetadata(metadata *Metadata) {
 	// Decode HTML entities in metadata fields
 	if metadata != nil {
@@ -124,14 +124,13 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 	}
 }
 
-// OutputBase provides common fields for all output types
-// ChangeDetector handles change detection for outputs
+// ChangeDetector handles change detection for outputs.
 type ChangeDetector struct {
 	lastValue string
 	mu        sync.RWMutex
 }
 
-// HasChanged checks if the value has changed and updates the stored value
+// HasChanged reports whether the value has changed and updates the stored value.
 func (c *ChangeDetector) HasChanged(newValue string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -143,20 +142,21 @@ func (c *ChangeDetector) HasChanged(newValue string) bool {
 	return false
 }
 
-// GetCurrentValue returns the current stored value
+// GetCurrentValue returns the current stored value.
 func (c *ChangeDetector) GetCurrentValue() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.lastValue
 }
 
-// SetCurrentValue sets the current stored value
+// SetCurrentValue sets the current stored value.
 func (c *ChangeDetector) SetCurrentValue(value string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.lastValue = value
 }
 
+// OutputBase provides common fields for all output types.
 type OutputBase struct {
 	name           string
 	inputs         []Input
@@ -164,34 +164,34 @@ type OutputBase struct {
 	delay          int
 }
 
-// NewOutputBase creates a new OutputBase
+// NewOutputBase creates a new OutputBase.
 func NewOutputBase(name string) *OutputBase {
 	return &OutputBase{
 		name: name,
 	}
 }
 
-// GetName returns the output name
+// GetName returns the output name.
 func (b *OutputBase) GetName() string {
 	return b.name
 }
 
-// SetInputs sets the inputs for this output
+// SetInputs sets the inputs for this output.
 func (b *OutputBase) SetInputs(inputs []Input) {
 	b.inputs = inputs
 }
 
-// HasChanged checks if the value has changed
+// HasChanged reports whether the value has changed.
 func (b *OutputBase) HasChanged(newValue string) bool {
 	return b.changeDetector.HasChanged(newValue)
 }
 
-// SetDelay sets the delay for this output
+// SetDelay sets the delay for this output.
 func (b *OutputBase) SetDelay(delay int) {
 	b.delay = delay
 }
 
-// GetDelay returns the delay for this output
+// GetDelay returns the delay for this output.
 func (b *OutputBase) GetDelay() int {
 	return b.delay
 }

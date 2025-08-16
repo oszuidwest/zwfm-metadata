@@ -1,3 +1,5 @@
+// Package web provides HTTP server functionality including a dashboard interface,
+// REST API endpoints, and WebSocket connections for real-time updates.
 package web
 
 import (
@@ -14,7 +16,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// Server represents the HTTP server
+// Server represents the HTTP server.
 type Server struct {
 	port         int
 	router       *core.MetadataRouter
@@ -24,7 +26,7 @@ type Server struct {
 	dashboardHub *utils.WebSocketHub
 }
 
-// OutputStatus represents the status of an output
+// OutputStatus represents the status of an output.
 type OutputStatus struct {
 	Name         string   `json:"name"`
 	Type         string   `json:"type"`
@@ -34,7 +36,7 @@ type OutputStatus struct {
 	CurrentInput string   `json:"currentInput,omitempty"`
 }
 
-// NewServer creates a new server instance
+// NewServer creates a new server instance.
 func NewServer(port int, router *core.MetadataRouter, stationName, brandColor string) *Server {
 	s := &Server{
 		port:         port,
@@ -56,7 +58,7 @@ func NewServer(port int, router *core.MetadataRouter, stationName, brandColor st
 	return s
 }
 
-// Start starts the HTTP server
+// Start starts the HTTP server.
 func (s *Server) Start(ctx context.Context) error {
 	router := mux.NewRouter()
 
@@ -106,7 +108,7 @@ func (s *Server) noIndexMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// dynamicInputHandler handles the /input/dynamic endpoint
+// dynamicInputHandler handles the /input/dynamic endpoint.
 func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 	// Get parameters from query string
 	inputName := req.URL.Query().Get("input")
@@ -170,7 +172,7 @@ func (s *Server) registerWebSocketRoutes(router *mux.Router) {
 	}
 }
 
-// getDashboardData returns the current dashboard data for WebSocket broadcasts
+// getDashboardData returns the current dashboard data for WebSocket broadcasts.
 func (s *Server) getDashboardData() interface{} {
 	// Get input statuses
 	inputStatuses := s.router.GetInputStatus()

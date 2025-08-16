@@ -12,7 +12,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// WebSocketOutput handles broadcasting metadata to WebSocket clients
+// WebSocketOutput handles broadcasting metadata to WebSocket clients.
 type WebSocketOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
@@ -23,7 +23,7 @@ type WebSocketOutput struct {
 	payloadMapper   *utils.PayloadMapper
 }
 
-// NewWebSocketOutput creates a new WebSocket output
+// NewWebSocketOutput creates a new WebSocket output.
 func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *WebSocketOutput {
 	var mapper *utils.PayloadMapper
 	if settings.PayloadMapping != nil {
@@ -52,13 +52,13 @@ func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *Web
 	return output
 }
 
-// RegisterRoutes implements the RouteRegistrar interface
+// RegisterRoutes implements the RouteRegistrar interface.
 func (w *WebSocketOutput) RegisterRoutes(router *mux.Router) {
 	router.HandleFunc(w.settings.Path, w.hub.HandleConnection).Methods("GET")
 	slog.Info("WebSocket route registered", "output", w.GetName(), "path", w.settings.Path)
 }
 
-// SendFormattedMetadata implements the Output interface
+// SendFormattedMetadata implements the Output interface.
 func (w *WebSocketOutput) SendFormattedMetadata(formattedText string) {
 	// Check if value changed to avoid unnecessary broadcasts
 	if !w.HasChanged(formattedText) {
@@ -78,7 +78,7 @@ func (w *WebSocketOutput) SendFormattedMetadata(formattedText string) {
 	w.broadcastMessage(*msg)
 }
 
-// SendEnhancedMetadata implements the EnhancedOutput interface
+// SendEnhancedMetadata implements the EnhancedOutput interface.
 func (w *WebSocketOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
 	// Check if value changed to avoid unnecessary broadcasts
 	if !w.HasChanged(formattedText) {
@@ -100,7 +100,7 @@ func (w *WebSocketOutput) storeCurrentMetadata(metadata *utils.UniversalMetadata
 	w.currentMetadata = metadata
 }
 
-// broadcastMessage sends a message to all connected WebSocket clients
+// broadcastMessage sends a message to all connected WebSocket clients.
 func (w *WebSocketOutput) broadcastMessage(msg utils.UniversalMetadata) {
 	payload := w.preparePayload(msg)
 	w.hub.Broadcast(payload)

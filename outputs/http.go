@@ -17,7 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// HTTPOutput handles serving metadata via GET endpoints
+// HTTPOutput handles serving metadata via GET endpoints.
 type HTTPOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
@@ -29,7 +29,7 @@ type HTTPOutput struct {
 	endpointMappers map[string]*utils.PayloadMapper // path -> pre-compiled mapper
 }
 
-// NewHTTPOutput creates a new HTTP output
+// NewHTTPOutput creates a new HTTP output.
 func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 	output := &HTTPOutput{
 		OutputBase:      core.NewOutputBase(name),
@@ -48,7 +48,7 @@ func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 	return output
 }
 
-// RegisterRoutes implements the RouteRegistrar interface
+// RegisterRoutes implements the RouteRegistrar interface.
 func (h *HTTPOutput) RegisterRoutes(router *mux.Router) {
 	for _, endpoint := range h.settings.Endpoints {
 		// Capture endpoint in closure to avoid loop variable issues
@@ -61,7 +61,7 @@ func (h *HTTPOutput) RegisterRoutes(router *mux.Router) {
 	}
 }
 
-// SendFormattedMetadata implements the Output interface
+// SendFormattedMetadata implements the Output interface.
 func (h *HTTPOutput) SendFormattedMetadata(formattedText string) {
 	// Check if value changed to avoid unnecessary processing
 	if !h.HasChanged(formattedText) {
@@ -78,7 +78,7 @@ func (h *HTTPOutput) SendFormattedMetadata(formattedText string) {
 	h.storeCurrentMetadata(httpMetadata)
 }
 
-// SendEnhancedMetadata implements the EnhancedOutput interface
+// SendEnhancedMetadata implements the EnhancedOutput interface.
 func (h *HTTPOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
 	// Check if value changed to avoid unnecessary processing
 	if !h.HasChanged(formattedText) {
@@ -89,7 +89,7 @@ func (h *HTTPOutput) SendEnhancedMetadata(formattedText string, metadata *core.M
 	h.storeCurrentMetadata(httpMetadata)
 }
 
-// handleEndpoint handles individual endpoint requests
+// handleEndpoint handles individual endpoint requests.
 func (h *HTTPOutput) handleEndpoint(w http.ResponseWriter, _ *http.Request, endpoint config.HTTPEndpoint) {
 	// Get current metadata
 	metadata := h.getCurrentMetadata()
@@ -118,7 +118,7 @@ func (h *HTTPOutput) handleEndpoint(w http.ResponseWriter, _ *http.Request, endp
 	slog.Debug("Served HTTP response", "output", h.GetName(), "path", endpoint.Path, "content_type", contentType)
 }
 
-// generateResponse creates the response data based on endpoint configuration
+// generateResponse creates the response data based on endpoint configuration.
 func (h *HTTPOutput) generateResponse(metadata *utils.UniversalMetadata, endpoint config.HTTPEndpoint) ([]byte, string, error) {
 	// If payloadMapping is defined, use it (always takes priority)
 	if endpoint.PayloadMapping != nil {
@@ -195,7 +195,7 @@ func (h *HTTPOutput) encodeResponse(data interface{}, responseType string) ([]by
 	}
 }
 
-// buildXMLString creates XML string from metadata
+// buildXMLString creates XML string from metadata.
 func (h *HTTPOutput) buildXMLString(metadata *utils.UniversalMetadata) string {
 	expiresAt := ""
 	if metadata.ExpiresAt != nil {
