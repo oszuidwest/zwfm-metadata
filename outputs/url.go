@@ -2,6 +2,7 @@ package outputs
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -32,28 +33,38 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 		mapper = utils.NewPayloadMapper(settings.PayloadMapping)
 	}
 
-	// Parse URL template if it contains template syntax
-	var tmpl *template.Template
-	if strings.Contains(settings.URL, "{{") {
-		var err error
-		tmpl, err = template.New("url").Parse(settings.URL)
-		if err != nil {
-			slog.Error("Failed to parse URL template", "error", err)
-			return nil
-		}
-	}
-
 	// Validate method is specified and valid
 	if settings.Method == "" {
 		slog.Error("Method is required for URL output", "output", name)
 		return nil
 	}
 
-	// Validate method is GET or POST (case-insensitive)
-	method := strings.ToUpper(settings.Method)
-	if method != "GET" && method != "POST" {
+	// Normalize and validate method (case-insensitive)
+	settings.Method = strings.ToUpper(settings.Method)
+	if settings.Method != "GET" && settings.Method != "POST" {
 		slog.Error("Invalid method for URL output", "output", name, "method", settings.Method, "valid_methods", "GET, POST")
 		return nil
+	}
+
+	// Validate URL scheme
+	parsedURL, err := url.Parse(settings.URL)
+	if err != nil {
+		slog.Error("Invalid URL", "output", name, "url", settings.URL, "error", err)
+		return nil
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		slog.Error("URL must use http or https scheme", "output", name, "url", settings.URL, "scheme", parsedURL.Scheme)
+		return nil
+	}
+
+	// Parse URL template if it contains template syntax
+	var tmpl *template.Template
+	if strings.Contains(settings.URL, "{{") {
+		tmpl, err = template.New("url").Parse(settings.URL)
+		if err != nil {
+			slog.Error("Failed to parse URL template", "output", name, "url", settings.URL, "error", err)
+			return nil
+		}
 	}
 
 	output := &URLOutput{
@@ -93,7 +104,8 @@ func (u *URLOutput) SendEnhancedMetadata(formattedText string, metadata *core.Me
 
 // sendRequest sends the request based on configured method.
 func (u *URLOutput) sendRequest(payload utils.UniversalMetadata) {
-	if strings.ToUpper(u.settings.Method) == "GET" {
+	// Method is already normalized to uppercase in constructor
+	if u.settings.Method == "GET" {
 		u.sendGETRequest(payload)
 	} else {
 		u.sendPOSTRequest(payload)
@@ -108,7 +120,7 @@ func (u *URLOutput) sendGETRequest(payload utils.UniversalMetadata) {
 	if u.urlTemplate != nil {
 		var urlBuffer strings.Builder
 		if err := u.urlTemplate.Execute(&urlBuffer, payload.ToTemplateData()); err != nil {
-			slog.Error("Failed to build URL from template", "output", u.GetName(), "error", err)
+			slog.Error("Failed to execute URL template", "output", u.GetName(), "template", u.settings.URL, "error", err)
 			return
 		}
 		requestURL = urlBuffer.String()
@@ -131,10 +143,13 @@ func (u *URLOutput) sendGETRequest(payload utils.UniversalMetadata) {
 
 	finalURL := parsedURL.String()
 
-	slog.Debug("Sending GET request", "url", finalURL)
+	slog.Debug("Sending GET request", "output", u.GetName(), "url", finalURL)
 
-	// Create HTTP request
-	req, err := http.NewRequest("GET", finalURL, nil)
+	// Create HTTP request with context
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", finalURL, nil)
 	if err != nil {
 		slog.Error("Failed to create GET request", "output", u.GetName(), "error", err)
 		return
@@ -163,7 +178,7 @@ func (u *URLOutput) sendGETRequest(payload utils.UniversalMetadata) {
 		return
 	}
 
-	slog.Debug("Successfully sent GET", "url", finalURL, "status", resp.StatusCode)
+	slog.Debug("Successfully sent GET", "output", u.GetName(), "url", finalURL, "status", resp.StatusCode)
 }
 
 // sendPOSTRequest sends metadata as POST request with JSON body.
@@ -186,10 +201,13 @@ func (u *URLOutput) sendPOSTRequest(payload utils.UniversalMetadata) {
 		return
 	}
 
-	slog.Debug("Sending POST request", "url", u.settings.URL, "payload", string(jsonData))
+	slog.Debug("Sending POST request", "output", u.GetName(), "url", u.settings.URL, "payload", string(jsonData))
 
-	// Create HTTP request
-	req, err := http.NewRequest("POST", u.settings.URL, bytes.NewBuffer(jsonData))
+	// Create HTTP request with context
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", u.settings.URL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		slog.Error("Failed to create POST request", "output", u.GetName(), "error", err)
 		return
@@ -219,5 +237,5 @@ func (u *URLOutput) sendPOSTRequest(payload utils.UniversalMetadata) {
 		return
 	}
 
-	slog.Debug("Successfully sent POST", "url", u.settings.URL, "status", resp.StatusCode)
+	slog.Debug("Successfully sent POST", "output", u.GetName(), "url", u.settings.URL, "status", resp.StatusCode)
 }
