@@ -278,7 +278,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
   "inputs": ["radio-live"],
   "settings": {
     "method": "GET",
-    "url": "http://air.radiotime.com/Playing.ashx?partnerId=YOUR_PARTNER_ID&partnerKey=YOUR_PARTNER_KEY&id=YOUR_STATION_ID&title={{.Title}}&artist={{.Artist}}",
+    "url": "http://air.radiotime.com/Playing.ashx?partnerId=YOUR_PARTNER_ID&partnerKey=YOUR_PARTNER_KEY&id=YOUR_STATION_ID&title={{.title}}&artist={{.artist}}",
     "delay": 0
   }
 }
@@ -294,7 +294,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 ##### HTTP Methods
 
 **GET Requests:**
-- Use Go template syntax in the URL: `{{.Title}}`, `{{.Artist}}`, `{{.Duration}}`
+- Use Go template syntax in the URL: `{{.title}}`, `{{.artist}}`, `{{.duration}}`
 - Metadata is URL-encoded and included as query parameters
 - Ideal for services like TuneIn that expect metadata in the URL
 
