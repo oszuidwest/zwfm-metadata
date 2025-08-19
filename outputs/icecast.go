@@ -1,7 +1,9 @@
 package outputs
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -56,8 +58,11 @@ func (i *IcecastOutput) sendToIcecast(metadata string) error {
 
 	fullURL := baseURL + "?" + params.Encode()
 
-	// Create request
-	req, err := http.NewRequest("GET", fullURL, nil)
+	// Create request with context
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -74,7 +79,9 @@ func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		// Read error response for debugging
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status code: %d, response: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	slog.Debug("Successfully updated Icecast", "output", i.GetName(), "metadata", metadata)

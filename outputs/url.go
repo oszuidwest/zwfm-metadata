@@ -80,6 +80,11 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 
 // SendFormattedMetadata implements the Output interface (fallback for non-enhanced usage).
 func (u *URLOutput) SendFormattedMetadata(formattedText string) {
+	// Check if value changed to avoid unnecessary HTTP requests
+	if !u.HasChanged(formattedText) {
+		return
+	}
+
 	minimalMetadata := &core.Metadata{
 		Title:     formattedText,
 		UpdatedAt: time.Now(),
