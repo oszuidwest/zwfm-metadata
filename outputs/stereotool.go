@@ -1,7 +1,9 @@
 package outputs
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -10,7 +12,7 @@ import (
 	"zwfm-metadata/core"
 )
 
-// StereoToolOutput handles sending metadata to StereoTool's RadioText
+// StereoToolOutput handles sending metadata to StereoTool's RadioText.
 type StereoToolOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
@@ -18,7 +20,7 @@ type StereoToolOutput struct {
 	httpClient *http.Client
 }
 
-// NewStereoToolOutput creates a new StereoTool output
+// NewStereoToolOutput creates a new StereoTool output.
 func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *StereoToolOutput {
 	output := &StereoToolOutput{
 		OutputBase: core.NewOutputBase(name),
@@ -29,7 +31,7 @@ func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *S
 	return output
 }
 
-// SendFormattedMetadata implements the Output interface (called by metadata router)
+// SendFormattedMetadata implements the Output interface (called by metadata router).
 func (i *StereoToolOutput) SendFormattedMetadata(formattedText string) {
 	// Check if value changed to avoid unnecessary HTTP requests
 	if !i.HasChanged(formattedText) {
@@ -42,29 +44,40 @@ func (i *StereoToolOutput) SendFormattedMetadata(formattedText string) {
 	}
 }
 
-// sendToStereoTool sends the metadata to StereoTool's RadioText
+// sendToStereoTool sends the metadata to StereoTool's RadioText.
 func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 	fieldNames := map[int]string{
 		6751: "Streaming Output Song",
 		9985: "FM RDS Radio Text",
 	}
 
+	// Create context for both requests
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	for id, fieldName := range fieldNames {
 		requestURL := fmt.Sprintf("http://%s:%d/json-1/lis{%q:{%q:%q,%q:%q}}",
 			i.settings.Hostname, i.settings.Port,
 			fmt.Sprintf("%d", id), "forced", "1", "new_value", url.QueryEscape(metadata))
 
-		resp, err := i.httpClient.Get(requestURL)
+		req, err := http.NewRequestWithContext(ctx, "GET", requestURL, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create request for %s: %w", fieldName, err)
+		}
+
+		resp, err := i.httpClient.Do(req)
 		if err != nil {
 			return fmt.Errorf("failed to update %s: %w", fieldName, err)
 		}
-		resp.Body.Close() //nolint:errcheck
+		defer resp.Body.Close() //nolint:errcheck
 
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("StereoTool API error for %s: status %d", fieldName, resp.StatusCode)
+			// Read error response for debugging
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("StereoTool API error for %s: status %d, response: %s", fieldName, resp.StatusCode, string(bodyBytes))
 		}
 
-		slog.Debug("Updated StereoTool field", "field", fieldName, "metadata", metadata)
+		slog.Debug("Updated StereoTool field", "output", i.GetName(), "field", fieldName, "metadata", metadata)
 	}
 	return nil
 }

@@ -1,3 +1,5 @@
+// Package inputs provides various metadata input sources including static text,
+// URL polling, and dynamic HTTP endpoint inputs for the metadata router.
 package inputs
 
 import (
@@ -6,14 +8,14 @@ import (
 	"zwfm-metadata/core"
 )
 
-// TextInput handles static text input
+// TextInput handles static text input.
 type TextInput struct {
 	*core.InputBase
 	core.PassiveComponent
 	settings config.TextInputConfig
 }
 
-// NewTextInput creates a new text input
+// NewTextInput creates a new text input.
 func NewTextInput(name string, settings config.TextInputConfig) *TextInput {
 	input := &TextInput{
 		InputBase: core.NewInputBase(name),

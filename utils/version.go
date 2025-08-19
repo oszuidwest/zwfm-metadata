@@ -1,3 +1,5 @@
+// Package utils provides utility functions for file operations, JSON processing,
+// payload mapping, version information, and WebSocket management.
 package utils
 
 import (
@@ -11,12 +13,12 @@ var (
 	BuildTime = "unknown"
 )
 
-// UserAgent returns the User-Agent string for HTTP requests
+// UserAgent returns the User-Agent string for HTTP requests.
 func UserAgent() string {
 	return "zwfm-metadata/" + Version
 }
 
-// GetBuildYear returns the year from the build time
+// GetBuildYear returns the year from the build time.
 func GetBuildYear() string {
 	if BuildTime == "unknown" {
 		return time.Now().Format("2006")

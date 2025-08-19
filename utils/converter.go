@@ -5,7 +5,7 @@ import (
 	"zwfm-metadata/core"
 )
 
-// UniversalMetadata represents the common metadata structure used across all outputs
+// UniversalMetadata represents the common metadata structure used across all outputs.
 type UniversalMetadata struct {
 	Type              string     `json:"type,omitempty" xml:"type,omitempty" yaml:"type,omitempty"`
 	FormattedMetadata string     `json:"formatted_metadata" xml:"formatted_metadata" yaml:"formatted_metadata"`
@@ -19,7 +19,7 @@ type UniversalMetadata struct {
 	SourceType        string     `json:"source_type,omitempty" xml:"source_type,omitempty" yaml:"source_type,omitempty"`
 }
 
-// ConvertMetadata converts core.Metadata to UniversalMetadata
+// ConvertMetadata converts core.Metadata to UniversalMetadata.
 func ConvertMetadata(formattedText string, metadata *core.Metadata, source, sourceType string) *UniversalMetadata {
 	return &UniversalMetadata{
 		FormattedMetadata: formattedText,
@@ -34,14 +34,14 @@ func ConvertMetadata(formattedText string, metadata *core.Metadata, source, sour
 	}
 }
 
-// ConvertMetadataWithType converts core.Metadata to UniversalMetadata with a specific type
+// ConvertMetadataWithType converts core.Metadata to UniversalMetadata with a specific type.
 func ConvertMetadataWithType(formattedText string, metadata *core.Metadata, metadataType, source, sourceType string) *UniversalMetadata {
 	universal := ConvertMetadata(formattedText, metadata, source, sourceType)
 	universal.Type = metadataType
 	return universal
 }
 
-// ToTemplateData converts UniversalMetadata to template data for payload mapping
+// ToTemplateData converts UniversalMetadata to template data for payload mapping.
 func (um *UniversalMetadata) ToTemplateData() map[string]interface{} {
 	data := map[string]interface{}{
 		"formatted_metadata": um.FormattedMetadata,

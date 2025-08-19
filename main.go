@@ -1,3 +1,5 @@
+// Package main implements a metadata router for radio stations that manages
+// multiple input sources and distributes formatted metadata to various outputs.
 package main
 
 import (
@@ -201,12 +203,12 @@ func createOutput(cfg config.OutputConfig) (core.Output, error) {
 		}
 		return outputs.NewFileOutput(cfg.Name, *settings), nil
 
-	case "post":
-		settings, err := utils.ParseJSONSettings[config.PostOutputConfig](cfg.Settings)
+	case "url":
+		settings, err := utils.ParseJSONSettings[config.URLOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewPostOutput(cfg.Name, *settings), nil
+		return outputs.NewURLOutput(cfg.Name, *settings), nil
 
 	case "dlsplus":
 		settings, err := utils.ParseJSONSettings[config.DLSPlusOutputConfig](cfg.Settings)
@@ -241,11 +243,12 @@ func createOutput(cfg config.OutputConfig) (core.Output, error) {
 	}
 }
 
-// unknownTypeError represents an unknown type error
+// unknownTypeError represents an unknown type error.
 type unknownTypeError struct {
 	Type string
 }
 
+// Error returns the error message for unknownTypeError.
 func (e *unknownTypeError) Error() string {
 	return "unknown type: " + e.Type
 }

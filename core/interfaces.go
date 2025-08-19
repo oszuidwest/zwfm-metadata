@@ -1,3 +1,5 @@
+// Package core provides the fundamental interfaces and types for the metadata
+// router, including input and output abstractions and metadata structures.
 package core
 
 import (
@@ -7,7 +9,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// Metadata represents the metadata for a song
+// Metadata represents the metadata for a song.
 type Metadata struct {
 	Name      string
 	SongID    string
@@ -18,7 +20,7 @@ type Metadata struct {
 	ExpiresAt *time.Time
 }
 
-// Input interface for all input types
+// Input defines the interface for all input types.
 type Input interface {
 	// Start begins processing the input
 	Start(ctx context.Context) error
@@ -32,7 +34,7 @@ type Input interface {
 	Unsubscribe(ch chan<- *Metadata)
 }
 
-// Output interface for all output types
+// Output defines the interface for all output types.
 type Output interface {
 	// Start begins processing the output
 	Start(ctx context.Context) error
@@ -46,14 +48,14 @@ type Output interface {
 	SendFormattedMetadata(formattedText string)
 }
 
-// EnhancedOutput interface for outputs that need access to full metadata
+// EnhancedOutput defines the interface for outputs that need access to full metadata.
 type EnhancedOutput interface {
 	Output
 	// SendEnhancedMetadata processes metadata with full details
 	SendEnhancedMetadata(formattedText string, metadata *Metadata, inputName, inputType string)
 }
 
-// RouteRegistrar interface for outputs that need to register HTTP routes
+// RouteRegistrar defines the interface for outputs that need to register HTTP routes.
 type RouteRegistrar interface {
 	// RegisterRoutes registers HTTP routes on the given router
 	RegisterRoutes(router *mux.Router)

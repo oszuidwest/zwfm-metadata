@@ -117,7 +117,12 @@ The codebase provides several utilities you can use:
 3. **Formatter Registration**: Must use `init()` function to register formatters
 4. **Imports**: Use full import paths like `zwfm-metadata/config`, not just `config`
 5. **Build and Test**: Remember to `go build` before testing your extensions
-6. **HTTP Body Closing**: Always use `defer resp.Body.Close() //nolint:errcheck`
+6. **HTTP Requests**: Always use `http.NewRequestWithContext` with proper timeout context
+7. **HTTP Body Closing**: Always use `defer resp.Body.Close() //nolint:errcheck`
+8. **Error Response Reading**: For HTTP errors, read response body for debugging information
+9. **HasChanged() Check**: Always call `HasChanged()` in `SendFormattedMetadata` methods
+10. **Logging Fields**: Include "output" or "input" field in all log messages for easy filtering
+11. **Context Timeouts**: Use context with timeout for all HTTP requests and external operations
 
 ## Adding a New Input
 
@@ -297,17 +302,26 @@ Create a new file in the `outputs/` directory:
 package outputs
 
 import (
+    "bytes"
     "context"
+    "encoding/json"
+    "fmt"
+    "io"
     "log/slog"
+    "net/http"
+    "strings"
+    "time"
     "zwfm-metadata/config"
     "zwfm-metadata/core"
+    "zwfm-metadata/utils"
 )
 
 // MyCustomOutput handles custom output destination
 type MyCustomOutput struct {
     *core.OutputBase
     core.PassiveComponent  // Most outputs are passive
-    settings config.MyCustomOutputConfig
+    settings   config.MyCustomOutputConfig
+    httpClient *http.Client
 }
 
 // NewMyCustomOutput creates a new custom output
@@ -315,6 +329,7 @@ func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCus
     output := &MyCustomOutput{
         OutputBase: core.NewOutputBase(name),
         settings:   settings,
+        httpClient: &http.Client{Timeout: 10 * time.Second},
     }
     output.SetDelay(settings.Delay)
     return output
@@ -339,7 +354,31 @@ func (m *MyCustomOutput) SendFormattedMetadata(formattedText string) {
 }
 
 func (m *MyCustomOutput) sendToDestination(metadata string) error {
-    // Implement your custom sending logic
+    // Create request with context timeout for HTTP operations
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    
+    // Example HTTP request (if applicable)
+    req, err := http.NewRequestWithContext(ctx, "POST", m.settings.URL, strings.NewReader(metadata))
+    if err != nil {
+        return fmt.Errorf("failed to create request: %w", err)
+    }
+    
+    req.Header.Set("Content-Type", "text/plain")
+    req.Header.Set("User-Agent", utils.UserAgent())
+    
+    resp, err := m.httpClient.Do(req)
+    if err != nil {
+        return fmt.Errorf("request failed: %w", err)
+    }
+    defer resp.Body.Close() //nolint:errcheck
+    
+    if resp.StatusCode >= 400 {
+        // Read error response for debugging
+        bodyBytes, _ := io.ReadAll(resp.Body)
+        return fmt.Errorf("server error: status %d, response: %s", resp.StatusCode, string(bodyBytes))
+    }
+    
     slog.Debug("Sent to custom output", "output", m.GetName(), "metadata", metadata)
     return nil
 }
@@ -378,7 +417,36 @@ func (m *MyCustomOutput) sendUniversalPayload(metadata utils.UniversalMetadata) 
         "source_type":      metadata.SourceType,
     }
     
-    // Send payload...
+    // Marshal to JSON
+    jsonData, err := json.Marshal(payload)
+    if err != nil {
+        return fmt.Errorf("failed to marshal payload: %w", err)
+    }
+    
+    // Create request with context timeout
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    
+    req, err := http.NewRequestWithContext(ctx, "POST", m.settings.URL, bytes.NewBuffer(jsonData))
+    if err != nil {
+        return fmt.Errorf("failed to create request: %w", err)
+    }
+    
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("User-Agent", utils.UserAgent())
+    
+    resp, err := m.httpClient.Do(req)
+    if err != nil {
+        return fmt.Errorf("request failed: %w", err)
+    }
+    defer resp.Body.Close() //nolint:errcheck
+    
+    if resp.StatusCode >= 400 {
+        // Read error response for debugging
+        bodyBytes, _ := io.ReadAll(resp.Body)
+        return fmt.Errorf("server error: status %d, response: %s", resp.StatusCode, string(bodyBytes))
+    }
+    
     return nil
 }
 ```
@@ -415,7 +483,7 @@ Add your configuration struct to `config/config.go`:
 // MyCustomOutputConfig represents settings for custom output
 type MyCustomOutputConfig struct {
     Delay          int                    `json:"delay"`
-    Endpoint       string                 `json:"endpoint"`
+    URL            string                 `json:"url"`
     APIKey         string                 `json:"apiKey"`
     PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
 }
@@ -448,7 +516,7 @@ Create a test configuration:
       "formatters": ["ucwords"],
       "settings": {
         "delay": 2,
-        "endpoint": "https://api.example.com/metadata",
+        "url": "https://api.example.com/metadata",
         "apiKey": "secret123"
       }
     }
@@ -532,7 +600,7 @@ Use in configuration:
 
 - **icecast** - Updates Icecast streaming server metadata
 - **file** - Writes metadata to local files
-- **post** - Sends metadata via HTTP POST webhooks
+- **url** - Sends metadata via HTTP GET/POST requests
 - **http** - Creates HTTP endpoints with multiple response formats
 - **websocket** - Real-time metadata streaming via WebSocket
 - **dlsplus** - DAB/DAB+ radio text format (ODR-PadEnc)
@@ -609,7 +677,8 @@ func (r *RedisInput) Start(ctx context.Context) error {
 }
 
 func (r *RedisInput) fetchFromRedis() error {
-    ctx := context.Background()
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
     
     // Get metadata from Redis key
     result, err := r.client.Get(ctx, r.settings.Key).Result()
@@ -695,8 +764,10 @@ package outputs
 
 import (
     "bytes"
+    "context"
     "encoding/json"
     "fmt"
+    "io"
     "log/slog"
     "net/http"
     "time"
@@ -736,7 +807,7 @@ func (d *DiscordOutput) SendFormattedMetadata(formattedText string) {
     }
     
     if err := d.sendWebhook(embed); err != nil {
-        slog.Error("Failed to send to Discord", "error", err)
+        slog.Error("Failed to send to Discord", "output", d.GetName(), "error", err)
     }
 }
 
@@ -791,7 +862,7 @@ func (d *DiscordOutput) SendEnhancedMetadata(formattedText string, metadata *cor
     }
     
     if err := d.sendWebhook(embed); err != nil {
-        slog.Error("Failed to send to Discord", "error", err)
+        slog.Error("Failed to send to Discord", "output", d.GetName(), "error", err)
     }
 }
 
@@ -805,7 +876,11 @@ func (d *DiscordOutput) sendWebhook(embed map[string]interface{}) error {
         return err
     }
     
-    req, err := http.NewRequest("POST", d.settings.WebhookURL, bytes.NewBuffer(jsonData))
+    // Create request with context timeout
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    
+    req, err := http.NewRequestWithContext(ctx, "POST", d.settings.WebhookURL, bytes.NewBuffer(jsonData))
     if err != nil {
         return err
     }
@@ -820,7 +895,9 @@ func (d *DiscordOutput) sendWebhook(embed map[string]interface{}) error {
     defer resp.Body.Close() //nolint:errcheck
     
     if resp.StatusCode >= 400 {
-        return fmt.Errorf("discord webhook returned status %d", resp.StatusCode)
+        // Read error response for debugging
+        bodyBytes, _ := io.ReadAll(resp.Body)
+        return fmt.Errorf("discord webhook returned status %d, response: %s", resp.StatusCode, string(bodyBytes))
     }
     
     return nil
@@ -1073,8 +1150,11 @@ Configuration example with payload mapping:
 ```go
 // Good - Output error handling
 func (o *MyOutput) SendFormattedMetadata(text string) {
+    if !o.HasChanged(text) {
+        return
+    }
     if err := o.send(text); err != nil {
-        slog.Error("Send failed", "error", err)  // Log but don't return
+        slog.Error("Send failed", "output", o.GetName(), "error", err)  // Log but don't return
     }
 }
 
@@ -1094,8 +1174,11 @@ import "zwfm-metadata/utils"
 // Create HTTP client with timeout
 httpClient := &http.Client{Timeout: 10 * time.Second}
 
-// Make request
-req, err := http.NewRequest("POST", url, body)
+// Create request with context timeout
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+defer cancel()
+
+req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 if err != nil {
     return err
 }
@@ -1110,6 +1193,12 @@ if err != nil {
     return err
 }
 defer resp.Body.Close() //nolint:errcheck
+
+// Check for error responses and read body for debugging
+if resp.StatusCode >= 400 {
+    bodyBytes, _ := io.ReadAll(resp.Body)
+    return fmt.Errorf("HTTP error: status %d, response: %s", resp.StatusCode, string(bodyBytes))
+}
 ```
 
 This ensures:
@@ -1218,6 +1307,10 @@ curl "http://localhost:9000/input/dynamic?input=test-input&title=Test&artist=Art
    ```
 8. **Universal Metadata**: Use `utils.ConvertMetadata` instead of manual field mapping
 9. **Payload Mapping**: Use `utils.NewPayloadMapper` for template-based mapping
-10. **HTTP Responses**: Always close response bodies with `defer resp.Body.Close() //nolint:errcheck`
+10. **HTTP Requests**: Use `http.NewRequestWithContext` with proper timeout context
+11. **HTTP Responses**: Always close response bodies with `defer resp.Body.Close() //nolint:errcheck`
+12. **Error Response Debugging**: Read response body for HTTP errors to aid debugging
+13. **Change Detection**: Always call `HasChanged()` before processing in outputs
+14. **Structured Logging**: Include "output"/"input" field in log messages for filtering
 
 This guide should help you create robust extensions for the ZuidWest FM metadata system. Happy coding!

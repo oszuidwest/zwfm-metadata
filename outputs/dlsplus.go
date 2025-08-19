@@ -16,8 +16,8 @@ const (
 	dlsPlusTypeArtist = 4
 )
 
-// DLSPlusOutput writes metadata in DLS Plus format for ODR-PadEnc
-// It implements EnhancedOutput to access raw metadata fields
+// DLSPlusOutput writes metadata in DLS Plus format for ODR-PadEnc.
+// It implements EnhancedOutput to access raw metadata fields.
 type DLSPlusOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
@@ -25,7 +25,7 @@ type DLSPlusOutput struct {
 	toggleValue bool // Alternates between true/false to indicate content changes
 }
 
-// NewDLSPlusOutput creates a new DLS Plus output instance
+// NewDLSPlusOutput creates a new DLS Plus output instance.
 func NewDLSPlusOutput(name string, settings config.DLSPlusOutputConfig) *DLSPlusOutput {
 	output := &DLSPlusOutput{
 		OutputBase: core.NewOutputBase(name),
@@ -35,12 +35,12 @@ func NewDLSPlusOutput(name string, settings config.DLSPlusOutputConfig) *DLSPlus
 	return output
 }
 
-// SendFormattedMetadata is not used for DLS Plus output
+// SendFormattedMetadata is not used for DLS Plus output.
 func (o *DLSPlusOutput) SendFormattedMetadata(_ string) {
 	// This won't be called since we implement EnhancedOutput
 }
 
-// SendEnhancedMetadata writes the metadata in DLS Plus format
+// SendEnhancedMetadata writes the metadata in DLS Plus format.
 func (o *DLSPlusOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
 	// Check if value changed to avoid unnecessary file writes
 	if !o.HasChanged(formattedText) {
@@ -52,14 +52,14 @@ func (o *DLSPlusOutput) SendEnhancedMetadata(formattedText string, metadata *cor
 
 	// Write to file
 	if err := o.writeToFile(content); err != nil {
-		slog.Error("Failed to write DLS Plus file", "filename", o.settings.Filename, "error", err)
+		slog.Error("Failed to write DLS Plus file", "output", o.GetName(), "filename", o.settings.Filename, "error", err)
 		return
 	}
 
-	slog.Debug("Wrote DLS Plus", "filename", o.settings.Filename)
+	slog.Debug("Wrote DLS Plus", "output", o.GetName(), "filename", o.settings.Filename)
 }
 
-// buildDLSPlusContent creates the DLS Plus formatted content
+// buildDLSPlusContent creates the DLS Plus formatted content.
 func (o *DLSPlusOutput) buildDLSPlusContent(formattedText string, metadata *core.Metadata) string {
 	var content strings.Builder
 
@@ -120,14 +120,14 @@ func (o *DLSPlusOutput) addDLSPlusTags(content *strings.Builder, formattedText s
 	}
 }
 
-// writeToFile writes the content to the configured file
+// writeToFile writes the content to the configured file.
 func (o *DLSPlusOutput) writeToFile(content string) error {
 	return utils.WriteFile(o.settings.Filename, []byte(content))
 }
 
 // Start initializes the output
 func (o *DLSPlusOutput) Start(_ context.Context) error {
-	slog.Info("DLS Plus output writing to file", "filename", o.settings.Filename)
+	slog.Info("DLS Plus output writing to file", "output", o.GetName(), "filename", o.settings.Filename)
 
 	// Create initial empty file
 	if err := utils.WriteFile(o.settings.Filename, []byte("")); err != nil {
@@ -139,6 +139,6 @@ func (o *DLSPlusOutput) Start(_ context.Context) error {
 
 // Stop cleans up the output
 func (o *DLSPlusOutput) Stop() error {
-	slog.Debug("Stopped DLS Plus output", "filename", o.settings.Filename)
+	slog.Debug("Stopped DLS Plus output", "output", o.GetName(), "filename", o.settings.Filename)
 	return nil
 }
