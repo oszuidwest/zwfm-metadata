@@ -70,23 +70,6 @@ func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret st
 	return nil
 }
 
-+// akzeptiert ganze Sekunden oder Sekunden mit Nachkommastellen,
-+// z.B. "272" oder "272,670041666667" bzw. "272.670041666667"
-+var secondsFormatRe = regexp.MustCompile(`^\s*\d+(?:[.,]\d+)?\s*$`)
-+
- func parseDurationString(s string) (time.Duration, error) {
-     s = strings.TrimSpace(s)
-+    // NEU: Sekundenformat erkennen (mit Punkt ODER Komma als Dezimaltrenner)
-+    if secondsFormatRe.MatchString(s) {
-+        fs, err := strconv.ParseFloat(strings.ReplaceAll(s, ",", "."), 64)
-+        if err != nil {
-+            return 0, err
-+        }
-+        // fs sind Sekunden (inkl. Nachkommastellen)
-+        d := time.Duration(fs * float64(time.Second))
-+        return d, nil
-+    }
-
 // calculateDynamicExpiration calculates expiration based on duration.
 // Accepts MM:SS (e.g., "3:00" or "03:00") or HH:MM:SS (e.g., "1:30:00" or "01:30:00") formats.
 // Leading zeros are optional. Invalid formats result in immediate expiration (no defaults).
