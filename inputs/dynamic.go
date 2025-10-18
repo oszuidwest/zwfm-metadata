@@ -77,20 +77,20 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 	var totalSeconds int
 
 	// Accepts whole seconds or seconds with decimal places,
-    // e.g. ‘272’ or ‘272.670041666667’ or ‘272.670041666667’
+	// e.g. ‘272’ or ‘272.670041666667’ or ‘272.670041666667’
 	var secondsFormatRe = regexp.MustCompile(`^\s*\d+(?:[.,]\d+)?\s*$`)
-    duration = strings.TrimSpace(duration)
+	duration = strings.TrimSpace(duration)
 
 	// Parse duration - only accept MM:SS or HH:MM:SS formats
 	parts := strings.Split(duration, ":")
-	
-    if secondsFormatRe.MatchString(duration) {
+
+	if secondsFormatRe.MatchString(duration) {
 		fs, err := strconv.ParseFloat(strings.ReplaceAll(duration, ",", "."), 64)
-        if err != nil {
+		if err != nil {
 			slog.Error("Error converting numerical value to Float duration")
-            return time.Now() // Immediate expiration
-        }
-        totalSeconds = int(math.Round(fs))
+			return time.Now() // Immediate expiration
+		}
+		totalSeconds = int(math.Round(fs))
 	} else if len(parts) == 2 {
 		// MM:SS format (e.g., "03:00")
 		minutes, errM := strconv.Atoi(parts[0])
@@ -113,12 +113,12 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 			return time.Now() // Immediate expiration
 		}
 	} else {
-        // if there is some crud in the duration field that doesn't match expected formats, look for the fixed expiry field.
-        if d.settings.Expiration.Minutes > 0 {
-            expiresAt := time.Now().Add(time.Duration(d.settings.Expiration.Minutes) * time.Minute)
-            slog.Error("Unsupported duration format - using fixed expiration", "input", d.GetName(), "duration", duration, "expected", "MM:SS, HH:MM:SS or SSS[,MS] format only")
-            return expiresAt
-        }
+		// if there is some crud in the duration field that doesn't match expected formats, look for the fixed expiry field.
+		if d.settings.Expiration.Minutes > 0 {
+			expiresAt := time.Now().Add(time.Duration(d.settings.Expiration.Minutes) * time.Minute)
+			slog.Error("Unsupported duration format - using fixed expiration", "input", d.GetName(), "duration", duration, "expected", "MM:SS, HH:MM:SS or SSS[,MS] format only")
+			return expiresAt
+		}
 		slog.Error("Unsupported duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "MM:SS, HH:MM:SS or SSS[,MS] format only")
 		return time.Now() // Immediate expiration
 	}
