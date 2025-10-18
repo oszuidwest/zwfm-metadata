@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -69,16 +70,45 @@ func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret st
 	return nil
 }
 
++// akzeptiert ganze Sekunden oder Sekunden mit Nachkommastellen,
++// z.B. "272" oder "272,670041666667" bzw. "272.670041666667"
++var secondsFormatRe = regexp.MustCompile(`^\s*\d+(?:[.,]\d+)?\s*$`)
++
+ func parseDurationString(s string) (time.Duration, error) {
+     s = strings.TrimSpace(s)
++    // NEU: Sekundenformat erkennen (mit Punkt ODER Komma als Dezimaltrenner)
++    if secondsFormatRe.MatchString(s) {
++        fs, err := strconv.ParseFloat(strings.ReplaceAll(s, ",", "."), 64)
++        if err != nil {
++            return 0, err
++        }
++        // fs sind Sekunden (inkl. Nachkommastellen)
++        d := time.Duration(fs * float64(time.Second))
++        return d, nil
++    }
+
 // calculateDynamicExpiration calculates expiration based on duration.
 // Accepts MM:SS (e.g., "3:00" or "03:00") or HH:MM:SS (e.g., "1:30:00" or "01:30:00") formats.
 // Leading zeros are optional. Invalid formats result in immediate expiration (no defaults).
 func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 	var totalSeconds int
 
+	// Accepts whole seconds or seconds with decimal places,
+    // e.g. ‘272’ or ‘272.670041666667’ or ‘272.670041666667’
+	var secondsFormatRe = regexp.MustCompile(`^\s*\d+(?:[.,]\d+)?\s*$`)
+    duration = strings.TrimSpace(duration)
+
 	// Parse duration - only accept MM:SS or HH:MM:SS formats
 	parts := strings.Split(duration, ":")
-
-	if len(parts) == 2 {
+	
+    if secondsFormatRe.MatchString(duration) {
+		fs, err := strconv.ParseFloat(strings.ReplaceAll(duration, ",", "."), 64)
+        if err != nil {
+			slog.Error("Error converting numerical value to Float duration")
+            return time.Now() // Immediate expiration
+        }
+        totalSeconds := time.Duration(fs * float64(time.Second))
+	} else if len(parts) == 2 {
 		// MM:SS format (e.g., "03:00")
 		minutes, errM := strconv.Atoi(parts[0])
 		seconds, errS := strconv.Atoi(parts[1])
@@ -100,7 +130,7 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 			return time.Now() // Immediate expiration
 		}
 	} else {
-		slog.Error("Unsupported duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "MM:SS or HH:MM:SS format only")
+		slog.Error("Unsupported duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "MM:SS, HH:MM:SS or SSS[,MS] format only")
 		return time.Now() // Immediate expiration
 	}
 
