@@ -90,7 +90,7 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 			slog.Error("Error converting numerical value to Float duration")
             return time.Now() // Immediate expiration
         }
-        totalSeconds := time.Duration(fs * float64(time.Second))
+        totalSeconds = int(math.Round(fs))
 	} else if len(parts) == 2 {
 		// MM:SS format (e.g., "03:00")
 		minutes, errM := strconv.Atoi(parts[0])
@@ -113,6 +113,12 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 			return time.Now() // Immediate expiration
 		}
 	} else {
+        // if there is some crud in the duration field that doesn't match expected formats, look for the fixed expiry field.
+        if d.settings.Expiration.Minutes > 0 {
+            expiresAt := time.Now().Add(time.Duration(d.settings.Expiration.Minutes) * time.Minute)
+            slog.Error("Unsupported duration format - using fixed expiration", "input", d.GetName(), "duration", duration, "expected", "MM:SS, HH:MM:SS or SSS[,MS] format only")
+            return expiresAt
+        }
 		slog.Error("Unsupported duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "MM:SS, HH:MM:SS or SSS[,MS] format only")
 		return time.Now() // Immediate expiration
 	}
