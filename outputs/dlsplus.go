@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
@@ -102,7 +103,7 @@ func (o *DLSPlusOutput) addDLSPlusTags(content *strings.Builder, formattedText s
 	// Add artist tag if artist exists and can be found in formatted text
 	if metadata.Artist != "" {
 		if pos := strings.Index(formattedText, metadata.Artist); pos >= 0 {
-			length := len(metadata.Artist) - 1
+			length := utf8.RuneCountInString(metadata.Artist) - 1
 			if length >= 0 {
 				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlsPlusTypeArtist, pos, length)
 			}
@@ -112,7 +113,7 @@ func (o *DLSPlusOutput) addDLSPlusTags(content *strings.Builder, formattedText s
 	// Add title tag if title exists and can be found in formatted text
 	if metadata.Title != "" {
 		if pos := strings.Index(formattedText, metadata.Title); pos >= 0 {
-			length := len(metadata.Title) - 1
+			length := utf8.RuneCountInString(metadata.Title) - 1
 			if length >= 0 {
 				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlsPlusTypeTitle, pos, length)
 			}
