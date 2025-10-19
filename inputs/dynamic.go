@@ -113,7 +113,7 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 			return time.Now() // Immediate expiration
 		}
 	} else {
-		// if there is some crud in the duration field that doesn't match expected formats, look for the fixed expiry field.
+		// if there is some junk in the duration field that doesn't match expected formats, look for the fixed expiry field.
 		if d.settings.Expiration.Minutes > 0 {
 			expiresAt := time.Now().Add(time.Duration(d.settings.Expiration.Minutes) * time.Minute)
 			slog.Error("Unsupported duration format - using fixed expiration", "input", d.GetName(), "duration", duration, "expected", "MM:SS, HH:MM:SS or SSS[,MS] format only")
