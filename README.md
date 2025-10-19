@@ -692,6 +692,20 @@ Smart processing for RDS compliance:
   6. Truncates at word boundaries with `...` if still too long
 
 ### Usage
+
+Formatters can be applied individually or chained together in sequence. When multiple formatters are specified, each formatter receives the output of the previous formatter.
+
+#### Single Formatter
+```json
+{
+  "type": "icecast",
+  "name": "main-stream",
+  "formatters": ["rds"],
+  "settings": {...}
+}
+```
+
+#### Chained Formatters
 ```json
 {
   "type": "icecast",
@@ -700,7 +714,41 @@ Smart processing for RDS compliance:
   "settings": {...}
 }
 ```
-Formatters are applied in order: `ucwords` first, then `rds`.
+Formatters are applied in order: `ucwords` first (converts to title case), then `rds` (applies 64-character limit and RDS compliance).
+
+#### Chaining Examples
+
+**Example 1: Title Case + RDS Compliance**
+```
+Input:    "john lennon - imagine (remastered)"
+ucwords:  "John Lennon - Imagine (Remastered)"
+rds:      "John Lennon - Imagine"
+```
+
+**Example 2: RDS Compliance + Uppercase**
+```json
+{
+  "formatters": ["rds", "uppercase"]
+}
+```
+```
+Input:      "very long artist name feat. someone - very long song title (extended remix)"
+rds:        "Very Long Artist Name - Very Long Song Title"
+uppercase:  "VERY LONG ARTIST NAME - VERY LONG SONG TITLE"
+```
+
+**Example 3: Lowercase Only**
+```json
+{
+  "formatters": ["lowercase"]
+}
+```
+```
+Input:     "Artist Name - Song Title"
+lowercase: "artist name - song title"
+```
+
+**Note:** The order of formatters matters. For example, `["rds", "uppercase"]` first truncates to 64 characters, then converts to uppercase, while `["uppercase", "rds"]` first converts to uppercase, then truncates.
 
 ## Features
 

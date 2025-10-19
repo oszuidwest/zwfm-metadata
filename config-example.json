@@ -65,6 +65,20 @@
       }
     },
     {
+      "type": "icecast",
+      "name": "secondary-stream",
+      "inputs": ["radio-live", "default-text"],
+      "formatters": ["rds", "uppercase"],
+      "settings": {
+        "delay": 2,
+        "server": "localhost",
+        "port": 8000,
+        "username": "source",
+        "password": "hackme",
+        "mountpoint": "/stream2"
+      }
+    },
+    {
       "type": "file",
       "name": "nowplaying-file",
       "inputs": ["radio-live", "radio-automation", "default-text"],
