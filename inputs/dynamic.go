@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -27,11 +28,12 @@ func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicIn
 }
 
 // UpdateMetadata updates the metadata from HTTP request.
-// Duration parameter accepts MM:SS or HH:MM:SS formats (leading zeros optional):
+// Duration parameter accepts the following formats (leading zeros optional):
+//   - Seconds: "272" or "272.5" or "272,5" (272 seconds)
 //   - MM:SS format: "3:00" or "03:00" (3 minutes)
 //   - HH:MM:SS format: "1:30:00" or "01:30:00" (1 hour 30 minutes)
 //
-// Invalid formats will cause immediate expiration (no defaults).
+// Invalid formats will cause immediate expiration or fixed fallback if configured.
 func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret string) error {
 	// Check secret
 	if d.settings.Secret != "" && secret != d.settings.Secret {
@@ -70,37 +72,71 @@ func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret st
 }
 
 // calculateDynamicExpiration calculates expiration based on duration.
-// Accepts MM:SS (e.g., "3:00" or "03:00") or HH:MM:SS (e.g., "1:30:00" or "01:30:00") formats.
-// Leading zeros are optional. Invalid formats result in immediate expiration (no defaults).
+// Accepts the following formats:
+//   - Seconds: "272" or "272.5" or "272,5" (272 seconds, with optional decimal/comma separator)
+//   - MM:SS: "3:00" or "03:00" (3 minutes)
+//   - HH:MM:SS: "1:30:00" or "01:30:00" (1 hour 30 minutes)
+//
+// Leading zeros are optional. Invalid formats result in immediate expiration or fixed fallback if configured.
 func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 	var totalSeconds int
 
-	// Parse duration - only accept MM:SS or HH:MM:SS formats
-	parts := strings.Split(duration, ":")
+	// Accepts whole seconds or seconds with decimal places,
+	// e.g. '272' or '272.5' or '272,670041666667'
+	duration = strings.TrimSpace(duration)
+	var secondsFormatRe = regexp.MustCompile(`^\d+(?:[.,]\d+)?$`)
 
-	if len(parts) == 2 {
-		// MM:SS format (e.g., "03:00")
-		minutes, errM := strconv.Atoi(parts[0])
-		seconds, errS := strconv.Atoi(parts[1])
-		if errM == nil && errS == nil && minutes >= 0 && seconds >= 0 && seconds < 60 {
-			totalSeconds = minutes*60 + seconds
-		} else {
-			slog.Error("Invalid MM:SS duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "MM:SS (e.g., '03:00')")
+	// Check format and parse accordingly
+	if secondsFormatRe.MatchString(duration) {
+		// Seconds format (e.g., "272" or "272.5" or "272,5")
+		fs, err := strconv.ParseFloat(strings.ReplaceAll(duration, ",", "."), 64)
+		if err != nil {
+			slog.Error("Error converting numerical value to Float duration", "input", d.GetName(), "duration", duration, "error", err)
 			return time.Now() // Immediate expiration
 		}
-	} else if len(parts) == 3 {
-		// HH:MM:SS format (e.g., "01:30:00")
-		hours, errH := strconv.Atoi(parts[0])
-		minutes, errM := strconv.Atoi(parts[1])
-		seconds, errS := strconv.Atoi(parts[2])
-		if errH == nil && errM == nil && errS == nil && hours >= 0 && minutes >= 0 && minutes < 60 && seconds >= 0 && seconds < 60 {
-			totalSeconds = hours*3600 + minutes*60 + seconds
+		totalSeconds = int(math.Round(fs))
+	} else if strings.Contains(duration, ":") {
+		// Time format (MM:SS or HH:MM:SS)
+		parts := strings.Split(duration, ":")
+		if len(parts) == 2 {
+			// MM:SS format (e.g., "03:00")
+			minutes, errM := strconv.Atoi(parts[0])
+			seconds, errS := strconv.Atoi(parts[1])
+			if errM == nil && errS == nil && minutes >= 0 && seconds >= 0 && seconds < 60 {
+				totalSeconds = minutes*60 + seconds
+			} else {
+				slog.Error("Invalid MM:SS duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "MM:SS (e.g., '03:00')")
+				return time.Now() // Immediate expiration
+			}
+		} else if len(parts) == 3 {
+			// HH:MM:SS format (e.g., "01:30:00")
+			hours, errH := strconv.Atoi(parts[0])
+			minutes, errM := strconv.Atoi(parts[1])
+			seconds, errS := strconv.Atoi(parts[2])
+			if errH == nil && errM == nil && errS == nil && hours >= 0 && minutes >= 0 && minutes < 60 && seconds >= 0 && seconds < 60 {
+				totalSeconds = hours*3600 + minutes*60 + seconds
+			} else {
+				slog.Error("Invalid HH:MM:SS duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "HH:MM:SS (e.g., '01:30:00')")
+				return time.Now() // Immediate expiration
+			}
 		} else {
-			slog.Error("Invalid HH:MM:SS duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "HH:MM:SS (e.g., '01:30:00')")
+			// Invalid time format
+			if d.settings.Expiration.Minutes > 0 {
+				expiresAt := time.Now().Add(time.Duration(d.settings.Expiration.Minutes) * time.Minute)
+				slog.Error("Unsupported duration format - using fixed expiration", "input", d.GetName(), "duration", duration, "expected", "seconds, MM:SS, or HH:MM:SS format only")
+				return expiresAt
+			}
+			slog.Error("Unsupported duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "seconds, MM:SS, or HH:MM:SS format only")
 			return time.Now() // Immediate expiration
 		}
 	} else {
-		slog.Error("Unsupported duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "MM:SS or HH:MM:SS format only")
+		// No recognized format at all - check for fixed expiration fallback
+		if d.settings.Expiration.Minutes > 0 {
+			expiresAt := time.Now().Add(time.Duration(d.settings.Expiration.Minutes) * time.Minute)
+			slog.Error("Unsupported duration format - using fixed expiration", "input", d.GetName(), "duration", duration, "expected", "seconds, MM:SS, or HH:MM:SS format only")
+			return expiresAt
+		}
+		slog.Error("Unsupported duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "seconds, MM:SS, or HH:MM:SS format only")
 		return time.Now() // Immediate expiration
 	}
 

@@ -104,7 +104,7 @@ HTTP API for live updates
 #### Settings
 - `secret` (optional) - Authentication secret for API calls
 - `expiration.type` - `"dynamic"` (expires based on song duration), `"fixed"` (expires after a set number of minutes), or `"none"` (never expires)
-- `expiration.minutes` (required if type=fixed) - Number of minutes until expiration
+- `expiration.minutes` (required if type=fixed, optional for type=dynamic) - Number of minutes until expiration. When `type` is `"dynamic"`, this serves as a fallback when the duration parameter is missing or invalid
 
 #### API Usage
 ```bash
@@ -113,6 +113,12 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&songID=123&artist=Art
 
 # Minimal update (only title required)
 curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=supersecret123"
+
+# PlayIt Live example (uses {{macros}} and seconds,microseconds format)
+http://localhost:9000/input/dynamic?input=playit-live&title={{html-text}}&songID={{guid}}&duration={{duration}}&secret=supersecret123
+
+# Aeron Studio example (uses <#Placeholders>)
+http://localhost:9000/input/dynamic?input=aeron-studio&title=<#Title>&artist=<#Artist>&songID=<#titleid>&duration=<#Duration>&secret=supersecret123
 ```
 
 #### Parameters
@@ -120,7 +126,11 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&secret=sup
 - `title` (required) - Song/track title
 - `songID` (optional) - Unique song identifier
 - `artist` (optional) - Artist name
-- `duration` (optional) - Song duration in MM:SS (e.g., `3:45` or `03:45`) or HH:MM:SS (e.g., `1:30:00` or `01:30:00`) format. Leading zeros are optional. Used for auto-expiration when `expiration.type` is `"dynamic"`. Invalid formats cause immediate expiration.
+- `duration` (optional) - Song duration in multiple formats. Leading zeros are optional. Used for auto-expiration when `expiration.type` is `"dynamic"`. Supported formats:
+  - **Seconds**: `272` or `272.5` or `272,5` (whole or decimal seconds, comma or period separator)
+  - **MM:SS**: `3:45` or `03:45` (minutes and seconds)
+  - **HH:MM:SS**: `1:30:00` or `01:30:00` (hours, minutes, and seconds)
+  - Invalid formats cause immediate expiration, or fallback to `expiration.minutes` if configured
 - `secret` (required if configured) - Authentication secret
 
 ### URL Input
