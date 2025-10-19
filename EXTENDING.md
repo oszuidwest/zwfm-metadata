@@ -603,7 +603,7 @@ Use in configuration:
 - **url** - Sends metadata via HTTP GET/POST requests
 - **http** - Creates HTTP endpoints with multiple response formats
 - **websocket** - Real-time metadata streaming via WebSocket
-- **dlsplus** - DAB/DAB+ radio text format (ODR-PadEnc)
+- **dlplus** - DAB/DAB+ radio text format (ODR-PadEnc)
 - **stereotool** - StereoTool RDS RadioText integration
 
 ### Formatters

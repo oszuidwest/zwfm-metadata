@@ -11,24 +11,24 @@ import (
 	"zwfm-metadata/utils"
 )
 
-// Content type constants for DLS Plus tags
+// Content type constants for DL Plus tags
 const (
-	dlsPlusTypeTitle  = 1
-	dlsPlusTypeArtist = 4
+	dlPlusTypeTitle  = 1
+	dlPlusTypeArtist = 4
 )
 
-// DLSPlusOutput writes metadata in DLS Plus format for ODR-PadEnc.
+// DLPlusOutput writes metadata in DL Plus format for ODR-PadEnc.
 // It implements EnhancedOutput to access raw metadata fields.
-type DLSPlusOutput struct {
+type DLPlusOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
-	settings    config.DLSPlusOutputConfig
+	settings    config.DLPlusOutputConfig
 	toggleValue bool // Alternates between true/false to indicate content changes
 }
 
-// NewDLSPlusOutput creates a new DLS Plus output instance.
-func NewDLSPlusOutput(name string, settings config.DLSPlusOutputConfig) *DLSPlusOutput {
-	output := &DLSPlusOutput{
+// NewDLPlusOutput creates a new DL Plus output instance.
+func NewDLPlusOutput(name string, settings config.DLPlusOutputConfig) *DLPlusOutput {
+	output := &DLPlusOutput{
 		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
 	}
@@ -36,32 +36,32 @@ func NewDLSPlusOutput(name string, settings config.DLSPlusOutputConfig) *DLSPlus
 	return output
 }
 
-// SendFormattedMetadata is not used for DLS Plus output.
-func (o *DLSPlusOutput) SendFormattedMetadata(_ string) {
+// SendFormattedMetadata is not used for DL Plus output.
+func (o *DLPlusOutput) SendFormattedMetadata(_ string) {
 	// This won't be called since we implement EnhancedOutput
 }
 
-// SendEnhancedMetadata writes the metadata in DLS Plus format.
-func (o *DLSPlusOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
+// SendEnhancedMetadata writes the metadata in DL Plus format.
+func (o *DLPlusOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
 	// Check if value changed to avoid unnecessary file writes
 	if !o.HasChanged(formattedText) {
 		return
 	}
 
-	// Build the DLS Plus content
-	content := o.buildDLSPlusContent(formattedText, metadata)
+	// Build the DL Plus content
+	content := o.buildDLPlusContent(formattedText, metadata)
 
 	// Write to file
 	if err := o.writeToFile(content); err != nil {
-		slog.Error("Failed to write DLS Plus file", "output", o.GetName(), "filename", o.settings.Filename, "error", err)
+		slog.Error("Failed to write DL Plus file", "output", o.GetName(), "filename", o.settings.Filename, "error", err)
 		return
 	}
 
-	slog.Debug("Wrote DLS Plus", "output", o.GetName(), "filename", o.settings.Filename)
+	slog.Debug("Wrote DL Plus", "output", o.GetName(), "filename", o.settings.Filename)
 }
 
-// buildDLSPlusContent creates the DLS Plus formatted content.
-func (o *DLSPlusOutput) buildDLSPlusContent(formattedText string, metadata *core.Metadata) string {
+// buildDLPlusContent creates the DL Plus formatted content.
+func (o *DLPlusOutput) buildDLPlusContent(formattedText string, metadata *core.Metadata) string {
 	var content strings.Builder
 
 	// Write parameter block header
@@ -78,8 +78,8 @@ func (o *DLSPlusOutput) buildDLSPlusContent(formattedText string, metadata *core
 		toggleInt = 1
 	}
 
-	// Add DLS Plus tags for artist and title if they exist and can be found
-	o.addDLSPlusTags(&content, formattedText, metadata)
+	// Add DL Plus tags for artist and title if they exist and can be found
+	o.addDLPlusTags(&content, formattedText, metadata)
 
 	// Add DL_PLUS_ITEM_RUNNING (1 for tracks with artist+title, 0 for station/program info)
 	runningInt := 0
@@ -98,14 +98,14 @@ func (o *DLSPlusOutput) buildDLSPlusContent(formattedText string, metadata *core
 	return content.String()
 }
 
-// addDLSPlusTags adds the DL_PLUS_TAG entries for artist and title
-func (o *DLSPlusOutput) addDLSPlusTags(content *strings.Builder, formattedText string, metadata *core.Metadata) {
+// addDLPlusTags adds the DL_PLUS_TAG entries for artist and title
+func (o *DLPlusOutput) addDLPlusTags(content *strings.Builder, formattedText string, metadata *core.Metadata) {
 	// Add artist tag if artist exists and can be found in formatted text
 	if metadata.Artist != "" {
 		if pos := strings.Index(formattedText, metadata.Artist); pos >= 0 {
 			length := utf8.RuneCountInString(metadata.Artist) - 1
 			if length >= 0 {
-				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlsPlusTypeArtist, pos, length)
+				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeArtist, pos, length)
 			}
 		}
 	}
@@ -115,31 +115,31 @@ func (o *DLSPlusOutput) addDLSPlusTags(content *strings.Builder, formattedText s
 		if pos := strings.Index(formattedText, metadata.Title); pos >= 0 {
 			length := utf8.RuneCountInString(metadata.Title) - 1
 			if length >= 0 {
-				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlsPlusTypeTitle, pos, length)
+				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeTitle, pos, length)
 			}
 		}
 	}
 }
 
 // writeToFile writes the content to the configured file.
-func (o *DLSPlusOutput) writeToFile(content string) error {
+func (o *DLPlusOutput) writeToFile(content string) error {
 	return utils.WriteFile(o.settings.Filename, []byte(content))
 }
 
 // Start initializes the output
-func (o *DLSPlusOutput) Start(_ context.Context) error {
-	slog.Info("DLS Plus output writing to file", "output", o.GetName(), "filename", o.settings.Filename)
+func (o *DLPlusOutput) Start(_ context.Context) error {
+	slog.Info("DL Plus output writing to file", "output", o.GetName(), "filename", o.settings.Filename)
 
 	// Create initial empty file
 	if err := utils.WriteFile(o.settings.Filename, []byte("")); err != nil {
-		return fmt.Errorf("failed to create DLS Plus file: %w", err)
+		return fmt.Errorf("failed to create DL Plus file: %w", err)
 	}
 
 	return nil
 }
 
 // Stop cleans up the output
-func (o *DLSPlusOutput) Stop() error {
-	slog.Debug("Stopped DLS Plus output", "output", o.GetName(), "filename", o.settings.Filename)
+func (o *DLPlusOutput) Stop() error {
+	slog.Debug("Stopped DL Plus output", "output", o.GetName(), "filename", o.settings.Filename)
 	return nil
 }

@@ -88,8 +88,8 @@ type URLOutputConfig struct {
 	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"` // Only for POST
 }
 
-// DLSPlusOutputConfig represents configuration for DLS Plus output.
-type DLSPlusOutputConfig struct {
+// DLPlusOutputConfig represents configuration for DL Plus output.
+type DLPlusOutputConfig struct {
 	Delay    int    `json:"delay"`
 	Filename string `json:"filename"`
 }

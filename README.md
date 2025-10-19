@@ -22,7 +22,7 @@ Metadata routing middleware for radio stations that routes metadata from inputs 
     - [URL Output](#url-output)
     - [HTTP Output](#http-output)
     - [WebSocket Output](#websocket-output)
-    - [DLS Plus Output](#dls-plus-output)
+    - [DL Plus Output](#dl-plus-output)
     - [StereoTool Output](#stereotool-output)
   - [Custom Payload Mapping](#custom-payload-mapping)
 - [Formatters](#formatters)
@@ -185,7 +185,7 @@ Control where formatted metadata is sent.
 | **File** | Write to local filesystem | ❌ | ❌ | N/A |
 | **URL** | Send via HTTP GET/POST | ✅ | ✅ | Bearer Token |
 | **HTTP** | Serve metadata via GET endpoints | ✅ | ✅ | N/A |
-| **DLS Plus** | DAB/DAB+ radio text | ✅ | ❌ | N/A |
+| **DL Plus** | DAB/DAB+ radio text | ✅ | ❌ | N/A |
 | **WebSocket** | Real-time browser/app updates | ✅ | ✅ | N/A |
 | **StereoTool** | Update RDS RadioText | ❌ | ❌ | N/A |
 
@@ -396,19 +396,19 @@ ws.onopen = () => {
 };
 ```
 
-#### DLS Plus Output
+#### DL Plus Output
 
-Generates DLS Plus format for DAB/DAB+ transmission
+Generates DL Plus format for DAB/DAB+ transmission
 
 ```json
 {
-  "type": "dlsplus",
-  "name": "dlsplus-output",
+  "type": "dlplus",
+  "name": "dlplus-output",
   "inputs": ["radio-live", "nowplaying-api", "default-text"],
   "formatters": [],
   "settings": {
     "delay": 0,
-    "filename": "/tmp/dlsplus.txt"
+    "filename": "/tmp/dlplus.txt"
   }
 }
 ```
@@ -418,7 +418,7 @@ Generates DLS Plus format for DAB/DAB+ transmission
 - `filename` (required) - Full path to output file
 
 ##### Output Format
-Generates ODR-PadEnc compatible DLS Plus files with parameter blocks:
+Generates ODR-PadEnc compatible DL Plus files with parameter blocks:
 ```
 ##### parameters { #####
 DL_PLUS=1
@@ -438,7 +438,7 @@ The output automatically:
 - Handles prefixes and suffixes correctly
 - Works with any formatters applied to the text
 
-Note: ODR-PadEnc automatically re-reads DLS files before each transmission.
+Note: ODR-PadEnc automatically re-reads DL files before each transmission.
 
 #### StereoTool Output
 

@@ -125,13 +125,13 @@
       }
     },
     {
-      "type": "dlsplus",
-      "name": "dlsplus-output",
+      "type": "dlplus",
+      "name": "dlplus-output",
       "inputs": ["radio-live", "nowplaying-api", "default-text"],
       "formatters": [],
       "settings": {
         "delay": 0,
-        "filename": "/tmp/dlsplus.txt"
+        "filename": "/tmp/dlplus.txt"
       }
     },
     {
