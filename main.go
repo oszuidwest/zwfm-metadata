@@ -210,12 +210,12 @@ func createOutput(cfg config.OutputConfig) (core.Output, error) {
 		}
 		return outputs.NewURLOutput(cfg.Name, *settings), nil
 
-	case "dlsplus":
-		settings, err := utils.ParseJSONSettings[config.DLSPlusOutputConfig](cfg.Settings)
+	case "dlplus":
+		settings, err := utils.ParseJSONSettings[config.DLPlusOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewDLSPlusOutput(cfg.Name, *settings), nil
+		return outputs.NewDLPlusOutput(cfg.Name, *settings), nil
 
 	case "websocket":
 		settings, err := utils.ParseJSONSettings[config.WebSocketOutputConfig](cfg.Settings)
