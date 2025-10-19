@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version without v prefix (e.g., 1.0.0) or "edge" for development build'
+        description: 'Version without v prefix (e.g., 2.0.0) or "edge" for development build'
         required: true
-        default: '1.0.0'
+        default: '2.0.0'
 
 env:
   GO_VERSION: '1.25'
