@@ -60,7 +60,11 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 	// Parse URL template if it contains template syntax
 	var tmpl *template.Template
 	if strings.Contains(settings.URL, "{{") {
-		tmpl, err = template.New("url").Parse(settings.URL)
+		tmpl, err = template.New("url").Funcs(template.FuncMap{
+			"upper": strings.ToUpper,
+			"lower": strings.ToLower,
+			"trim":  strings.TrimSpace,
+		}).Parse(settings.URL)
 		if err != nil {
 			slog.Error("Failed to parse URL template", "output", name, "url", settings.URL, "error", err)
 			return nil

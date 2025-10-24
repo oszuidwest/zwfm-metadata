@@ -189,18 +189,18 @@ Control where formatted metadata is sent.
 
 ### Output Feature Comparison
 
-| Output Type | Purpose | Enhanced Metadata | Custom Payload Mapping | Authentication |
-|-------------|---------|-------------------|------------------------|----------------|
+| Output Type | Purpose | Enhanced Metadata | Template Support | Authentication |
+|-------------|---------|-------------------|------------------|----------------|
 | **Icecast** | Update streaming server metadata | ❌ | ❌ | Basic Auth |
 | **File** | Write to local filesystem | ❌ | ❌ | N/A |
-| **URL** | Send via HTTP GET/POST | ✅ | ✅ | Bearer Token |
-| **HTTP** | Serve metadata via GET endpoints | ✅ | ✅ | N/A |
+| **URL** | Send via HTTP GET/POST | ✅ | ✅ (GET in URL, POST via payloadMapping) | Bearer Token |
+| **HTTP** | Serve metadata via GET endpoints | ✅ | ✅ (via payloadMapping) | N/A |
 | **DL Plus** | DAB/DAB+ radio text | ✅ | ❌ | N/A |
-| **WebSocket** | Real-time browser/app updates | ✅ | ✅ | N/A |
+| **WebSocket** | Real-time browser/app updates | ✅ | ✅ (via payloadMapping) | N/A |
 | **StereoTool** | Update RDS RadioText | ❌ | ❌ | N/A |
 
 - **Enhanced Metadata**: Receives full metadata details (title, artist, duration, etc.) rather than just formatted text
-- **Custom Payload Mapping**: Supports transforming output to match any JSON structure
+- **Template Support**: Can use Go template functions to transform values (e.g., `{{.title | upper}}`, `{{printf "%.20s" .title}}`)
 - **Authentication**: Security mechanisms supported
 
 ### Output Configurations
@@ -208,6 +208,8 @@ Control where formatted metadata is sent.
 All output types support:
 - `inputs` (required) - Array of input names in priority order
 - `formatters` (optional) - Array of formatter names to apply
+
+**Note on Templates**: Template functions (like `{{.title | upper}}`) are only available in outputs with template support (URL, HTTP, WebSocket). Other outputs (File, Icecast, StereoTool, DL Plus) receive only the formatted text after formatters are applied and cannot use template syntax.
 
 #### Icecast Output
 
@@ -240,7 +242,7 @@ Updates streaming server metadata
 
 #### File Output
 
-Writes to the filesystem
+Writes to the filesystem. Receives formatted text only (no template support).
 
 ```json
 {
@@ -259,6 +261,8 @@ Writes to the filesystem
 - `delay` (required) - Number of seconds to delay metadata updates
 - `filename` (required) - Full path to output file
 
+**Note**: File output writes the formatted text as-is. To transform text, use formatters like `uppercase`, `lowercase`, `ucwords`, or `rds`. Template functions are not available for file outputs.
+
 #### URL Output
 
 Sends metadata via HTTP GET or POST requests. Supports both GET requests with URL templates and POST requests with JSON payloads.
@@ -275,7 +279,20 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
     "url": "https://api.example.com/metadata",
     "method": "POST",
     "bearerToken": "your-bearer-token-here",
-    "payloadMapping": {...}  // See Custom Payload Mapping section
+    "payloadMapping": {
+      "station": "My Radio Station",
+      "now_playing": {
+        "title": "{{.title | upper}}",
+        "artist": "{{.artist | lower}}",
+        "text": "{{print .artist \" - \" .title}}",
+        "duration_seconds": "{{.duration}}"
+      },
+      "metadata": {
+        "has_artist": "{{if .artist}}true{{else}}false{{end}}",
+        "truncated_title": "{{printf \"%.30s\" .title}}",
+        "source": "{{.source}}"
+      }
+    }
   }
 }
 ```
@@ -304,14 +321,107 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 ##### HTTP Methods
 
 **GET Requests:**
-- Use Go template syntax in the URL: `{{.title}}`, `{{.artist}}`, `{{.duration}}`
-- Metadata is URL-encoded and included as query parameters
+- Use Go template syntax in the URL (see [URL Templates](#url-templates-get-requests) below)
+- Supports template functions for value transformation
 - Ideal for services like TuneIn that expect metadata in the URL
 
 **POST Requests:**
 - Send JSON payload in the request body
-- Support custom payload mapping for API compatibility
+- Support custom payload mapping with template syntax (see [Custom Payload Mapping](#custom-payload-mapping))
 - Include bearer token authentication if configured
+- No automatic URL encoding (values are in JSON body, not URL)
+
+##### URL Templates (GET Requests)
+
+When using GET requests, the URL output supports Go template syntax for dynamic URL construction. **All template values are automatically URL-encoded** for safety with special characters.
+
+**Available Template Fields:**
+- `{{.title}}` - Song/track title
+- `{{.artist}}` - Artist name
+- `{{.songID}}` - Unique song identifier
+- `{{.duration}}` - Song duration
+- `{{.formatted_metadata}}` - Complete formatted text after formatters
+- `{{.source}}` - Name of the input providing this metadata
+- `{{.source_type}}` - Type of input (e.g., "dynamic", "url", "text")
+- `{{.updated_at}}` - Update timestamp (RFC3339)
+- `{{.expires_at}}` - Expiration timestamp (RFC3339, empty if none)
+
+**Template Functions:**
+
+Custom formatting functions:
+- `{{.title | upper}}` - Convert to uppercase
+- `{{.title | lower}}` - Convert to lowercase
+- `{{.title | trim}}` - Remove leading/trailing whitespace
+
+Built-in Go template functions for formatting:
+- `{{.title | urlquery}}` - URL-encode a value (automatic for GET requests)
+- `{{.title | html}}` - HTML-escape special characters
+- `{{.title | js}}` - JavaScript-escape for safe inclusion in JS strings
+- `{{printf "%.20s" .title}}` - Format with printf (truncate to 20 chars)
+- `{{print .artist " - " .title}}` - Concatenate multiple values
+- `{{len .title}}` - Get length of a string
+
+Conditional logic (built-in):
+- `{{if .artist}}{{.artist}} - {{end}}{{.title}}` - Conditional inclusion
+- `{{or .empty .title}}` - Use first non-empty value
+- `{{and .artist .title}}` - Check if both values exist
+
+**Automatic URL Encoding for GET Requests:**
+
+For GET requests, all template values are automatically URL-encoded. This means special characters like `&`, `?`, `=`, `#` are handled safely without manual intervention:
+
+- With `title: "Rock & Roll"` and `artist: "AC/DC"`
+- Template: `?title={{.title}}&artist={{.artist}}`
+- Result: `?title=Rock+%26+Roll&artist=AC%2FDC`
+
+**Examples:**
+
+Basic template:
+```json
+{
+  "type": "url",
+  "name": "metadata-api",
+  "settings": {
+    "method": "GET",
+    "url": "http://api.example.com/update?title={{.title}}&artist={{.artist}}"
+  }
+}
+```
+
+Using template functions:
+```json
+{
+  "url": "http://api.example.com/update?title={{.title | upper}}&artist={{.artist | lower}}"
+}
+```
+
+Advanced template examples:
+```json
+{
+  "url": "http://api.example.com/update?text={{print .artist \" - \" .title}}"
+}
+```
+
+```json
+{
+  "url": "http://api.example.com/update?title={{printf \"%.30s\" .title}}"
+}
+```
+
+```json
+{
+  "url": "http://api.example.com/update?{{if .artist}}artist={{.artist}}&{{end}}title={{.title}}"
+}
+```
+
+Complex URL with path and query parameters:
+```json
+{
+  "url": "http://api.example.com/station/{{.source}}/song/{{.songID}}?title={{.title}}&artist={{.artist}}&duration={{.duration}}"
+}
+```
+
+Note: The `urlquery` function is available but typically not needed for GET requests due to automatic encoding. It may be useful in special cases like building encoded values for other purposes.
 
 #### HTTP Output
 
@@ -503,11 +613,23 @@ Both **URL** (POST method) and **WebSocket** outputs support custom payload mapp
 - `{{.source_type}}` - Type of the input (e.g., "dynamic", "url", "text")
 
 #### Available Template Functions
-- `{{.field | upper}}` - Converts to uppercase
-- `{{.field | lower}}` - Converts to lowercase
-- `{{.field | trim}}` - Removes leading/trailing whitespace
-- `{{.field | formatTime}}` - Formats time.Time to RFC3339 (rarely needed as times are pre-formatted)
-- `{{.field | formatTimePtr}}` - Formats *time.Time to RFC3339, returns empty string if nil
+
+Custom functions (added for payload mapping):
+- `{{.field | upper}}` - Convert to uppercase
+- `{{.field | lower}}` - Convert to lowercase
+- `{{.field | trim}}` - Remove leading/trailing whitespace
+- `{{.field | formatTime}}` - Format time.Time to RFC3339 (rarely needed as times are pre-formatted)
+- `{{.field | formatTimePtr}}` - Format *time.Time to RFC3339, returns empty string if nil
+
+Built-in Go template functions (also available):
+- `{{.field | urlquery}}` - URL-encode a value (useful if building URLs in JSON)
+- `{{.field | html}}` - HTML-escape special characters
+- `{{.field | js}}` - JavaScript-escape for safe inclusion in JS strings
+- `{{printf "%.20s" .field}}` - Format with printf (e.g., truncate to 20 chars)
+- `{{print .artist " - " .title}}` - Concatenate multiple values
+- `{{len .field}}` - Get length of a string
+- `{{if .artist}}{{.artist}} - {{end}}{{.title}}` - Conditional inclusion
+- `{{or .empty .default}}` - Use first non-empty value
 
 #### Default Payloads
 
@@ -661,6 +783,11 @@ Output:
 ## Formatters
 
 Apply text transformations to metadata before sending it to outputs.
+
+**Formatters vs Templates**:
+- **Formatters** apply to ALL output types and transform the text before any output processing
+- **Templates** (e.g., `{{.title | upper}}`) are only available in URL, HTTP, and WebSocket outputs
+- Use formatters when you want the same transformation for all outputs, use templates for output-specific formatting
 
 ### Available Formatters
 
