@@ -117,14 +117,39 @@ func (u *URLOutput) sendRequest(payload utils.UniversalMetadata) {
 	}
 }
 
+// urlEncodeTemplateData recursively URL-encodes all string values in template data
+// to ensure they are safe for use in URL query parameters.
+func urlEncodeTemplateData(data map[string]interface{}) map[string]interface{} {
+	encoded := make(map[string]interface{})
+	for key, value := range data {
+		switch v := value.(type) {
+		case string:
+			// Encode string values
+			encoded[key] = url.QueryEscape(v)
+		case map[string]interface{}:
+			// Recursively encode nested maps
+			encoded[key] = urlEncodeTemplateData(v)
+		default:
+			// Preserve non-string types
+			encoded[key] = v
+		}
+	}
+	return encoded
+}
+
 // sendGETRequest sends metadata as GET request with query parameters.
 func (u *URLOutput) sendGETRequest(payload utils.UniversalMetadata) {
 	var requestURL string
 
 	// If URL contains templates, process them
 	if u.urlTemplate != nil {
+		templateData := payload.ToTemplateData()
+
+		// Pre-encode template data to ensure special characters are properly escaped in URLs
+		encodedData := urlEncodeTemplateData(templateData)
+
 		var urlBuffer strings.Builder
-		if err := u.urlTemplate.Execute(&urlBuffer, payload.ToTemplateData()); err != nil {
+		if err := u.urlTemplate.Execute(&urlBuffer, encodedData); err != nil {
 			slog.Error("Failed to execute URL template", "output", u.GetName(), "template", u.settings.URL, "error", err)
 			return
 		}
@@ -133,17 +158,11 @@ func (u *URLOutput) sendGETRequest(payload utils.UniversalMetadata) {
 		requestURL = u.settings.URL
 	}
 
-	// Parse and ensure proper URL encoding
+	// Validate the constructed URL is well-formed
 	parsedURL, err := url.Parse(requestURL)
 	if err != nil {
 		slog.Error("Failed to parse URL", "output", u.GetName(), "url", requestURL, "error", err)
 		return
-	}
-
-	// Re-encode query parameters to ensure proper encoding
-	if parsedURL.RawQuery != "" {
-		query := parsedURL.Query()
-		parsedURL.RawQuery = query.Encode()
 	}
 
 	finalURL := parsedURL.String()
