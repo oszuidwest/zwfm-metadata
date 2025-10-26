@@ -584,8 +584,9 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 - `port` (required) - StereoTool HTTP server port (typically 8080)
 
 ##### Notes
-- Updates both FM RDS RadioText (ID: 9985) and Streaming Output Song (ID: 6751)
-- Uses StereoTool's undocumented JSON API
+- Updates both FM RDS RadioText and Streaming Output Song
+- Uses StereoTool's undocumented JSON API. Field ID's might be different in other versions
+- Currently validated with StereoTool version 10.71
 - Recommended for use with the RDS formatter for 64-character compliance
 - Automatically handles EBU Latin character set (0-255 range) for proper RDS encoding
 

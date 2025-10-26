@@ -47,8 +47,8 @@ func (i *StereoToolOutput) SendFormattedMetadata(formattedText string) {
 // sendToStereoTool sends the metadata to StereoTool's RadioText.
 func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 	fieldNames := map[int]string{
-		6751: "Streaming Output Song",
-		9985: "FM RDS Radio Text",
+		6751:  "Streaming Output Song",
+		15046: "FM RDS Radio Text",
 	}
 
 	// Create context for both requests
