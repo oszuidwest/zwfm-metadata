@@ -1,22 +1,28 @@
 package web
 
+import (
+	"encoding/base64"
+	"fmt"
+)
+
+// generateFaviconDataURI creates a base64-encoded SVG favicon with the brand color.
+func generateFaviconDataURI(brandColor string) string {
+	svg := fmt.Sprintf(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%s'/><path fill='white' d='M50 30v40M35 40l15 10-15 10M65 40l-15 10 15 10'/></svg>`, brandColor)
+	encoded := base64.StdEncoding.EncodeToString([]byte(svg))
+	return "data:image/svg+xml;base64," + encoded
+}
+
 // dashboardHTML returns the HTML for the dashboard.
 func dashboardHTML(stationName, brandColor, version, buildYear string) string {
+	faviconURI := generateFaviconDataURI(brandColor)
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="` + brandColor + `">
-
-    <!-- Mobile Web App -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="` + stationName + `">
-    <meta name="mobile-web-app-capable" content="yes">
-
-    <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='` + brandColor + `'/%3E%3Cpath fill='white' d='M50 30v40M35 40l15 10-15 10M65 40l-15 10 15 10'/%3E%3C/svg%3E">
+    <meta name="apple-mobile-web-app-title" content="` + stationName + ` Metadata">
+    <link rel="icon" type="image/svg+xml" href="` + faviconURI + `">
 
     <title>` + stationName + ` Metadata</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
