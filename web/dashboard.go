@@ -19,8 +19,10 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="` + brandColor + `">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="` + stationName + ` Metadata">
     <link rel="icon" type="image/svg+xml" href="` + faviconURI + `">
 
@@ -43,19 +45,19 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
         .animate-flash {
             animation: flash 0.5s ease-in-out;
         }
+
     </style>
 </head>
-<body class="bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-900 dark:to-slate-900 min-h-screen text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
+<body class="bg-gray-100 dark:bg-slate-900 min-h-screen text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
     <div class="max-w-7xl mx-auto p-5">
-        <!-- Header -->
-        <div class="mb-8">
+        <header class="mb-8" role="banner">
             <div>
                 <h1 class="text-4xl font-bold text-brand mb-2">` + stationName + ` Metadata</h1>
                 <p class="text-muted dark:text-gray-400 text-lg">Real-time metadata routing and synchronization</p>
             </div>
-        </div>
+        </header>
         
-        <!-- Statistics -->
+        <main role="main">
         <div id="stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 mb-10">
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md dark:shadow-gray-900/50 p-4 sm:p-6 text-center hover:shadow-xl dark:hover:shadow-gray-900/70 transform hover:-translate-y-1 transition-all">
                 <div class="text-3xl sm:text-5xl font-bold text-brand mb-2" id="total-inputs">-</div>
@@ -75,7 +77,6 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
             </div>
         </div>
         
-        <!-- Inputs Section -->
         <div class="mb-10">
             <h2 class="text-2xl font-semibold mb-5 text-gray-800 dark:text-gray-200">Inputs</h2>
             <div id="inputs-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -83,7 +84,6 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
             </div>
         </div>
 
-        <!-- Outputs Section -->
         <div class="mb-10">
             <h2 class="text-2xl font-semibold mb-5 text-gray-800 dark:text-gray-200">Outputs</h2>
             <div id="outputs-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -91,11 +91,10 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
             </div>
         </div>
         
-        <!-- Footer -->
-        <footer class="mt-16 border-t border-gray-200 dark:border-gray-700">
+        </main>
+        <footer class="mt-16 border-t border-gray-200 dark:border-gray-700" role="contentinfo">
             <div class="max-w-7xl mx-auto px-4 py-8">
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
-                    <!-- Left: Branding with Connection Status -->
                     <div>
                         <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1 text-center md:text-left">` + stationName + ` Metadata</h3>
                         <div id="connection-indicator" class="flex items-center gap-1.5 justify-center md:justify-start">
@@ -106,10 +105,8 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
                         </div>
                     </div>
 
-                    <!-- Center spacer -->
                     <div class="hidden md:block"></div>
 
-                    <!-- Right: Links and Version -->
                     <div class="text-center md:text-right space-y-2">
                         <div class="flex items-center justify-center md:justify-end gap-3 text-sm">
                             <a href="https://github.com/oszuidwest/zwfm-metadata" target="_blank" class="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-brand transition-colors">
