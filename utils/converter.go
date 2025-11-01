@@ -7,16 +7,16 @@ import (
 
 // UniversalMetadata represents the common metadata structure used across all outputs.
 type UniversalMetadata struct {
-	Type              string     `json:"type,omitempty" xml:"type,omitempty" yaml:"type,omitempty"`
-	FormattedMetadata string     `json:"formatted_metadata" xml:"formatted_metadata" yaml:"formatted_metadata"`
-	SongID            string     `json:"songID,omitempty" xml:"songID,omitempty" yaml:"songID,omitempty"`
-	Title             string     `json:"title" xml:"title" yaml:"title"`
-	Artist            string     `json:"artist,omitempty" xml:"artist,omitempty" yaml:"artist,omitempty"`
-	Duration          string     `json:"duration,omitempty" xml:"duration,omitempty" yaml:"duration,omitempty"`
-	UpdatedAt         time.Time  `json:"updated_at" xml:"updated_at" yaml:"updated_at"`
-	ExpiresAt         *time.Time `json:"expires_at,omitempty" xml:"expires_at,omitempty" yaml:"expires_at,omitempty"`
-	Source            string     `json:"source,omitempty" xml:"source,omitempty" yaml:"source,omitempty"`
-	SourceType        string     `json:"source_type,omitempty" xml:"source_type,omitempty" yaml:"source_type,omitempty"`
+	Type              string     `json:"type,omitempty" xml:"type,omitempty"`
+	FormattedMetadata string     `json:"formatted_metadata" xml:"formatted_metadata"`
+	SongID            string     `json:"songID,omitempty" xml:"songID,omitempty"`
+	Title             string     `json:"title" xml:"title"`
+	Artist            string     `json:"artist,omitempty" xml:"artist,omitempty"`
+	Duration          string     `json:"duration,omitempty" xml:"duration,omitempty"`
+	UpdatedAt         time.Time  `json:"updated_at" xml:"updated_at"`
+	ExpiresAt         *time.Time `json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+	Source            string     `json:"source,omitempty" xml:"source,omitempty"`
+	SourceType        string     `json:"source_type,omitempty" xml:"source_type,omitempty"`
 }
 
 // ConvertMetadata converts core.Metadata to UniversalMetadata.

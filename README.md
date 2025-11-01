@@ -464,7 +464,7 @@ Serves metadata via GET endpoints with multiple response formats
 
 ##### Endpoint Configuration
 - `path` (required) - URL path for the endpoint
-- `responseType` (optional) - Response format: `json` (default), `xml`, `yaml`, or `plaintext`
+- `responseType` (optional) - Response format: `json` (default), `xml`, or `plaintext`
 - `payloadMapping` (optional) - Custom response structure (see [Custom Payload Mapping](#custom-payload-mapping))
 
 ##### Response Types
