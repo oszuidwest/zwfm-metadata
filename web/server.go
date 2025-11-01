@@ -16,17 +16,22 @@ import (
 	"github.com/gorilla/mux"
 )
 
+const cacheControlNoCache = "public, max-age=0, must-revalidate"
+
 // Server represents the HTTP server.
 type Server struct {
-	port         int
-	router       *core.MetadataRouter
-	server       *http.Server
-	stationName  string
-	brandColor   string
-	dashboardHub *utils.WebSocketHub
-	faviconICO   []byte
-	iconSVG      []byte
-	appleIconPNG []byte
+	port             int
+	router           *core.MetadataRouter
+	server           *http.Server
+	stationName      string
+	brandColor       string
+	dashboardHub     *utils.WebSocketHub
+	faviconICO       []byte
+	iconSVG          []byte
+	appleIconPNG     []byte
+	darkFaviconICO   []byte
+	darkIconSVG      []byte
+	darkAppleIconPNG []byte
 }
 
 // OutputStatus represents the status of an output.
@@ -51,15 +56,28 @@ func NewServer(port int, router *core.MetadataRouter, stationName, brandColor st
 		return nil, fmt.Errorf("generate apple-touch-icon.png: %w", err)
 	}
 
+	darkFaviconICO, err := generateFaviconICODark(brandColor)
+	if err != nil {
+		return nil, fmt.Errorf("generate dark favicon.ico: %w", err)
+	}
+
+	darkAppleIconPNG, err := generateAppleTouchIconPNGD(brandColor)
+	if err != nil {
+		return nil, fmt.Errorf("generate dark apple-touch-icon.png: %w", err)
+	}
+
 	s := &Server{
-		port:         port,
-		router:       router,
-		stationName:  stationName,
-		brandColor:   brandColor,
-		dashboardHub: utils.NewWebSocketHub("dashboard"),
-		faviconICO:   faviconICO,
-		iconSVG:      []byte(generateFaviconSVG(brandColor)),
-		appleIconPNG: appleIconPNG,
+		port:             port,
+		router:           router,
+		stationName:      stationName,
+		brandColor:       brandColor,
+		dashboardHub:     utils.NewWebSocketHub("dashboard"),
+		faviconICO:       faviconICO,
+		iconSVG:          []byte(generateFaviconSVG(brandColor)),
+		appleIconPNG:     appleIconPNG,
+		darkFaviconICO:   darkFaviconICO,
+		darkIconSVG:      []byte(generateFaviconSVGDark(brandColor)),
+		darkAppleIconPNG: darkAppleIconPNG,
 	}
 
 	// Set up dashboard WebSocket callbacks
@@ -83,8 +101,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Route handlers
 	router.HandleFunc("/favicon.ico", s.faviconHandler).Methods("GET")
+	router.HandleFunc("/favicon-dark.ico", s.faviconDarkHandler).Methods("GET")
 	router.HandleFunc("/icon.svg", s.iconSVGHandler).Methods("GET")
+	router.HandleFunc("/icon-dark.svg", s.iconSVGDarkHandler).Methods("GET")
 	router.HandleFunc("/apple-touch-icon.png", s.appleTouchIconHandler).Methods("GET")
+	router.HandleFunc("/apple-touch-icon-dark.png", s.appleTouchIconDarkHandler).Methods("GET")
 	router.HandleFunc("/", s.dashboardHandler).Methods("GET")
 	router.HandleFunc("/input/dynamic", s.dynamicInputHandler).Methods("GET")
 	router.HandleFunc("/ws/dashboard", s.dashboardHub.HandleConnection).Methods("GET")
@@ -189,10 +210,24 @@ func (s *Server) faviconHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "image/x-icon")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
 
 	if _, err := w.Write(s.faviconICO); err != nil {
 		slog.Warn("Failed to write favicon.ico response", "error", err)
+	}
+}
+
+func (s *Server) faviconDarkHandler(w http.ResponseWriter, _ *http.Request) {
+	if len(s.darkFaviconICO) == 0 {
+		http.Error(w, "favicon not available", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/x-icon")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
+
+	if _, err := w.Write(s.darkFaviconICO); err != nil {
+		slog.Warn("Failed to write favicon-dark.ico response", "error", err)
 	}
 }
 
@@ -204,10 +239,24 @@ func (s *Server) iconSVGHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
 
 	if _, err := w.Write(s.iconSVG); err != nil {
 		slog.Warn("Failed to write icon.svg response", "error", err)
+	}
+}
+
+func (s *Server) iconSVGDarkHandler(w http.ResponseWriter, _ *http.Request) {
+	if len(s.darkIconSVG) == 0 {
+		http.Error(w, "icon not available", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
+
+	if _, err := w.Write(s.darkIconSVG); err != nil {
+		slog.Warn("Failed to write icon-dark.svg response", "error", err)
 	}
 }
 
@@ -219,10 +268,24 @@ func (s *Server) appleTouchIconHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
 
 	if _, err := w.Write(s.appleIconPNG); err != nil {
 		slog.Warn("Failed to write apple-touch-icon.png response", "error", err)
+	}
+}
+
+func (s *Server) appleTouchIconDarkHandler(w http.ResponseWriter, _ *http.Request) {
+	if len(s.darkAppleIconPNG) == 0 {
+		http.Error(w, "apple touch icon not available", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
+
+	if _, err := w.Write(s.darkAppleIconPNG); err != nil {
+		slog.Warn("Failed to write apple-touch-icon-dark.png response", "error", err)
 	}
 }
 
