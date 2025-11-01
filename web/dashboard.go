@@ -43,21 +43,34 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
 </head>
 <body class="bg-gray-100 dark:bg-slate-900 min-h-screen text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
     <div class="max-w-7xl mx-auto p-5">
-        <header class="mb-8" role="banner">
-            <div class="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-center sm:gap-3 sm:text-left">
-                <picture class="sm:flex-shrink-0">
-                    <source srcset="/icon-dark.svg" media="(prefers-color-scheme: dark)">
-                    <img src="/icon.svg" alt="` + stationName + ` brand icon" class="h-12 w-12 sm:h-11 sm:w-11 rounded-md" loading="lazy">
-                </picture>
-                <div>
-                    <h1 class="text-3xl sm:text-4xl font-semibold text-brand">` + stationName + ` Metadata</h1>
-                    <p class="text-muted dark:text-gray-400 text-sm sm:text-base">Real-time metadata routing and synchronization</p>
+        <header class="mb-10" role="banner">
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 sm:p-7 shadow-sm dark:shadow-gray-900/50">
+                <div class="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-center sm:gap-5 sm:text-left">
+                        <picture class="sm:flex-shrink-0">
+                            <source srcset="/icon-dark.svg" media="(prefers-color-scheme: dark)">
+                            <img src="/icon.svg" alt="` + stationName + ` brand icon" class="h-12 w-12 sm:h-11 sm:w-11 rounded-lg shadow-sm" loading="lazy">
+                        </picture>
+                        <div>
+                            <h1 class="text-3xl sm:text-[2.35rem] font-semibold tracking-tight text-brand">` + stationName + ` Metadata</h1>
+                            <p class="text-muted dark:text-gray-400 text-sm sm:text-base">Real-time metadata routing and synchronization</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center gap-2 text-center sm:items-end sm:text-right">
+                        <nav class="flex flex-wrap items-center justify-center gap-3 text-sm font-medium text-gray-500 dark:text-gray-300 sm:justify-end">
+                            <a href="#overview" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Overview</a>
+                            <a href="#inputs-section" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Inputs</a>
+                            <a href="#outputs-section" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Outputs</a>
+                        </nav>
+                    </div>
                 </div>
             </div>
         </header>
-        
+
         <main role="main">
-        <div id="stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 mb-10">
+        <section id="overview" class="mb-10">
+            <h2 class="text-2xl font-semibold mb-5 text-gray-800 dark:text-gray-200">Overview</h2>
+            <div id="stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md dark:shadow-gray-900/50 p-4 sm:p-6 text-center hover:shadow-xl dark:hover:shadow-gray-900/70 transform hover:-translate-y-1 transition-all">
                 <div class="text-3xl sm:text-5xl font-bold text-brand mb-2" id="total-inputs">-</div>
                 <div class="text-gray-700 dark:text-gray-300 text-sm sm:text-lg font-medium">Total Inputs</div>
@@ -75,15 +88,16 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
                 <div class="text-gray-700 dark:text-gray-300 text-sm sm:text-lg font-medium">Active Flows</div>
             </div>
         </div>
+        </section>
         
-        <div class="mb-10">
+        <div class="mb-10" id="inputs-section">
             <h2 class="text-2xl font-semibold mb-5 text-gray-800 dark:text-gray-200">Inputs</h2>
             <div id="inputs-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
                 <div class="text-center py-12 text-muted dark:text-gray-400">Loading inputs...</div>
             </div>
         </div>
 
-        <div class="mb-10">
+        <div class="mb-10" id="outputs-section">
             <h2 class="text-2xl font-semibold mb-5 text-gray-800 dark:text-gray-200">Outputs</h2>
             <div id="outputs-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
                 <div class="text-center py-12 text-muted dark:text-gray-400">Loading outputs...</div>
