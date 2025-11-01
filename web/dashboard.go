@@ -44,8 +44,10 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
 <body class="bg-gray-100 dark:bg-slate-900 min-h-screen text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
     <div class="max-w-7xl mx-auto p-5">
         <header class="mb-10" role="banner">
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 sm:p-7 shadow-sm dark:shadow-gray-900/50">
-                <div class="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 sm:p-7 shadow-md dark:shadow-gray-900/40 relative overflow-hidden">
+                <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-white via-white to-white/80 dark:from-gray-800 dark:via-gray-800/96 dark:to-gray-800/70"></div>
+                <div class="pointer-events-none absolute inset-0 opacity-[0.03] bg-[radial-gradient(circle_at_top,_rgba(0,0,0,0.6)_0%,_transparent_60%)] dark:bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.35)_0%,_transparent_60%)]"></div>
+                <div class="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-center sm:gap-5 sm:text-left">
                         <picture class="sm:flex-shrink-0">
                             <source srcset="/icon-dark.svg" media="(prefers-color-scheme: dark)">
@@ -56,13 +58,11 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
                             <p class="text-muted dark:text-gray-400 text-sm sm:text-base">Real-time metadata routing and synchronization</p>
                         </div>
                     </div>
-                    <div class="flex flex-col items-center gap-2 text-center sm:items-end sm:text-right">
-                        <nav class="flex flex-wrap items-center justify-center gap-3 text-sm font-medium text-gray-500 dark:text-gray-300 sm:justify-end">
-                            <a href="#overview" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Overview</a>
-                            <a href="#inputs-section" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Inputs</a>
-                            <a href="#outputs-section" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Outputs</a>
-                        </nav>
-                    </div>
+                    <nav class="flex flex-wrap items-center justify-center gap-3 text-sm font-medium text-gray-500 dark:text-gray-300 sm:justify-end">
+                        <a href="#overview" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Overview</a>
+                        <a href="#inputs-section" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Inputs</a>
+                        <a href="#outputs-section" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Outputs</a>
+                    </nav>
                 </div>
             </div>
         </header>
