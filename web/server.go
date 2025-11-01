@@ -16,6 +16,8 @@ import (
 	"github.com/gorilla/mux"
 )
 
+const cacheControlNoCache = "public, max-age=0, must-revalidate"
+
 // Server represents the HTTP server.
 type Server struct {
 	port             int
@@ -208,7 +210,7 @@ func (s *Server) faviconHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "image/x-icon")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
 
 	if _, err := w.Write(s.faviconICO); err != nil {
 		slog.Warn("Failed to write favicon.ico response", "error", err)
@@ -222,7 +224,7 @@ func (s *Server) faviconDarkHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "image/x-icon")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
 
 	if _, err := w.Write(s.darkFaviconICO); err != nil {
 		slog.Warn("Failed to write favicon-dark.ico response", "error", err)
@@ -237,7 +239,7 @@ func (s *Server) iconSVGHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
 
 	if _, err := w.Write(s.iconSVG); err != nil {
 		slog.Warn("Failed to write icon.svg response", "error", err)
@@ -251,7 +253,7 @@ func (s *Server) iconSVGDarkHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
 
 	if _, err := w.Write(s.darkIconSVG); err != nil {
 		slog.Warn("Failed to write icon-dark.svg response", "error", err)
@@ -266,7 +268,7 @@ func (s *Server) appleTouchIconHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
 
 	if _, err := w.Write(s.appleIconPNG); err != nil {
 		slog.Warn("Failed to write apple-touch-icon.png response", "error", err)
@@ -280,7 +282,7 @@ func (s *Server) appleTouchIconDarkHandler(w http.ResponseWriter, _ *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", cacheControlNoCache)
 
 	if _, err := w.Write(s.darkAppleIconPNG); err != nil {
 		slog.Warn("Failed to write apple-touch-icon-dark.png response", "error", err)
