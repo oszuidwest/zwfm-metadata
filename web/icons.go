@@ -106,14 +106,6 @@ func generateAppleTouchIconPNGD(brandColor string) ([]byte, error) {
 	return generateIconPNGFromSVG(buildHubSVGDark(brandColor), 180)
 }
 
-func generateIconPNG(brandColor string, size int) ([]byte, error) {
-	return generateIconPNGFromSVG(buildHubSVG(brandColor), size)
-}
-
-func generateIconPNGDark(brandColor string, size int) ([]byte, error) {
-	return generateIconPNGFromSVG(buildHubSVGDark(brandColor), size)
-}
-
 func generateIconPNGFromSVG(svg string, size int) ([]byte, error) {
 	img, err := renderIconImage(svg, size)
 	if err != nil {
