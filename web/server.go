@@ -24,6 +24,9 @@ type Server struct {
 	stationName  string
 	brandColor   string
 	dashboardHub *utils.WebSocketHub
+	faviconICO   []byte
+	iconSVG      []byte
+	appleIconPNG []byte
 }
 
 // OutputStatus represents the status of an output.
@@ -37,13 +40,26 @@ type OutputStatus struct {
 }
 
 // NewServer creates a new server instance.
-func NewServer(port int, router *core.MetadataRouter, stationName, brandColor string) *Server {
+func NewServer(port int, router *core.MetadataRouter, stationName, brandColor string) (*Server, error) {
+	faviconICO, err := generateFaviconICO(brandColor)
+	if err != nil {
+		return nil, fmt.Errorf("generate favicon.ico: %w", err)
+	}
+
+	appleIconPNG, err := generateAppleTouchIconPNG(brandColor)
+	if err != nil {
+		return nil, fmt.Errorf("generate apple-touch-icon.png: %w", err)
+	}
+
 	s := &Server{
 		port:         port,
 		router:       router,
 		stationName:  stationName,
 		brandColor:   brandColor,
 		dashboardHub: utils.NewWebSocketHub("dashboard"),
+		faviconICO:   faviconICO,
+		iconSVG:      []byte(generateFaviconSVG(brandColor)),
+		appleIconPNG: appleIconPNG,
 	}
 
 	// Set up dashboard WebSocket callbacks
@@ -55,7 +71,7 @@ func NewServer(port int, router *core.MetadataRouter, stationName, brandColor st
 	// Start periodic dashboard updates over WebSocket
 	go s.startPeriodicDashboardUpdates()
 
-	return s
+	return s, nil
 }
 
 // Start starts the HTTP server.
@@ -66,6 +82,9 @@ func (s *Server) Start(ctx context.Context) error {
 	router.Use(s.noIndexMiddleware)
 
 	// Route handlers
+	router.HandleFunc("/favicon.ico", s.faviconHandler).Methods("GET")
+	router.HandleFunc("/icon.svg", s.iconSVGHandler).Methods("GET")
+	router.HandleFunc("/apple-touch-icon.png", s.appleTouchIconHandler).Methods("GET")
 	router.HandleFunc("/", s.dashboardHandler).Methods("GET")
 	router.HandleFunc("/input/dynamic", s.dynamicInputHandler).Methods("GET")
 	router.HandleFunc("/ws/dashboard", s.dashboardHub.HandleConnection).Methods("GET")
@@ -159,6 +178,51 @@ func (s *Server) dashboardHandler(w http.ResponseWriter, _ *http.Request) {
 
 	if _, err := w.Write([]byte(dashboardHTML(s.stationName, s.brandColor, utils.Version, utils.GetBuildYear()))); err != nil {
 		slog.Error("Failed to write dashboard HTML response", "error", err)
+	}
+}
+
+// faviconHandler serves ICO favicons with support for legacy browsers.
+func (s *Server) faviconHandler(w http.ResponseWriter, _ *http.Request) {
+	if len(s.faviconICO) == 0 {
+		http.Error(w, "favicon not available", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/x-icon")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+
+	if _, err := w.Write(s.faviconICO); err != nil {
+		slog.Warn("Failed to write favicon.ico response", "error", err)
+	}
+}
+
+// iconSVGHandler serves the scalable favicon variant.
+func (s *Server) iconSVGHandler(w http.ResponseWriter, _ *http.Request) {
+	if len(s.iconSVG) == 0 {
+		http.Error(w, "icon not available", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+
+	if _, err := w.Write(s.iconSVG); err != nil {
+		slog.Warn("Failed to write icon.svg response", "error", err)
+	}
+}
+
+// appleTouchIconHandler serves the Apple touch icon variant.
+func (s *Server) appleTouchIconHandler(w http.ResponseWriter, _ *http.Request) {
+	if len(s.appleIconPNG) == 0 {
+		http.Error(w, "apple touch icon not available", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+
+	if _, err := w.Write(s.appleIconPNG); err != nil {
+		slog.Warn("Failed to write apple-touch-icon.png response", "error", err)
 	}
 }
 

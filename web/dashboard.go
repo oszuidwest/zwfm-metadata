@@ -1,20 +1,7 @@
 package web
 
-import (
-	"encoding/base64"
-	"fmt"
-)
-
-// generateFaviconDataURI creates a base64-encoded SVG favicon with the brand color.
-func generateFaviconDataURI(brandColor string) string {
-	svg := fmt.Sprintf(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%s'/><path fill='white' d='M50 30v40M35 40l15 10-15 10M65 40l-15 10 15 10'/></svg>`, brandColor)
-	encoded := base64.StdEncoding.EncodeToString([]byte(svg))
-	return "data:image/svg+xml;base64," + encoded
-}
-
 // dashboardHTML returns the HTML for the dashboard.
 func dashboardHTML(stationName, brandColor, version, buildYear string) string {
-	faviconURI := generateFaviconDataURI(brandColor)
 	return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -24,7 +11,9 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="` + stationName + ` Metadata">
-    <link rel="icon" type="image/svg+xml" href="` + faviconURI + `">
+    <link rel="icon" href="/favicon.ico" sizes="32x32">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
     <title>` + stationName + ` Metadata</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
