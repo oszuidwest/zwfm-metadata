@@ -1,5 +1,9 @@
 # ZuidWest FM Metadata
 
+<p align="center">
+  <img src="docs/icon.svg" width="120" alt="ZuidWest FM Metadata icon">
+</p>
+
 Metadata routing middleware for radio stations that routes metadata from inputs (playout software, APIs, and static text) to outputs (Icecast, files, and webhooks) with priority-based fallback and configurable delays. Originally designed for ZuidWest FM in the Netherlands.
 
 <img width="1755" alt="Scherm­afbeelding 2025-07-05 om 00 20 05" src="https://github.com/user-attachments/assets/98fd12cb-d74e-4ca2-8224-c13d4f50b397" />

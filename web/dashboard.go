@@ -12,8 +12,12 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="` + stationName + ` Metadata">
     <link rel="icon" href="/favicon.ico" sizes="32x32">
-    <link rel="icon" href="/icon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" href="/favicon.ico" sizes="32x32" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="/favicon-dark.ico" sizes="32x32" media="(prefers-color-scheme: dark)">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="/icon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" media="(prefers-color-scheme: light)">
+    <link rel="apple-touch-icon" href="/apple-touch-icon-dark.png" media="(prefers-color-scheme: dark)">
 
     <title>` + stationName + ` Metadata</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -40,9 +44,15 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
 <body class="bg-gray-100 dark:bg-slate-900 min-h-screen text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
     <div class="max-w-7xl mx-auto p-5">
         <header class="mb-8" role="banner">
-            <div>
-                <h1 class="text-4xl font-bold text-brand mb-2">` + stationName + ` Metadata</h1>
-                <p class="text-muted dark:text-gray-400 text-lg">Real-time metadata routing and synchronization</p>
+            <div class="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-center sm:gap-3 sm:text-left">
+                <picture class="sm:flex-shrink-0">
+                    <source srcset="/icon-dark.svg" media="(prefers-color-scheme: dark)">
+                    <img src="/icon.svg" alt="` + stationName + ` brand icon" class="h-12 w-12 sm:h-11 sm:w-11 rounded-md" loading="lazy">
+                </picture>
+                <div>
+                    <h1 class="text-3xl sm:text-4xl font-semibold text-brand">` + stationName + ` Metadata</h1>
+                    <p class="text-muted dark:text-gray-400 text-sm sm:text-base">Real-time metadata routing and synchronization</p>
+                </div>
             </div>
         </header>
         

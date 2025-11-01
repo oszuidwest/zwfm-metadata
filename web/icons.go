@@ -4,37 +4,44 @@ import (
 	"bytes"
 	"fmt"
 	"image"
-	"image/color"
-	"image/draw"
 	"image/png"
-	"math"
-	"strconv"
 	"strings"
 
-	"golang.org/x/image/vector"
+	"github.com/srwiley/oksvg"
+	"github.com/srwiley/rasterx"
 )
 
-// generateFaviconSVG returns an SVG favicon that reflects the configured brand color.
+const lightTemplate = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="%s"/><path d="M385.164 677a32 32 0 0 1 12.819 2.68L606.855 771h100.958c12.226-43.838 52.45-76 100.187-76 57.438 0 104 46.562 104 104s-46.562 104-104 104c-47.736 0-87.96-32.162-100.187-75.999L598.491 827a16 16 0 0 1-6.41-1.34L380.148 733H120a8 8 0 0 1-8-8v-40a8 8 0 0 1 8-8h265.164zM808 759c-22.091 0-40 17.909-40 40s17.909 40 40 40 40-17.909 40-40-17.909-40-40-40zm0-638c57.438 0 104 46.562 104 104s-46.562 104-104 104c-47.736 0-87.96-32.162-100.187-75.999L454 253v64h71.492c9.538-16.489 27.242-27.663 47.582-27.992L574 289c30.928 0 56 25.072 56 56s-25.072 56-56 56c-20.727 0-38.825-11.261-48.508-27.999L454 373v104c0 8.837-7.163 16-16 16H120a8 8 0 0 1-8-8v-40a8 8 0 0 1 8-8h278v-64H120a8 8 0 0 1-8-8v-40a8 8 0 0 1 8-8h278v-88c0-17.673 14.327-32 32-32h277.813c12.226-43.838 52.45-76 100.187-76zm0 64c-22.091 0-40 17.909-40 40s17.909 40 40 40 40-17.909 40-40-17.909-40-40-40z" fill="#FFFFFF"/><path d="M512 529c30.928 0 56 25.072 56 56s-25.072 56-56 56c-20.727 0-38.825-11.261-48.508-27.999L120 613a8 8 0 0 1-8-8v-40a8 8 0 0 1 8-8h343.492c9.682-16.738 27.78-28 48.508-28z" fill="#FFFFFF"/></svg>`
+const darkTemplate = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="%s"/><path d="M385.164 677a32 32 0 0 1 12.819 2.68L606.855 771h100.958c12.226-43.838 52.45-76 100.187-76 57.438 0 104 46.562 104 104s-46.562 104-104 104c-47.736 0-87.96-32.162-100.187-75.999L598.491 827a16 16 0 0 1-6.41-1.34L380.148 733H120a8 8 0 0 1-8-8v-40a8 8 0 0 1 8-8h265.164zM808 759c-22.091 0-40 17.909-40 40s17.909 40 40 40 40-17.909 40-40-17.909-40-40-40zm0-638c57.438 0 104 46.562 104 104s-46.562 104-104 104c-47.736 0-87.96-32.162-100.187-75.999L454 253v64h71.492c9.538-16.489 27.242-27.663 47.582-27.992L574 289c30.928 0 56 25.072 56 56s-25.072 56-56 56c-20.727 0-38.825-11.261-48.508-27.999L454 373v104c0 8.837-7.163 16-16 16H120a8 8 0 0 1-8-8v-40a8 8 0 0 1 8-8h278v-64H120a8 8 0 0 1-8-8v-40a8 8 0 0 1 8-8h278v-88c0-17.673 14.327-32 32-32h277.813c12.226-43.838 52.45-76 100.187-76zm0 64c-22.091 0-40 17.909-40 40s17.909 40 40 40 40-17.909 40-40-17.909-40-40-40z" fill="#9CA3AF"/><path d="M512 529c30.928 0 56 25.072 56 56s-25.072 56-56 56c-20.727 0-38.825-11.261-48.508-27.999L120 613a8 8 0 0 1-8-8v-40a8 8 0 0 1 8-8h343.492c9.682-16.738 27.78-28 48.508-28z" fill="#9CA3AF"/></svg>`
+
+// buildHubSVG returns the static hub icon SVG with the provided brand color.
+func buildHubSVG(brandColor string) string {
+	return fmt.Sprintf(lightTemplate, brandColor)
+}
+
+func buildHubSVGDark(brandColor string) string {
+	return fmt.Sprintf(darkTemplate, brandColor)
+}
+
+// generateFaviconSVG returns the SVG favicon string.
 func generateFaviconSVG(brandColor string) string {
-	var sb strings.Builder
-	for _, band := range flowBands {
-		if path := polygonToSVGPath(band); path != "" {
-			fmt.Fprintf(&sb, `<path d='%s' fill='white'/>`, path)
-		}
-	}
+	return buildHubSVG(brandColor)
+}
 
-	sb.WriteString(`<circle cx='50' cy='50' r='18' fill='none' stroke='white' stroke-width='6' stroke-linecap='round'/>`)
-	sb.WriteString(`<circle cx='50' cy='50' r='7' fill='white' fill-opacity='0.9'/>`)
-
-	return fmt.Sprintf(
-		`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%s'/>%s</svg>`,
-		brandColor,
-		sb.String(),
-	)
+func generateFaviconSVGDark(brandColor string) string {
+	return buildHubSVGDark(brandColor)
 }
 
 // generateFaviconICO produces an ICO container with 16px and 32px PNG layers.
 func generateFaviconICO(brandColor string) ([]byte, error) {
+	return generateFaviconICOFromSVG(buildHubSVG(brandColor))
+}
+
+func generateFaviconICODark(brandColor string) ([]byte, error) {
+	return generateFaviconICOFromSVG(buildHubSVGDark(brandColor))
+}
+
+func generateFaviconICOFromSVG(svg string) ([]byte, error) {
 	sizes := []int{16, 32}
 	type iconLayer struct {
 		size int
@@ -43,7 +50,7 @@ func generateFaviconICO(brandColor string) ([]byte, error) {
 
 	layers := make([]iconLayer, 0, len(sizes))
 	for _, size := range sizes {
-		data, err := generateIconPNG(brandColor, size)
+		data, err := generateIconPNGFromSVG(svg, size)
 		if err != nil {
 			return nil, err
 		}
@@ -52,11 +59,10 @@ func generateFaviconICO(brandColor string) ([]byte, error) {
 
 	buf := &bytes.Buffer{}
 
-	// ICONDIR header
 	buf.Write([]byte{0x00, 0x00})              // Reserved
 	buf.Write([]byte{0x01, 0x00})              // Type (icon)
 	buf.Write([]byte{byte(len(layers)), 0x00}) // Image count
-	dataOffset := 6 + 16*len(layers)           // Initial offset after header and entries
+	dataOffset := 6 + 16*len(layers)
 	for _, layer := range layers {
 		size := layer.size
 		width := byte(size)
@@ -66,12 +72,12 @@ func generateFaviconICO(brandColor string) ([]byte, error) {
 			height = 0
 		}
 
-		buf.WriteByte(width)          // Width
-		buf.WriteByte(height)         // Height
-		buf.WriteByte(0x00)           // Color palette count (none)
-		buf.WriteByte(0x00)           // Reserved
-		buf.Write([]byte{0x01, 0x00}) // Color planes
-		buf.Write([]byte{0x20, 0x00}) // Bits per pixel (32)
+		buf.WriteByte(width)
+		buf.WriteByte(height)
+		buf.WriteByte(0x00)
+		buf.WriteByte(0x00)
+		buf.Write([]byte{0x01, 0x00})
+		buf.Write([]byte{0x20, 0x00})
 
 		length := uint32(len(layer.data))
 		buf.Write([]byte{byte(length), byte(length >> 8), byte(length >> 16), byte(length >> 24)})
@@ -91,12 +97,25 @@ func generateFaviconICO(brandColor string) ([]byte, error) {
 }
 
 // generateAppleTouchIconPNG produces the 180×180 PNG used by iOS devices.
+
 func generateAppleTouchIconPNG(brandColor string) ([]byte, error) {
-	return generateIconPNG(brandColor, 180)
+	return generateIconPNGFromSVG(buildHubSVG(brandColor), 180)
+}
+
+func generateAppleTouchIconPNGD(brandColor string) ([]byte, error) {
+	return generateIconPNGFromSVG(buildHubSVGDark(brandColor), 180)
 }
 
 func generateIconPNG(brandColor string, size int) ([]byte, error) {
-	img, err := renderIconImage(brandColor, size)
+	return generateIconPNGFromSVG(buildHubSVG(brandColor), size)
+}
+
+func generateIconPNGDark(brandColor string, size int) ([]byte, error) {
+	return generateIconPNGFromSVG(buildHubSVGDark(brandColor), size)
+}
+
+func generateIconPNGFromSVG(svg string, size int) ([]byte, error) {
+	img, err := renderIconImage(svg, size)
 	if err != nil {
 		return nil, err
 	}
@@ -109,162 +128,23 @@ func generateIconPNG(brandColor string, size int) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func renderIconImage(brandColor string, size int) (*image.NRGBA, error) {
+func renderIconImage(svg string, size int) (*image.RGBA, error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("invalid icon size: %d", size)
 	}
 
-	brandColorRGBA, err := parseHexColor(brandColor)
+	icon, err := oksvg.ReadIconStream(strings.NewReader(svg))
 	if err != nil {
 		return nil, err
 	}
 
-	img := image.NewNRGBA(image.Rect(0, 0, size, size))
-	scaleX := float32(size) / canonicalSize
-	scaleY := float32(size) / canonicalSize
+	icon.SetTarget(0, 0, float64(size), float64(size))
 
-	brandSrc := image.NewUniform(brandColorRGBA)
-	drawPolygon(img, brandSrc, scaleX, scaleY, backgroundCircle)
+	img := image.NewRGBA(image.Rect(0, 0, size, size))
+	scanner := rasterx.NewScannerGV(size, size, img, img.Bounds())
+	raster := rasterx.NewDasher(size, size, scanner)
 
-	whiteSrc := image.NewUniform(color.RGBA{255, 255, 255, 255})
-	for _, band := range flowBands {
-		drawPolygon(img, whiteSrc, scaleX, scaleY, band)
-	}
-
-	drawPolygon(img, whiteSrc, scaleX, scaleY, outerRingCircle)
-	drawPolygon(img, brandSrc, scaleX, scaleY, innerRingCircle)
-
-	coreSrc := image.NewUniform(color.RGBA{255, 255, 255, 230})
-	drawPolygon(img, coreSrc, scaleX, scaleY, coreCircle)
+	icon.Draw(raster, 1.0)
 
 	return img, nil
-}
-
-func parseHexColor(hex string) (color.RGBA, error) {
-	h := strings.TrimPrefix(hex, "#")
-	if len(h) != 6 {
-		return color.RGBA{}, fmt.Errorf("invalid hex color: %s", hex)
-	}
-
-	r, err := strconv.ParseUint(h[0:2], 16, 8)
-	if err != nil {
-		return color.RGBA{}, err
-	}
-	g, err := strconv.ParseUint(h[2:4], 16, 8)
-	if err != nil {
-		return color.RGBA{}, err
-	}
-	b, err := strconv.ParseUint(h[4:6], 16, 8)
-	if err != nil {
-		return color.RGBA{}, err
-	}
-
-	return color.RGBA{uint8(r), uint8(g), uint8(b), 255}, nil
-}
-
-const (
-	canonicalSize  float32 = 100.0
-	circleSegments         = 256
-	centerX        float32 = 50
-	centerY        float32 = 50
-)
-
-type canonicalPoint struct {
-	x float32
-	y float32
-}
-
-var (
-	backgroundCircle = buildCirclePoints(circleSegments, centerX, centerY, 45)
-	outerRingCircle  = buildCirclePoints(circleSegments, centerX, centerY, 18)
-	innerRingCircle  = buildCirclePoints(circleSegments, centerX, centerY, 12.5)
-	coreCircle       = buildCirclePoints(circleSegments, centerX, centerY, 7)
-	flowBands        = [][]canonicalPoint{
-		buildFlowBand(-118, -22),
-		buildFlowBand(62, 158),
-	}
-)
-
-func buildCirclePoints(segments int, centerX, centerY, radius float32) []canonicalPoint {
-	points := make([]canonicalPoint, segments)
-	for i := 0; i < segments; i++ {
-		angle := 2 * math.Pi * float64(i) / float64(segments)
-		points[i] = canonicalPoint{
-			x: centerX + radius*float32(math.Cos(angle)),
-			y: centerY + radius*float32(math.Sin(angle)),
-		}
-	}
-	return points
-}
-
-func drawPolygon(dst draw.Image, src image.Image, scaleX, scaleY float32, points []canonicalPoint) {
-	if len(points) < 3 {
-		return
-	}
-
-	r := vector.NewRasterizer(dst.Bounds().Dx(), dst.Bounds().Dy())
-	r.MoveTo(points[0].x*scaleX, points[0].y*scaleY)
-	for _, p := range points[1:] {
-		r.LineTo(p.x*scaleX, p.y*scaleY)
-	}
-	r.ClosePath()
-	r.Draw(dst, dst.Bounds(), src, image.Point{})
-}
-
-func buildFlowBand(startDeg, endDeg float64) []canonicalPoint {
-	const (
-		outerRadius = 41.0
-		innerRadius = 29.0
-		gapDeg      = 14.0
-		steps       = 160
-	)
-
-	start := degreesToRadians(startDeg)
-	end := degreesToRadians(endDeg)
-
-	points := make([]canonicalPoint, 0, 2*steps+2)
-
-	outerStart := start + degreesToRadians(gapDeg)
-	outerEnd := end - degreesToRadians(gapDeg)
-	if outerEnd <= outerStart {
-		outerEnd = outerStart + 0.01
-	}
-
-	for i := 0; i <= steps; i++ {
-		t := float64(i) / float64(steps)
-		angle := outerStart + (outerEnd-outerStart)*t
-		points = append(points, canonicalPoint{
-			x: centerX + float32(outerRadius*math.Cos(angle)),
-			y: centerY + float32(outerRadius*math.Sin(angle)),
-		})
-	}
-
-	for i := 0; i <= steps; i++ {
-		t := float64(i) / float64(steps)
-		angle := outerEnd - (outerEnd-outerStart)*t
-		points = append(points, canonicalPoint{
-			x: centerX + float32(innerRadius*math.Cos(angle)),
-			y: centerY + float32(innerRadius*math.Sin(angle)),
-		})
-	}
-
-	return points
-}
-
-func degreesToRadians(deg float64) float64 {
-	return deg * math.Pi / 180.0
-}
-
-func polygonToSVGPath(points []canonicalPoint) string {
-	if len(points) == 0 {
-		return ""
-	}
-
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "M%.2f %.2f", points[0].x, points[0].y)
-	for _, p := range points[1:] {
-		fmt.Fprintf(&sb, "L%.2f %.2f", p.x, p.y)
-	}
-	sb.WriteString("Z")
-	return sb.String()
 }
