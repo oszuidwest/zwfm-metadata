@@ -138,7 +138,11 @@ func main() {
 	}()
 
 	// Start web server
-	server := web.NewServer(appConfig.WebServerPort, router, appConfig.StationName, appConfig.BrandColor)
+	server, err := web.NewServer(appConfig.WebServerPort, router, appConfig.StationName, appConfig.BrandColor)
+	if err != nil {
+		slog.Error("Failed to initialize web server", "error", err)
+		os.Exit(1)
+	}
 	go func() {
 		if err := server.Start(ctx); err != nil {
 			slog.Error("Web server encountered an error", "error", err)
