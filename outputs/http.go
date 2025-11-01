@@ -14,7 +14,6 @@ import (
 	"zwfm-metadata/utils"
 
 	"github.com/gorilla/mux"
-	"gopkg.in/yaml.v3"
 )
 
 // HTTPOutput handles serving metadata via GET endpoints.
@@ -159,8 +158,6 @@ func (h *HTTPOutput) generateStandardResponse(metadata *utils.UniversalMetadata,
 	switch strings.ToLower(responseType) {
 	case "xml":
 		return h.encodeResponse(h.buildXMLString(metadata), responseType)
-	case "yaml":
-		return h.encodeResponse(metadata, responseType)
 	case "plaintext", "text":
 		return h.encodeResponse(metadata.FormattedMetadata, responseType)
 	case "json", "":
@@ -178,9 +175,6 @@ func (h *HTTPOutput) encodeResponse(data interface{}, responseType string) ([]by
 			return []byte(str), "application/xml", nil
 		}
 		fallthrough // Complex data falls back to JSON
-	case "yaml":
-		encoded, err := yaml.Marshal(data)
-		return encoded, "application/x-yaml", err
 	case "plaintext", "text":
 		if str, ok := data.(string); ok {
 			return []byte(str), "text/plain", nil

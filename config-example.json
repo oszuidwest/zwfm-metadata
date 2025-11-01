@@ -195,10 +195,6 @@
             "responseType": "plaintext"
           },
           {
-            "path": "/api/nowplaying.yaml",
-            "responseType": "yaml"
-          },
-          {
             "path": "/api/custom.json",
             "responseType": "json",
             "payloadMapping": {

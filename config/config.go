@@ -110,7 +110,7 @@ type HTTPOutputConfig struct {
 // HTTPEndpoint represents a single HTTP endpoint configuration.
 type HTTPEndpoint struct {
 	Path           string                 `json:"path"`
-	ResponseType   string                 `json:"responseType,omitempty"` // json, xml, plaintext, yaml, custom
+	ResponseType   string                 `json:"responseType,omitempty"` // json, xml, plaintext, custom
 	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
 }
 
