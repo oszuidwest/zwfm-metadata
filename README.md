@@ -591,8 +591,8 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 - Updates both FM RDS RadioText and Streaming Output Song
 - Uses StereoTool's undocumented JSON API. Field ID's might be different in other versions
 - Currently validated with StereoTool version 10.71
-- Recommended for use with the RDS formatter for 64-character compliance
-- Automatically handles EBU Latin character set (0-255 range) for proper RDS encoding
+- **REQUIRED:** Must be used with the RDS formatter for proper character encoding
+- **StereoTool Bug Workaround:** The RDS formatter converts all extended Latin characters (é, ø, ß, etc.) to pure ASCII as a temporary workaround for a bug in StereoTool's RDS implementation. While the EBU Latin character set (0x80-0xFF) should be valid for RDS, StereoTool doesn't handle these characters correctly. The formatter transliterates them (é→e, ø→o, ß→ss) to ensure compatibility until this bug is fixed
 
 ### Custom Payload Mapping
 
@@ -823,7 +823,12 @@ Radio Data System formatter (64-character limit)
 
 Smart processing for RDS compliance:
 - **HTML cleaning**: Strips all HTML tags (`<b>`, `<i>`, `<span>`, `<script>`) and decodes entities (`&amp;` → `&`, `&lt;` → `<`, `&quot;` → `"`, `&shy;` → soft hyphen, `&nbsp;` → non-breaking space)
-- **Character filtering**: Keeps only the EBU Latin character set (0-255 range) for RDS compatibility. Characters outside this range, such as zero-width spaces (`\u200B`, `\u200C`, `\u200D`) and other Unicode characters, are removed
+- **ASCII transliteration**: Converts all extended Latin characters to pure ASCII (0-127 range) as a workaround for a StereoTool RDS bug. This is temporary until StereoTool properly supports the EBU Latin character set. Examples:
+  - `BLØF` → `BLOF`
+  - `Café` → `Cafe`
+  - `Straße` → `Strasse`
+  - And 150+ other European characters
+
 - **Single-line output**: Converts newlines (`\n`, `\r`) and tabs (`\t`) to spaces for RDS displays
 - **Smart truncation** (applied in order until under 64 chars):
   1. Progressively removes content in parentheses from right to left: `Artist - Song (Important Info) (Extended Mix)` → `Artist - Song (Important Info)`
