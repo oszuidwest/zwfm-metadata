@@ -1,5 +1,6 @@
 # Build stage
-FROM golang:1.25-alpine AS builder
+# Using Alpine 3.22 due to moby/buildkit#6400 - QEMU emulation fails with 3.23's busybox
+FROM golang:1.25-alpine3.22 AS builder
 
 LABEL org.opencontainers.image.source="https://github.com/oszuidwest/zwfm-metadata"
 LABEL org.opencontainers.image.description="Metadata handling middleware for ZuidWest FM"
