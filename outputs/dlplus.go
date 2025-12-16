@@ -102,20 +102,24 @@ func (o *DLPlusOutput) buildDLPlusContent(formattedText string, metadata *core.M
 func (o *DLPlusOutput) addDLPlusTags(content *strings.Builder, formattedText string, metadata *core.Metadata) {
 	// Add artist tag if artist exists and can be found in formatted text
 	if metadata.Artist != "" {
-		if pos := strings.Index(formattedText, metadata.Artist); pos >= 0 {
+		if bytePos := strings.Index(formattedText, metadata.Artist); bytePos >= 0 {
+			// Convert byte position to rune position for DL Plus
+			runePos := utf8.RuneCountInString(formattedText[:bytePos])
 			length := utf8.RuneCountInString(metadata.Artist) - 1
 			if length >= 0 {
-				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeArtist, pos, length)
+				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeArtist, runePos, length)
 			}
 		}
 	}
 
 	// Add title tag if title exists and can be found in formatted text
 	if metadata.Title != "" {
-		if pos := strings.Index(formattedText, metadata.Title); pos >= 0 {
+		if bytePos := strings.Index(formattedText, metadata.Title); bytePos >= 0 {
+			// Convert byte position to rune position for DL Plus
+			runePos := utf8.RuneCountInString(formattedText[:bytePos])
 			length := utf8.RuneCountInString(metadata.Title) - 1
 			if length >= 0 {
-				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeTitle, pos, length)
+				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeTitle, runePos, length)
 			}
 		}
 	}
