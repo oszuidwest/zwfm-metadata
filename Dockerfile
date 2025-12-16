@@ -33,7 +33,8 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -o zwfm-metadata .
 
 # Runtime stage
-FROM alpine:3.23
+# Alpine 3.22 used due to moby/buildkit#6400 - QEMU emulation fails with 3.23's busybox
+FROM alpine:3.22
 
 # Install packages + create user + setup directories
 RUN apk --no-cache add ca-certificates tzdata wget && \
