@@ -560,7 +560,8 @@ The output automatically:
 - Sets DL_PLUS_ITEM_RUNNING=1 for tracks (with artist+title), 0 for station/program info
 - Alternates DL_PLUS_ITEM_TOGGLE between 0 and 1 on each update to indicate content changes
 - Handles prefixes and suffixes correctly
-- Works with any formatters applied to the text
+
+**Important**: Do not use formatters with DL Plus output. Formatters that modify the text (like `rds`, `uppercase`, `lowercase`) will cause artist/title detection to fail because the original metadata no longer matches the transformed text. DAB/DAB+ supports Extended ASCII characters, so the `rds` formatter's ASCII transliteration is not needed.
 
 Note: ODR-PadEnc automatically re-reads DL files before each transmission.
 
