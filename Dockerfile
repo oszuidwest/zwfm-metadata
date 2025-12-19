@@ -1,6 +1,5 @@
 # Build stage
-# Using Alpine 3.22 due to moby/buildkit#6400 - QEMU emulation fails with 3.23's busybox
-FROM golang:1.25-alpine3.22 AS builder
+FROM golang:1.25-alpine3.23 AS builder
 
 LABEL org.opencontainers.image.source="https://github.com/oszuidwest/zwfm-metadata"
 LABEL org.opencontainers.image.description="Metadata handling middleware for ZuidWest FM"
@@ -34,8 +33,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -o zwfm-metadata .
 
 # Runtime stage
-# Alpine 3.22 used due to moby/buildkit#6400 - QEMU emulation fails with 3.23's busybox
-FROM alpine:3.22
+FROM alpine:3.23
 
 # Install packages + create user + setup directories
 RUN apk --no-cache add ca-certificates tzdata wget && \
