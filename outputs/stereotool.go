@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 )
@@ -31,13 +32,14 @@ func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *S
 	return output
 }
 
-// SendFormattedMetadata updates StereoTool's RadioText fields.
-func (i *StereoToolOutput) SendFormattedMetadata(formattedText string) {
-	if !i.HasChanged(formattedText) {
+// Send updates StereoTool's RadioText fields.
+func (i *StereoToolOutput) Send(st *core.StructuredText) {
+	text := st.String()
+	if !i.HasChanged(text) {
 		return
 	}
 
-	if err := i.sendToStereoTool(formattedText); err != nil {
+	if err := i.sendToStereoTool(text); err != nil {
 		slog.Error("Failed to update StereoTool's RadioText", "output", i.GetName(), "error", err)
 	}
 }

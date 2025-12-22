@@ -1,18 +1,15 @@
-// Package formatters provides text formatting capabilities for metadata strings,
-// including various case transformations and specialized formatting for radio systems.
+// Package formatters provides text formatting capabilities for metadata,
+// including case transformations and specialized formatting for radio systems.
 package formatters
 
 import (
 	"fmt"
+
+	"zwfm-metadata/core"
 )
 
-// Formatter transforms metadata text for output-specific requirements.
-type Formatter interface {
-	Format(text string) string
-}
-
 // FormatterFactory creates new Formatter instances for the registry.
-type FormatterFactory func() Formatter
+type FormatterFactory func() core.Formatter
 
 var formatterRegistry = map[string]FormatterFactory{}
 
@@ -22,7 +19,7 @@ func RegisterFormatter(name string, factory FormatterFactory) {
 }
 
 // GetFormatter creates a formatter instance by name from the registry.
-func GetFormatter(name string) (Formatter, error) {
+func GetFormatter(name string) (core.Formatter, error) {
 	factory, exists := formatterRegistry[name]
 	if !exists {
 		return nil, fmt.Errorf("unknown formatter: %s", name)

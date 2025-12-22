@@ -7,26 +7,16 @@ import (
 	"sync"
 )
 
-// PassiveComponent provides a Start() method for passive components.
-//
-// In this system, inputs provide metadata and can be "available" or "unavailable".
-// Some inputs (like URLInput) need background tasks to fetch data and maintain availability.
-// Others are passive:
-//   - TextInput: Always available with static metadata
-//   - DynamicInput: Available when it receives HTTP updates
-//   - All outputs: Just wait to process metadata from the MetadataRouter
-//
-// Passive components don't need to do anything in Start() except wait for shutdown.
-// They embed PassiveComponent to get this behavior.
+// PassiveComponent provides a no-op Start method for components without background tasks.
 type PassiveComponent struct{}
 
-// Start waits for context cancellation (shutdown signal).
+// Start blocks until context cancellation.
 func (p *PassiveComponent) Start(ctx context.Context) error {
 	<-ctx.Done()
 	return nil
 }
 
-// InputBase provides common fields and methods for all input types.
+// InputBase provides the base implementation for metadata input sources.
 type InputBase struct {
 	name        string
 	metadata    *Metadata
@@ -34,7 +24,7 @@ type InputBase struct {
 	mu          sync.RWMutex
 }
 
-// NewInputBase creates a new InputBase.
+// NewInputBase initializes an InputBase with the given name.
 func NewInputBase(name string) *InputBase {
 	return &InputBase{
 		name:        name,
@@ -42,12 +32,12 @@ func NewInputBase(name string) *InputBase {
 	}
 }
 
-// GetName returns the input name.
+// GetName implements the Input interface.
 func (b *InputBase) GetName() string {
 	return b.name
 }
 
-// GetMetadata returns the current metadata (including expired metadata).
+// GetMetadata returns the current metadata, which may be expired.
 func (b *InputBase) GetMetadata() *Metadata {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -58,14 +48,14 @@ func (b *InputBase) GetMetadata() *Metadata {
 	return nil
 }
 
-// Subscribe adds a channel to receive metadata updates.
+// Subscribe registers a channel to receive metadata change notifications.
 func (b *InputBase) Subscribe(ch chan<- *Metadata) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.subscribers = append(b.subscribers, ch)
 }
 
-// Unsubscribe removes a channel from receiving metadata updates.
+// Unsubscribe removes a previously registered subscription channel.
 func (b *InputBase) Unsubscribe(ch chan<- *Metadata) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -75,7 +65,7 @@ func (b *InputBase) Unsubscribe(ch chan<- *Metadata) {
 	})
 }
 
-// SetMetadata updates the metadata and notifies subscribers only when content changes.
+// SetMetadata stores new metadata and notifies subscribers if content changed.
 func (b *InputBase) SetMetadata(metadata *Metadata) {
 	if metadata != nil {
 		metadata.Title = html.UnescapeString(metadata.Title)
@@ -115,13 +105,13 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 	}
 }
 
-// ChangeDetector handles change detection for outputs.
+// ChangeDetector tracks the last sent value to prevent duplicate updates.
 type ChangeDetector struct {
 	lastValue string
 	mu        sync.RWMutex
 }
 
-// HasChanged reports whether the value has changed and updates the stored value.
+// HasChanged compares and stores the new value, returning true if it differs.
 func (c *ChangeDetector) HasChanged(newValue string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -133,21 +123,21 @@ func (c *ChangeDetector) HasChanged(newValue string) bool {
 	return false
 }
 
-// GetCurrentValue returns the current stored value.
+// GetCurrentValue retrieves the last stored value.
 func (c *ChangeDetector) GetCurrentValue() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.lastValue
 }
 
-// SetCurrentValue sets the current stored value.
+// SetCurrentValue updates the stored value without triggering change detection.
 func (c *ChangeDetector) SetCurrentValue(value string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.lastValue = value
 }
 
-// OutputBase provides common fields for all output types.
+// OutputBase provides the base implementation for metadata output destinations.
 type OutputBase struct {
 	name           string
 	inputs         []Input
@@ -155,34 +145,34 @@ type OutputBase struct {
 	delay          int
 }
 
-// NewOutputBase creates a new OutputBase.
+// NewOutputBase initializes an OutputBase with the given name.
 func NewOutputBase(name string) *OutputBase {
 	return &OutputBase{
 		name: name,
 	}
 }
 
-// GetName returns the output name.
+// GetName implements the Output interface.
 func (b *OutputBase) GetName() string {
 	return b.name
 }
 
-// SetInputs sets the inputs for this output.
+// SetInputs implements the Output interface.
 func (b *OutputBase) SetInputs(inputs []Input) {
 	b.inputs = inputs
 }
 
-// HasChanged reports whether the value has changed.
+// HasChanged delegates to the embedded ChangeDetector.
 func (b *OutputBase) HasChanged(newValue string) bool {
 	return b.changeDetector.HasChanged(newValue)
 }
 
-// SetDelay sets the delay for this output.
+// SetDelay configures the output delay in seconds.
 func (b *OutputBase) SetDelay(delay int) {
 	b.delay = delay
 }
 
-// GetDelay returns the delay for this output.
+// GetDelay implements the Output interface.
 func (b *OutputBase) GetDelay() int {
 	return b.delay
 }

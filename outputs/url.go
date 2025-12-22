@@ -11,6 +11,7 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
@@ -78,29 +79,14 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 	return output
 }
 
-// SendFormattedMetadata sends metadata via the configured HTTP method.
-func (u *URLOutput) SendFormattedMetadata(formattedText string) {
-	if !u.HasChanged(formattedText) {
+// Send sends metadata via the configured HTTP method.
+func (u *URLOutput) Send(st *core.StructuredText) {
+	text := st.String()
+	if !u.HasChanged(text) {
 		return
 	}
 
-	minimalMetadata := &core.Metadata{
-		Title:     formattedText,
-		UpdatedAt: time.Now(),
-	}
-	payload := utils.ConvertMetadata(formattedText, minimalMetadata, "", "")
-
-	u.sendRequest(*payload)
-}
-
-// SendEnhancedMetadata sends full metadata via the configured HTTP method.
-func (u *URLOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
-	if !u.HasChanged(formattedText) {
-		return
-	}
-
-	payload := utils.ConvertMetadata(formattedText, metadata, inputName, inputType)
-
+	payload := utils.ConvertStructuredText(st)
 	u.sendRequest(*payload)
 }
 

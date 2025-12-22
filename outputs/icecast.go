@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 )
@@ -31,13 +32,14 @@ func NewIcecastOutput(name string, settings config.IcecastOutputConfig) *Icecast
 	return output
 }
 
-// SendFormattedMetadata updates the Icecast server with new metadata.
-func (i *IcecastOutput) SendFormattedMetadata(formattedText string) {
-	if !i.HasChanged(formattedText) {
+// Send updates the Icecast server with new metadata.
+func (i *IcecastOutput) Send(st *core.StructuredText) {
+	text := st.String()
+	if !i.HasChanged(text) {
 		return
 	}
 
-	if err := i.sendToIcecast(formattedText); err != nil {
+	if err := i.sendToIcecast(text); err != nil {
 		slog.Error("Failed to update Icecast server", "output", i.GetName(), "error", err)
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// bufferPool is a pool of reusable bytes.Buffer objects for template processing
+// bufferPool reduces allocations during template processing.
 var bufferPool = sync.Pool{
 	New: func() any {
 		return new(bytes.Buffer)
@@ -21,7 +21,7 @@ type PayloadMapper struct {
 	mapping map[string]any
 }
 
-// NewPayloadMapper creates a new payload mapper with the given mapping configuration.
+// NewPayloadMapper initializes a mapper with the given template configuration.
 func NewPayloadMapper(mapping map[string]any) *PayloadMapper {
 	return &PayloadMapper{
 		mapping: mapping,
@@ -39,7 +39,7 @@ func (pm *PayloadMapper) MapPayload(data any) map[string]any {
 	return result
 }
 
-// processMapping recursively processes the mapping configuration.
+// processMapping walks the mapping tree and applies templates to string values.
 func (pm *PayloadMapper) processMapping(mapping map[string]any, result map[string]any, data any) {
 	for key, value := range mapping {
 		switch v := value.(type) {

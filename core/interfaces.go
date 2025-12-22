@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Metadata holds song information including artist, title, duration, and expiration.
+// Metadata carries song information with optional expiration for time-sensitive sources.
 type Metadata struct {
 	Name      string
 	SongID    string
@@ -19,7 +19,7 @@ type Metadata struct {
 	ExpiresAt *time.Time
 }
 
-// Input defines metadata source behavior for the router.
+// Input provides metadata from a source and notifies subscribers of changes.
 type Input interface {
 	Start(ctx context.Context) error
 	GetName() string
@@ -28,22 +28,21 @@ type Input interface {
 	Unsubscribe(ch chan<- *Metadata)
 }
 
-// Output defines metadata destination behavior for the router.
+// Output receives formatted metadata and delivers it to a destination.
 type Output interface {
 	Start(ctx context.Context) error
 	GetName() string
 	GetDelay() int
 	SetInputs(inputs []Input)
-	SendFormattedMetadata(formattedText string)
+	Send(st *StructuredText)
 }
 
-// EnhancedOutput extends Output for destinations needing full metadata details.
-type EnhancedOutput interface {
-	Output
-	SendEnhancedMetadata(formattedText string, metadata *Metadata, inputName, inputType string)
-}
-
-// RouteRegistrar extends Output for destinations exposing HTTP endpoints.
+// RouteRegistrar allows outputs to register HTTP handlers on the web server.
 type RouteRegistrar interface {
 	RegisterRoutes(mux *http.ServeMux)
+}
+
+// Formatter modifies StructuredText fields before output delivery.
+type Formatter interface {
+	Format(st *StructuredText)
 }

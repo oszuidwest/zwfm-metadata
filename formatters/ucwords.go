@@ -5,17 +5,19 @@ import (
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"zwfm-metadata/core"
 )
 
 // UcwordsFormatter capitalizes the first letter of each word (title case).
 type UcwordsFormatter struct{}
 
-// Format returns text with title case applied.
-func (u *UcwordsFormatter) Format(text string) string {
+// Format transforms artist and title fields to title case.
+func (u *UcwordsFormatter) Format(st *core.StructuredText) {
 	caser := cases.Title(language.English)
-	return caser.String(strings.ToLower(text))
+	st.Artist = caser.String(strings.ToLower(st.Artist))
+	st.Title = caser.String(strings.ToLower(st.Title))
 }
 
 func init() {
-	RegisterFormatter("ucwords", func() Formatter { return &UcwordsFormatter{} })
+	RegisterFormatter("ucwords", func() core.Formatter { return &UcwordsFormatter{} })
 }

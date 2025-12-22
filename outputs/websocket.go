@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
-	"time"
+
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
@@ -55,31 +55,14 @@ func (w *WebSocketOutput) RegisterRoutes(mux *http.ServeMux) {
 	slog.Info("WebSocket route registered", "output", w.GetName(), "path", w.settings.Path)
 }
 
-// SendFormattedMetadata broadcasts metadata to all connected WebSocket clients.
-func (w *WebSocketOutput) SendFormattedMetadata(formattedText string) {
-	if !w.HasChanged(formattedText) {
+// Send broadcasts metadata to all connected WebSocket clients.
+func (w *WebSocketOutput) Send(st *core.StructuredText) {
+	text := st.String()
+	if !w.HasChanged(text) {
 		return
 	}
 
-	msg := &utils.UniversalMetadata{
-		Type:              "metadata_update",
-		FormattedMetadata: formattedText,
-		Title:             formattedText,
-		UpdatedAt:         time.Now(),
-	}
-
-	// Store current metadata
-	w.storeCurrentMetadata(msg)
-	w.broadcastMessage(*msg)
-}
-
-// SendEnhancedMetadata broadcasts full metadata to all connected WebSocket clients.
-func (w *WebSocketOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
-	if !w.HasChanged(formattedText) {
-		return
-	}
-
-	msg := utils.ConvertMetadataWithType(formattedText, metadata, "metadata_update", inputName, inputType)
+	msg := utils.ConvertStructuredTextWithType(st, "metadata_update")
 
 	w.storeCurrentMetadata(msg)
 	w.broadcastMessage(*msg)

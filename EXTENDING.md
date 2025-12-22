@@ -19,11 +19,10 @@ This guide covers how to add new inputs, outputs, and formatters to the ZuidWest
   - [Output Types](#output-types)
   - [Step 1: Create Output Structure](#step-1-create-output-structure)
   - [Step 2: Implement Required Methods](#step-2-implement-required-methods-1)
-  - [Step 3: Enhanced Output (Optional)](#step-3-enhanced-output-optional)
-  - [Step 4: HTTP Route Registration (Optional)](#step-4-http-route-registration-optional)
-  - [Step 5: Add Configuration Support](#step-5-add-configuration-support)
-  - [Step 6: Register Output](#step-6-register-output)
-  - [Step 7: Test Your Output](#step-7-test-your-output)
+  - [Step 3: HTTP Route Registration (Optional)](#step-3-http-route-registration-optional)
+  - [Step 4: Add Configuration Support](#step-4-add-configuration-support)
+  - [Step 5: Register Output](#step-5-register-output)
+  - [Step 6: Test Your Output](#step-6-test-your-output)
 - [Adding a New Formatter](#adding-a-new-formatter)
   - [Step 1: Create Formatter Structure](#step-1-create-formatter-structure)
   - [Step 2: Register Formatter](#step-2-register-formatter)
@@ -39,9 +38,9 @@ This guide covers how to add new inputs, outputs, and formatters to the ZuidWest
 - [Interface Reference](#interface-reference)
   - [core.Input Interface](#coreinput-interface)
   - [core.Output Interface](#coreoutput-interface)
-  - [core.EnhancedOutput Interface](#coreenhancedoutput-interface)
   - [core.RouteRegistrar Interface](#corerouteregistrar-interface)
-  - [formatters.Formatter Interface](#formattersformatter-interface)
+  - [core.Formatter Interface](#coreformatter-interface)
+  - [core.StructuredText Type](#corestructuredtext-type)
 - [Design Patterns](#design-patterns)
   - [Base Class Embedding](#base-class-embedding)
   - [PassiveComponent](#passivecomponent)
@@ -90,16 +89,16 @@ The codebase provides several utilities you can use:
   settings, err := utils.ParseJSONSettings[YourConfigType](cfg.Settings)
   ```
 
-- **Universal Metadata Converter**: `utils.ConvertMetadata` for consistent metadata handling
+- **Universal Metadata Converter**: `utils.ConvertStructuredText` for consistent metadata handling
   ```go
   import "zwfm-metadata/utils"
-  
-  // Convert core.Metadata to universal format
-  universal := utils.ConvertMetadata(formattedText, metadata, inputName, inputType)
-  
+
+  // Convert core.StructuredText to universal format
+  universal := utils.ConvertStructuredText(st)
+
   // Convert with a specific type field
-  universal := utils.ConvertMetadataWithType(formattedText, metadata, "webhook", inputName, inputType)
-  
+  universal := utils.ConvertStructuredTextWithType(st, "webhook")
+
   // Convert to template data for payload mapping
   templateData := universal.ToTemplateData()
   ```
@@ -120,9 +119,10 @@ The codebase provides several utilities you can use:
 6. **HTTP Requests**: Always use `http.NewRequestWithContext` with proper timeout context
 7. **HTTP Body Closing**: Always use `defer resp.Body.Close() //nolint:errcheck`
 8. **Error Response Reading**: For HTTP errors, read response body for debugging information
-9. **HasChanged() Check**: Always call `HasChanged()` in `SendFormattedMetadata` methods
+9. **HasChanged() Check**: Always call `HasChanged()` in `Send` methods using `st.String()`
 10. **Logging Fields**: Include "output" or "input" field in all log messages for easy filtering
 11. **Context Timeouts**: Use context with timeout for all HTTP requests and external operations
+12. **StructuredText**: All outputs receive `*core.StructuredText` which provides Artist, Title, and position calculations
 
 ## Adding a New Input
 
@@ -289,9 +289,14 @@ Outputs implement the `core.Output` interface and typically embed `core.OutputBa
 
 ### Output Types
 
-- **Basic Outputs**: Receive only formatted text
-- **Enhanced Outputs**: Receive full metadata details (implement `core.EnhancedOutput`)
-- **HTTP Outputs**: Can register HTTP routes (implement `core.RouteRegistrar`)
+All outputs receive `*core.StructuredText` which provides:
+- Separate `Artist` and `Title` fields (for field-level access)
+- `String()` method for combined formatted text
+- `ArtistRange()` and `TitleRange()` for position calculations (useful for DL Plus)
+- Access to original metadata via `Original` field
+
+- **Standard Outputs**: Process metadata and send to destinations
+- **HTTP Outputs**: Can also register HTTP routes (implement `core.RouteRegistrar`)
 
 ### Step 1: Create Output Structure
 
@@ -339,15 +344,30 @@ func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCus
 ### Step 2: Implement Required Methods
 
 ```go
-// SendFormattedMetadata implements the Output interface
-func (m *MyCustomOutput) SendFormattedMetadata(formattedText string) {
+// Send implements the Output interface
+func (m *MyCustomOutput) Send(st *core.StructuredText) {
+    // Get formatted text for change detection
+    text := st.String()
+
     // IMPORTANT: Check if value changed to avoid unnecessary operations
-    if !m.HasChanged(formattedText) {
+    if !m.HasChanged(text) {
         return
     }
-    
+
+    // Access individual fields if needed
+    artist := st.Artist
+    title := st.Title
+
+    // Access original metadata for additional fields
+    if st.Original != nil {
+        songID := st.Original.SongID
+        duration := st.Original.Duration
+        _ = songID   // use as needed
+        _ = duration // use as needed
+    }
+
     // Send to your custom destination
-    if err := m.sendToDestination(formattedText); err != nil {
+    if err := m.sendToDestination(text); err != nil {
         // IMPORTANT: Log error but don't return it
         slog.Error("Failed to send to custom output", "output", m.GetName(), "error", err)
     }
@@ -357,125 +377,56 @@ func (m *MyCustomOutput) sendToDestination(metadata string) error {
     // Create request with context timeout for HTTP operations
     ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
     defer cancel()
-    
+
     // Example HTTP request (if applicable)
     req, err := http.NewRequestWithContext(ctx, "POST", m.settings.URL, strings.NewReader(metadata))
     if err != nil {
         return fmt.Errorf("failed to create request: %w", err)
     }
-    
+
     req.Header.Set("Content-Type", "text/plain")
     req.Header.Set("User-Agent", utils.UserAgent())
-    
+
     resp, err := m.httpClient.Do(req)
     if err != nil {
         return fmt.Errorf("request failed: %w", err)
     }
     defer resp.Body.Close() //nolint:errcheck
-    
+
     if resp.StatusCode >= 400 {
         // Read error response for debugging
         bodyBytes, _ := io.ReadAll(resp.Body)
         return fmt.Errorf("server error: status %d, response: %s", resp.StatusCode, string(bodyBytes))
     }
-    
+
     slog.Debug("Sent to custom output", "output", m.GetName(), "metadata", metadata)
     return nil
 }
 ```
 
-### Step 3: Enhanced Output (Optional)
-
-If your output needs access to full metadata details:
-
-```go
-// SendEnhancedMetadata implements the EnhancedOutput interface
-func (m *MyCustomOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
-    if !m.HasChanged(formattedText) {
-        return
-    }
-    
-    // Use universal metadata converter for consistent field mapping
-    universal := utils.ConvertMetadataWithType(formattedText, metadata, "custom", inputName, inputType)
-    
-    if err := m.sendUniversalPayload(*universal); err != nil {
-        slog.Error("Failed to send enhanced payload", "output", m.GetName(), "error", err)
-    }
-}
-
-func (m *MyCustomOutput) sendUniversalPayload(metadata utils.UniversalMetadata) error {
-    // Access all metadata fields without manual mapping
-    payload := map[string]interface{}{
-        "type":             metadata.Type,
-        "title":            metadata.Title,
-        "artist":           metadata.Artist,
-        "duration":         metadata.Duration,
-        "updated_at":       metadata.UpdatedAt,
-        "expires_at":       metadata.ExpiresAt,
-        "formatted":        metadata.FormattedMetadata,
-        "source":           metadata.Source,
-        "source_type":      metadata.SourceType,
-    }
-    
-    // Marshal to JSON
-    jsonData, err := json.Marshal(payload)
-    if err != nil {
-        return fmt.Errorf("failed to marshal payload: %w", err)
-    }
-    
-    // Create request with context timeout
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
-    
-    req, err := http.NewRequestWithContext(ctx, "POST", m.settings.URL, bytes.NewBuffer(jsonData))
-    if err != nil {
-        return fmt.Errorf("failed to create request: %w", err)
-    }
-    
-    req.Header.Set("Content-Type", "application/json")
-    req.Header.Set("User-Agent", utils.UserAgent())
-    
-    resp, err := m.httpClient.Do(req)
-    if err != nil {
-        return fmt.Errorf("request failed: %w", err)
-    }
-    defer resp.Body.Close() //nolint:errcheck
-    
-    if resp.StatusCode >= 400 {
-        // Read error response for debugging
-        bodyBytes, _ := io.ReadAll(resp.Body)
-        return fmt.Errorf("server error: status %d, response: %s", resp.StatusCode, string(bodyBytes))
-    }
-    
-    return nil
-}
-```
-
-### Step 4: HTTP Route Registration (Optional)
+### Step 3: HTTP Route Registration (Optional)
 
 If your output needs to expose HTTP endpoints:
 
 ```go
-import (
-    "net/http"
-    "github.com/gorilla/mux"
-)
+import "net/http"
 
 // RegisterRoutes implements the RouteRegistrar interface
-func (m *MyCustomOutput) RegisterRoutes(router *mux.Router) {
-    router.HandleFunc("/output/"+m.GetName(), m.handleHTTPRequest).Methods("GET")
+func (m *MyCustomOutput) RegisterRoutes(mux *http.ServeMux) {
+    mux.HandleFunc("GET /output/"+m.GetName(), m.handleHTTPRequest)
+    slog.Info("Route registered", "output", m.GetName(), "path", "/output/"+m.GetName())
 }
 
 func (m *MyCustomOutput) handleHTTPRequest(w http.ResponseWriter, r *http.Request) {
     // Get current metadata
     currentMetadata := m.GetCurrentMetadata()
-    
+
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(currentMetadata)
 }
 ```
 
-### Step 5: Add Configuration Support
+### Step 4: Add Configuration Support
 
 Add your configuration struct to `config/config.go`:
 
@@ -489,7 +440,7 @@ type MyCustomOutputConfig struct {
 }
 ```
 
-### Step 6: Register Output
+### Step 5: Register Output
 
 In `main.go`, add a case for your new output type in the `createOutput` function:
 
@@ -502,7 +453,7 @@ case "mycustom":
     return outputs.NewMyCustomOutput(cfg.Name, *settings), nil
 ```
 
-### Step 7: Test Your Output
+### Step 6: Test Your Output
 
 Create a test configuration:
 
@@ -526,7 +477,7 @@ Create a test configuration:
 
 ## Adding a New Formatter
 
-Formatters implement the simple `formatters.Formatter` interface.
+Formatters implement the `core.Formatter` interface and transform `StructuredText` fields in place.
 
 ### Step 1: Create Formatter Structure
 
@@ -536,15 +487,21 @@ Create a new file in the `formatters/` directory:
 // formatters/myformatter.go
 package formatters
 
-import "strings"
+import (
+    "strings"
+
+    "zwfm-metadata/core"
+)
 
 // MyCustomFormatter applies custom text transformation
 type MyCustomFormatter struct{}
 
 // Format implements the Formatter interface
-func (m *MyCustomFormatter) Format(text string) string {
-    // Apply your custom transformation
-    return m.customTransform(text)
+// It modifies the StructuredText fields in place
+func (m *MyCustomFormatter) Format(st *core.StructuredText) {
+    // Transform Artist and Title fields separately
+    st.Artist = m.customTransform(st.Artist)
+    st.Title = m.customTransform(st.Title)
 }
 
 func (m *MyCustomFormatter) customTransform(text string) string {
@@ -561,8 +518,8 @@ Add an `init()` function to register your formatter:
 
 ```go
 func init() {
-    RegisterFormatter("mycustom", func() Formatter { 
-        return &MyCustomFormatter{} 
+    RegisterFormatter("mycustom", func() core.Formatter {
+        return &MyCustomFormatter{}
     })
 }
 ```
@@ -756,7 +713,7 @@ Usage:
 
 ### Example: Discord Output
 
-A Discord webhook output with enhanced metadata support:
+A Discord webhook output with rich embed support:
 
 ```go
 // outputs/discord.go
@@ -771,7 +728,7 @@ import (
     "log/slog"
     "net/http"
     "time"
-    
+
     "zwfm-metadata/config"
     "zwfm-metadata/core"
     "zwfm-metadata/utils"
@@ -794,73 +751,56 @@ func NewDiscordOutput(name string, settings config.DiscordOutputConfig) *Discord
     return output
 }
 
-func (d *DiscordOutput) SendFormattedMetadata(formattedText string) {
-    if !d.HasChanged(formattedText) {
+func (d *DiscordOutput) Send(st *core.StructuredText) {
+    text := st.String()
+    if !d.HasChanged(text) {
         return
     }
-    
-    embed := map[string]interface{}{
-        "title":       "Now Playing",
-        "description": formattedText,
-        "color":       0x00ff00,
-        "timestamp":   time.Now().Format(time.RFC3339),
-    }
-    
-    if err := d.sendWebhook(embed); err != nil {
-        slog.Error("Failed to send to Discord", "output", d.GetName(), "error", err)
-    }
-}
 
-func (d *DiscordOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
-    if !d.HasChanged(formattedText) {
-        return
-    }
-    
-    // Use universal converter for consistent metadata handling
-    universal := utils.ConvertMetadataWithType(formattedText, metadata, "discord", inputName, inputType)
-    
+    // Build Discord embed fields from StructuredText
     fields := []map[string]interface{}{}
-    
-    if universal.Artist != "" {
+
+    if st.Artist != "" {
         fields = append(fields, map[string]interface{}{
             "name":   "Artist",
-            "value":  universal.Artist,
+            "value":  st.Artist,
             "inline": true,
         })
     }
-    
-    if universal.Title != "" {
+
+    if st.Title != "" {
         fields = append(fields, map[string]interface{}{
             "name":   "Title",
-            "value":  universal.Title,
+            "value":  st.Title,
             "inline": true,
         })
     }
-    
-    if universal.Duration != "" {
+
+    // Access original metadata for additional fields
+    if st.Original != nil && st.Original.Duration != "" {
         fields = append(fields, map[string]interface{}{
             "name":   "Duration",
-            "value":  universal.Duration,
+            "value":  st.Original.Duration,
             "inline": true,
         })
     }
-    
-    if universal.Source != "" {
+
+    if st.InputName != "" {
         fields = append(fields, map[string]interface{}{
             "name":   "Source",
-            "value":  universal.Source,
+            "value":  st.InputName,
             "inline": true,
         })
     }
-    
+
     embed := map[string]interface{}{
-        "title":       "🎵 Now Playing",
-        "description": universal.FormattedMetadata,
+        "title":       "Now Playing",
+        "description": text,
         "color":       0x00ff00,
         "fields":      fields,
-        "timestamp":   universal.UpdatedAt.Format(time.RFC3339),
+        "timestamp":   time.Now().Format(time.RFC3339),
     }
-    
+
     if err := d.sendWebhook(embed); err != nil {
         slog.Error("Failed to send to Discord", "output", d.GetName(), "error", err)
     }
@@ -870,36 +810,36 @@ func (d *DiscordOutput) sendWebhook(embed map[string]interface{}) error {
     payload := map[string]interface{}{
         "embeds": []map[string]interface{}{embed},
     }
-    
+
     jsonData, err := json.Marshal(payload)
     if err != nil {
         return err
     }
-    
+
     // Create request with context timeout
     ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
     defer cancel()
-    
+
     req, err := http.NewRequestWithContext(ctx, "POST", d.settings.WebhookURL, bytes.NewBuffer(jsonData))
     if err != nil {
         return err
     }
-    
+
     req.Header.Set("Content-Type", "application/json")
     req.Header.Set("User-Agent", utils.UserAgent())
-    
+
     resp, err := d.httpClient.Do(req)
     if err != nil {
         return err
     }
     defer resp.Body.Close() //nolint:errcheck
-    
+
     if resp.StatusCode >= 400 {
         // Read error response for debugging
         bodyBytes, _ := io.ReadAll(resp.Body)
         return fmt.Errorf("discord webhook returned status %d, response: %s", resp.StatusCode, string(bodyBytes))
     }
-    
+
     return nil
 }
 ```
@@ -915,29 +855,35 @@ package formatters
 import (
     "regexp"
     "strings"
+
+    "zwfm-metadata/core"
 )
 
 type SanitizeFormatter struct {
-    badWords []string
-    regex    *regexp.Regexp
+    regex *regexp.Regexp
 }
 
 func NewSanitizeFormatter() *SanitizeFormatter {
     badWords := []string{
         "explicit1", "explicit2", // Add actual words to filter
     }
-    
+
     // Create regex pattern
     pattern := "(?i)\\b(" + strings.Join(badWords, "|") + ")\\b"
     regex := regexp.MustCompile(pattern)
-    
+
     return &SanitizeFormatter{
-        badWords: badWords,
-        regex:    regex,
+        regex: regex,
     }
 }
 
-func (s *SanitizeFormatter) Format(text string) string {
+// Format sanitizes Artist and Title fields by replacing bad words
+func (s *SanitizeFormatter) Format(st *core.StructuredText) {
+    st.Artist = s.sanitize(st.Artist)
+    st.Title = s.sanitize(st.Title)
+}
+
+func (s *SanitizeFormatter) sanitize(text string) string {
     // Replace bad words with asterisks
     return s.regex.ReplaceAllStringFunc(text, func(match string) string {
         return strings.Repeat("*", len(match))
@@ -945,7 +891,7 @@ func (s *SanitizeFormatter) Format(text string) string {
 }
 
 func init() {
-    RegisterFormatter("sanitize", func() Formatter {
+    RegisterFormatter("sanitize", func() core.Formatter {
         return NewSanitizeFormatter()
     })
 }
@@ -969,20 +915,11 @@ type Input interface {
 
 ```go
 type Output interface {
-    Start(ctx context.Context) error                    // Start processing
-    GetName() string                                    // Return output name
-    GetDelay() int                                      // Return delay in seconds
-    SetInputs(inputs []Input)                           // Set input list
-    SendFormattedMetadata(formattedText string)         // Process metadata
-}
-```
-
-### core.EnhancedOutput Interface
-
-```go
-type EnhancedOutput interface {
-    Output
-    SendEnhancedMetadata(formattedText string, metadata *Metadata, inputName, inputType string)
+    Start(ctx context.Context) error    // Start processing
+    GetName() string                    // Return output name
+    GetDelay() int                      // Return delay in seconds
+    SetInputs(inputs []Input)           // Set input list
+    Send(st *StructuredText)            // Process structured metadata
 }
 ```
 
@@ -990,16 +927,45 @@ type EnhancedOutput interface {
 
 ```go
 type RouteRegistrar interface {
-    RegisterRoutes(router *mux.Router)    // Register HTTP routes
+    RegisterRoutes(mux *http.ServeMux)  // Register HTTP routes
 }
 ```
 
-### formatters.Formatter Interface
+### core.Formatter Interface
 
 ```go
 type Formatter interface {
-    Format(text string) string    // Transform text
+    Format(st *StructuredText)          // Transform fields in place
 }
+```
+
+### core.StructuredText Type
+
+```go
+type StructuredText struct {
+    // Original metadata for access to SongID, Duration, UpdatedAt, etc.
+    Original *Metadata
+
+    // Text fields (transformed by formatters)
+    Prefix    string
+    Artist    string
+    Separator string  // Default: " - "
+    Title     string
+    Suffix    string
+
+    // Source information
+    InputName string
+    InputType string
+}
+
+// Key methods:
+func (st *StructuredText) String() string                        // Combined text
+func (st *StructuredText) Len() int                              // Length in runes
+func (st *StructuredText) ArtistRange() (start, length int, ok bool)  // Position for DL Plus
+func (st *StructuredText) TitleRange() (start, length int, ok bool)   // Position for DL Plus
+func (st *StructuredText) HasContent() bool                      // Has artist or title
+func (st *StructuredText) IsRunning() bool                       // Has both artist and title
+func (st *StructuredText) Clone() *StructuredText                // Deep copy
 ```
 
 ## Design Patterns
@@ -1035,8 +1001,9 @@ This is typically used for:
 Outputs should always use `HasChanged()` to avoid unnecessary operations:
 
 ```go
-func (o *MyOutput) SendFormattedMetadata(formattedText string) {
-    if !o.HasChanged(formattedText) {
+func (o *MyOutput) Send(st *core.StructuredText) {
+    text := st.String()
+    if !o.HasChanged(text) {
         return  // Skip if metadata hasn't changed
     }
     // Process the update...
@@ -1045,34 +1012,23 @@ func (o *MyOutput) SendFormattedMetadata(formattedText string) {
 
 ### Universal Metadata Converter
 
-Use `utils.ConvertMetadata` instead of manually mapping fields from `core.Metadata`. This ensures consistency across all outputs and makes maintenance easier:
+Use `utils.ConvertStructuredText` instead of manually mapping fields. This ensures consistency across all outputs and makes maintenance easier:
 
 ```go
 import "zwfm-metadata/utils"
 
-// Instead of manual field mapping:
-// payload := CustomPayload{
-//     FormattedMetadata: formattedText,
-//     SongID:            metadata.SongID,
-//     Title:             metadata.Title,
-//     Artist:            metadata.Artist,
-//     Duration:          metadata.Duration,
-//     UpdatedAt:         metadata.UpdatedAt,
-//     ExpiresAt:         metadata.ExpiresAt,
-// }
-
-// Use the universal converter:
-func (o *MyOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
-    if !o.HasChanged(formattedText) {
+func (o *MyOutput) Send(st *core.StructuredText) {
+    text := st.String()
+    if !o.HasChanged(text) {
         return
     }
-    
-    // Convert to universal format
-    universal := utils.ConvertMetadata(formattedText, metadata, inputName, inputType)
-    
+
+    // Convert to universal format for JSON APIs, webhooks, etc.
+    universal := utils.ConvertStructuredText(st)
+
     // Or with a type field:
-    universal := utils.ConvertMetadataWithType(formattedText, metadata, "myoutput", inputName, inputType)
-    
+    universal := utils.ConvertStructuredTextWithType(st, "myoutput")
+
     // Send the universal metadata
     o.sendMetadata(*universal)
 }
@@ -1107,18 +1063,19 @@ func NewMyOutput(name string, settings config.MyOutputConfig) *MyOutput {
     return output
 }
 
-func (o *MyOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
-    if !o.HasChanged(formattedText) {
+func (o *MyOutput) Send(st *core.StructuredText) {
+    text := st.String()
+    if !o.HasChanged(text) {
         return
     }
-    
+
     // Convert to universal format
-    universal := utils.ConvertMetadata(formattedText, metadata, inputName, inputType)
-    
+    universal := utils.ConvertStructuredText(st)
+
     // Convert to template data and apply mapping
     templateData := universal.ToTemplateData()
     mappedPayload := o.payloadMapper.MapPayload(templateData)
-    
+
     // Send mapped payload
     o.sendPayload(mappedPayload)
 }
@@ -1144,12 +1101,13 @@ Configuration example with payload mapping:
 
 1. **Inputs**: Can return errors from Start(), should log errors during operation
 2. **Outputs**: Should NEVER return errors from Send methods, only log them
-3. **Formatters**: Should handle errors gracefully and return valid text
-4. **Metadata Conversion**: Use `utils.ConvertMetadata` instead of manual field mapping
+3. **Formatters**: Should handle errors gracefully and transform fields safely
+4. **Metadata Conversion**: Use `utils.ConvertStructuredText` instead of manual field mapping
 
 ```go
 // Good - Output error handling
-func (o *MyOutput) SendFormattedMetadata(text string) {
+func (o *MyOutput) Send(st *core.StructuredText) {
+    text := st.String()
     if !o.HasChanged(text) {
         return
     }
@@ -1159,8 +1117,8 @@ func (o *MyOutput) SendFormattedMetadata(text string) {
 }
 
 // Bad - Don't do this in outputs
-func (o *MyOutput) SendFormattedMetadata(text string) error {
-    return o.send(text)  // DON'T return errors!
+func (o *MyOutput) Send(st *core.StructuredText) error {
+    return o.send(st.String())  // DON'T return errors!
 }
 ```
 
@@ -1215,7 +1173,7 @@ The base classes handle thread safety for:
 
 Your code should:
 - Use the provided SetMetadata/GetMetadata methods
-- Use `utils.ConvertMetadata` for consistent metadata handling
+- Use `utils.ConvertStructuredText` for consistent metadata handling
 - Not directly access shared state
 - Use mutexes for any additional shared state you add
 
@@ -1305,12 +1263,14 @@ curl "http://localhost:9000/input/dynamic?input=test-input&title=Test&artist=Art
        return nil, fmt.Errorf("URL is required")
    }
    ```
-8. **Universal Metadata**: Use `utils.ConvertMetadata` instead of manual field mapping
-9. **Payload Mapping**: Use `utils.NewPayloadMapper` for template-based mapping
-10. **HTTP Requests**: Use `http.NewRequestWithContext` with proper timeout context
-11. **HTTP Responses**: Always close response bodies with `defer resp.Body.Close() //nolint:errcheck`
-12. **Error Response Debugging**: Read response body for HTTP errors to aid debugging
-13. **Change Detection**: Always call `HasChanged()` before processing in outputs
-14. **Structured Logging**: Include "output"/"input" field in log messages for filtering
+8. **StructuredText**: Access `st.Artist` and `st.Title` for field-level operations
+9. **Universal Metadata**: Use `utils.ConvertStructuredText` for JSON/webhook payloads
+10. **Payload Mapping**: Use `utils.NewPayloadMapper` for template-based mapping
+11. **HTTP Requests**: Use `http.NewRequestWithContext` with proper timeout context
+12. **HTTP Responses**: Always close response bodies with `defer resp.Body.Close() //nolint:errcheck`
+13. **Error Response Debugging**: Read response body for HTTP errors to aid debugging
+14. **Change Detection**: Always call `HasChanged()` with `st.String()` before processing
+15. **Structured Logging**: Include "output"/"input" field in log messages for filtering
+16. **Position Calculations**: Use `st.ArtistRange()` and `st.TitleRange()` for DL Plus-style protocols
 
 This guide should help you create robust extensions for the ZuidWest FM metadata system. Happy coding!

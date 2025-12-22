@@ -1,15 +1,20 @@
 package formatters
 
-import "strings"
+import (
+	"strings"
 
-// UppercaseFormatter converts all characters to uppercase.
+	"zwfm-metadata/core"
+)
+
+// UppercaseFormatter converts artist and title to uppercase.
 type UppercaseFormatter struct{}
 
-// Format returns text in uppercase.
-func (u *UppercaseFormatter) Format(text string) string {
-	return strings.ToUpper(text)
+// Format transforms artist and title fields to uppercase.
+func (u *UppercaseFormatter) Format(st *core.StructuredText) {
+	st.Artist = strings.ToUpper(st.Artist)
+	st.Title = strings.ToUpper(st.Title)
 }
 
 func init() {
-	RegisterFormatter("uppercase", func() Formatter { return &UppercaseFormatter{} })
+	RegisterFormatter("uppercase", func() core.Formatter { return &UppercaseFormatter{} })
 }
