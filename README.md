@@ -214,7 +214,7 @@ All output types support:
 - `inputs` (required) - Array of input names in priority order
 - `formatters` (optional) - Array of formatter names to apply
 
-**Note on Templates**: Template functions (like `{{.title | upper}}`) are only available in outputs with template support (URL, HTTP, WebSocket). Other outputs (File, Icecast, StereoTool, DL Plus) receive only the formatted text after formatters are applied and cannot use template syntax.
+**Note on Templates**: Template functions (like `{{.title | upper}}`) are only available in outputs with template support (URL, HTTP, WebSocket). Other outputs use the formatted text directly and cannot use template syntax in their configuration.
 
 #### Icecast Output
 
@@ -247,7 +247,7 @@ Updates streaming server metadata
 
 #### File Output
 
-Writes to the filesystem. Receives formatted text only (no template support).
+Writes metadata to the filesystem.
 
 ```json
 {
@@ -530,7 +530,7 @@ Generates DL Plus format for DAB/DAB+ transmission
   "type": "dlplus",
   "name": "dlplus-output",
   "inputs": ["radio-live", "nowplaying-api", "default-text"],
-  "formatters": [],
+  "formatters": ["ucwords"],
   "settings": {
     "delay": 0,
     "filename": "/tmp/dlplus.txt"
@@ -926,7 +926,8 @@ Set `"debug": true` in `config.json` for detailed logging.
 
 See `EXTENDING.md` for detailed guidance on adding new inputs, outputs, and formatters. Key patterns include:
 
-- Using `utils.ConvertMetadata()` for consistent metadata handling across outputs
+- All outputs receive `*core.StructuredText` with full metadata access
+- Using `utils.ConvertStructuredText()` for JSON/webhook payloads
 - Embedding base types (`core.InputBase`, `core.OutputBase`) for common functionality
 - Using `core.PassiveComponent` for components without background tasks
 
