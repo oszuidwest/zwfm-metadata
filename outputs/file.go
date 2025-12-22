@@ -4,6 +4,7 @@ package outputs
 
 import (
 	"log/slog"
+
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
@@ -26,21 +27,17 @@ func NewFileOutput(name string, settings config.FileOutputConfig) *FileOutput {
 	return output
 }
 
-// SendFormattedMetadata writes metadata to the configured file.
-func (f *FileOutput) SendFormattedMetadata(formattedText string) {
-	if !f.HasChanged(formattedText) {
+// Send writes metadata to the configured file.
+func (f *FileOutput) Send(st *core.StructuredText) {
+	text := st.String()
+	if !f.HasChanged(text) {
 		return
 	}
 
-	if err := f.writeToFile(formattedText); err != nil {
+	if err := utils.WriteFile(f.settings.Filename, []byte(text)); err != nil {
 		slog.Error("Failed to write metadata to file", "output", f.GetName(), "error", err)
+		return
 	}
-}
 
-func (f *FileOutput) writeToFile(metadata string) error {
-	if err := utils.WriteFile(f.settings.Filename, []byte(metadata)); err != nil {
-		return err
-	}
-	slog.Debug("Successfully wrote to file", "filename", f.settings.Filename, "metadata", metadata)
-	return nil
+	slog.Debug("Successfully wrote to file", "filename", f.settings.Filename, "metadata", text)
 }

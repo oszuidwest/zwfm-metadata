@@ -1,15 +1,20 @@
 package formatters
 
-import "strings"
+import (
+	"strings"
 
-// LowercaseFormatter converts all characters to lowercase.
+	"zwfm-metadata/core"
+)
+
+// LowercaseFormatter converts artist and title to lowercase.
 type LowercaseFormatter struct{}
 
-// Format returns text in lowercase.
-func (l *LowercaseFormatter) Format(text string) string {
-	return strings.ToLower(text)
+// Format transforms artist and title fields to lowercase.
+func (l *LowercaseFormatter) Format(st *core.StructuredText) {
+	st.Artist = strings.ToLower(st.Artist)
+	st.Title = strings.ToLower(st.Title)
 }
 
 func init() {
-	RegisterFormatter("lowercase", func() Formatter { return &LowercaseFormatter{} })
+	RegisterFormatter("lowercase", func() core.Formatter { return &LowercaseFormatter{} })
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
@@ -26,7 +27,7 @@ type HTTPOutput struct {
 	endpointMappers map[string]*utils.PayloadMapper // path -> pre-compiled mapper
 }
 
-// NewHTTPOutput creates an HTTPOutput with the given name and settings.
+// NewHTTPOutput initializes an HTTP endpoint server with the given settings.
 func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 	output := &HTTPOutput{
 		OutputBase:      core.NewOutputBase(name),
@@ -44,7 +45,7 @@ func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 	return output
 }
 
-// RegisterRoutes registers HTTP GET endpoints on the server mux.
+// RegisterRoutes implements RouteRegistrar to expose metadata via HTTP GET.
 func (h *HTTPOutput) RegisterRoutes(mux *http.ServeMux) {
 	for _, endpoint := range h.settings.Endpoints {
 		mux.HandleFunc("GET "+endpoint.Path, func(w http.ResponseWriter, req *http.Request) {
@@ -55,28 +56,14 @@ func (h *HTTPOutput) RegisterRoutes(mux *http.ServeMux) {
 	}
 }
 
-// SendFormattedMetadata stores metadata for serving via HTTP endpoints.
-func (h *HTTPOutput) SendFormattedMetadata(formattedText string) {
-	if !h.HasChanged(formattedText) {
+// Send implements Output by caching metadata for HTTP endpoint responses.
+func (h *HTTPOutput) Send(st *core.StructuredText) {
+	text := st.String()
+	if !h.HasChanged(text) {
 		return
 	}
 
-	minimalMetadata := &core.Metadata{
-		Title:     formattedText, // Use formatted text as title fallback
-		UpdatedAt: time.Now(),
-	}
-
-	httpMetadata := utils.ConvertMetadata(formattedText, minimalMetadata, "", "")
-	h.storeCurrentMetadata(httpMetadata)
-}
-
-// SendEnhancedMetadata stores full metadata for serving via HTTP endpoints.
-func (h *HTTPOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
-	if !h.HasChanged(formattedText) {
-		return
-	}
-
-	httpMetadata := utils.ConvertMetadata(formattedText, metadata, inputName, inputType)
+	httpMetadata := utils.ConvertStructuredText(st)
 	h.storeCurrentMetadata(httpMetadata)
 }
 

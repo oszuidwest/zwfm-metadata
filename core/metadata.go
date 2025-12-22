@@ -18,7 +18,7 @@ func (m *Metadata) IsAvailable() bool {
 	return m != nil && m.Title != "" && !m.IsExpired()
 }
 
-// Clone creates a deep copy of the metadata.
+// Clone duplicates the metadata including a copy of the expiration time.
 func (m *Metadata) Clone() *Metadata {
 	if m == nil {
 		return nil
@@ -41,10 +41,10 @@ func (m *Metadata) Clone() *Metadata {
 	return clone
 }
 
-// FormatString returns a formatted string representation.
+// FormatString returns "Artist - Title" or just Title, empty if no content.
 func (m *Metadata) FormatString() string {
 	if m == nil || m.Title == "" {
-		return "" // Return empty if no title - makes input "unavailable"
+		return ""
 	}
 
 	if m.Artist != "" && m.Title != "" {

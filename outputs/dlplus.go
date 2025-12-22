@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"unicode/utf8"
+
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
@@ -24,7 +24,7 @@ type DLPlusOutput struct {
 	toggleValue bool // Alternates between true/false to indicate content changes
 }
 
-// NewDLPlusOutput creates a DLPlusOutput with the given name and settings.
+// NewDLPlusOutput initializes a DL Plus file writer with the given settings.
 func NewDLPlusOutput(name string, settings config.DLPlusOutputConfig) *DLPlusOutput {
 	output := &DLPlusOutput{
 		OutputBase: core.NewOutputBase(name),
@@ -34,18 +34,16 @@ func NewDLPlusOutput(name string, settings config.DLPlusOutputConfig) *DLPlusOut
 	return output
 }
 
-// SendFormattedMetadata is unused; DLPlusOutput implements EnhancedOutput.
-func (o *DLPlusOutput) SendFormattedMetadata(_ string) {}
-
-// SendEnhancedMetadata writes metadata with DL Plus tags to the configured file.
-func (o *DLPlusOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
-	if !o.HasChanged(formattedText) {
+// Send writes metadata with DL Plus tags to the configured file.
+func (o *DLPlusOutput) Send(st *core.StructuredText) {
+	text := st.String()
+	if !o.HasChanged(text) {
 		return
 	}
 
-	content := o.buildDLPlusContent(formattedText, metadata)
+	content := o.buildDLPlusContent(st)
 
-	if err := o.writeToFile(content); err != nil {
+	if err := utils.WriteFile(o.settings.Filename, []byte(content)); err != nil {
 		slog.Error("Failed to write DL Plus file", "output", o.GetName(), "filename", o.settings.Filename, "error", err)
 		return
 	}
@@ -53,13 +51,11 @@ func (o *DLPlusOutput) SendEnhancedMetadata(formattedText string, metadata *core
 	slog.Debug("Wrote DL Plus", "output", o.GetName(), "filename", o.settings.Filename)
 }
 
-func (o *DLPlusOutput) buildDLPlusContent(formattedText string, metadata *core.Metadata) string {
+func (o *DLPlusOutput) buildDLPlusContent(st *core.StructuredText) string {
 	var content strings.Builder
 
 	content.WriteString("##### parameters { #####\n")
 	content.WriteString("DL_PLUS=1\n")
-
-	isRunning := metadata.Artist != "" && metadata.Title != ""
 
 	o.toggleValue = !o.toggleValue
 	toggleInt := 0
@@ -67,48 +63,33 @@ func (o *DLPlusOutput) buildDLPlusContent(formattedText string, metadata *core.M
 		toggleInt = 1
 	}
 
-	o.addDLPlusTags(&content, formattedText, metadata)
+	o.addDLPlusTags(&content, st)
 
 	runningInt := 0
-	if isRunning {
+	if st.IsRunning() {
 		runningInt = 1
 	}
+
 	fmt.Fprintf(&content, "DL_PLUS_ITEM_RUNNING=%d\n", runningInt)
 	fmt.Fprintf(&content, "DL_PLUS_ITEM_TOGGLE=%d\n", toggleInt)
 
 	content.WriteString("##### parameters } #####\n")
-	content.WriteString(formattedText)
+	content.WriteString(st.String())
 
 	return content.String()
 }
 
-func (o *DLPlusOutput) addDLPlusTags(content *strings.Builder, formattedText string, metadata *core.Metadata) {
-	if metadata.Artist != "" {
-		if bytePos := strings.Index(formattedText, metadata.Artist); bytePos >= 0 {
-			runePos := utf8.RuneCountInString(formattedText[:bytePos])
-			length := utf8.RuneCountInString(metadata.Artist) - 1
-			if length >= 0 {
-				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeArtist, runePos, length)
-			}
-		}
+func (o *DLPlusOutput) addDLPlusTags(content *strings.Builder, st *core.StructuredText) {
+	if start, length, ok := st.ArtistRange(); ok && length >= 0 {
+		fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeArtist, start, length)
 	}
 
-	if metadata.Title != "" {
-		if bytePos := strings.Index(formattedText, metadata.Title); bytePos >= 0 {
-			runePos := utf8.RuneCountInString(formattedText[:bytePos])
-			length := utf8.RuneCountInString(metadata.Title) - 1
-			if length >= 0 {
-				fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeTitle, runePos, length)
-			}
-		}
+	if start, length, ok := st.TitleRange(); ok && length >= 0 {
+		fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeTitle, start, length)
 	}
 }
 
-func (o *DLPlusOutput) writeToFile(content string) error {
-	return utils.WriteFile(o.settings.Filename, []byte(content))
-}
-
-// Start creates the initial empty output file.
+// Start creates an empty output file for ODR-PadEnc to monitor.
 func (o *DLPlusOutput) Start(_ context.Context) error {
 	slog.Info("DL Plus output writing to file", "output", o.GetName(), "filename", o.settings.Filename)
 
@@ -119,7 +100,7 @@ func (o *DLPlusOutput) Start(_ context.Context) error {
 	return nil
 }
 
-// Stop performs cleanup when the output shuts down.
+// Stop handles graceful shutdown of the DL Plus output.
 func (o *DLPlusOutput) Stop() error {
 	slog.Debug("Stopped DL Plus output", "output", o.GetName(), "filename", o.settings.Filename)
 	return nil

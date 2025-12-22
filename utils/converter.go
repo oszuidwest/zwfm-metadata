@@ -2,6 +2,7 @@ package utils
 
 import (
 	"time"
+
 	"zwfm-metadata/core"
 )
 
@@ -19,26 +20,39 @@ type UniversalMetadata struct {
 	SourceType        string     `json:"source_type,omitzero" xml:"source_type,omitempty"`
 }
 
-// ConvertMetadata converts core.Metadata to UniversalMetadata.
-func ConvertMetadata(formattedText string, metadata *core.Metadata, source, sourceType string) *UniversalMetadata {
-	return &UniversalMetadata{
-		FormattedMetadata: formattedText,
-		SongID:            metadata.SongID,
-		Title:             metadata.Title,
-		Artist:            metadata.Artist,
-		Duration:          metadata.Duration,
-		UpdatedAt:         metadata.UpdatedAt,
-		ExpiresAt:         metadata.ExpiresAt,
-		Source:            source,
-		SourceType:        sourceType,
+// ConvertStructuredText converts a StructuredText to UniversalMetadata.
+func ConvertStructuredText(st *core.StructuredText) *UniversalMetadata {
+	if st == nil {
+		return &UniversalMetadata{
+			UpdatedAt: time.Now(),
+		}
 	}
+
+	um := &UniversalMetadata{
+		FormattedMetadata: st.String(),
+		Title:             st.Title,
+		Artist:            st.Artist,
+		Source:            st.InputName,
+		SourceType:        st.InputType,
+		UpdatedAt:         time.Now(),
+	}
+
+	// Copy additional fields from Original metadata if available
+	if st.Original != nil {
+		um.SongID = st.Original.SongID
+		um.Duration = st.Original.Duration
+		um.UpdatedAt = st.Original.UpdatedAt
+		um.ExpiresAt = st.Original.ExpiresAt
+	}
+
+	return um
 }
 
-// ConvertMetadataWithType converts core.Metadata to UniversalMetadata with a specific type.
-func ConvertMetadataWithType(formattedText string, metadata *core.Metadata, metadataType, source, sourceType string) *UniversalMetadata {
-	universal := ConvertMetadata(formattedText, metadata, source, sourceType)
-	universal.Type = metadataType
-	return universal
+// ConvertStructuredTextWithType converts StructuredText with a specific type.
+func ConvertStructuredTextWithType(st *core.StructuredText, metadataType string) *UniversalMetadata {
+	um := ConvertStructuredText(st)
+	um.Type = metadataType
+	return um
 }
 
 // ToTemplateData converts UniversalMetadata to template data for payload mapping.

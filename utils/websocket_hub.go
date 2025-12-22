@@ -29,7 +29,7 @@ type WebSocketHub struct {
 	writeTimeout time.Duration
 }
 
-// NewWebSocketHub creates a new WebSocket hub.
+// NewWebSocketHub initializes a hub with default ping/pong timeouts.
 func NewWebSocketHub(name string) *WebSocketHub {
 	return &WebSocketHub{
 		name:    name,
@@ -144,7 +144,7 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	slog.Debug("WebSocket client disconnected", "hub", h.name, "clients", clientCount)
 }
 
-// Broadcast sends data to all connected clients
+// Broadcast sends data to all connected clients.
 func (h *WebSocketHub) Broadcast(data any) {
 	h.mu.RLock()
 	clients := slices.Collect(maps.Keys(h.clients))

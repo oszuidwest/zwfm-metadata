@@ -16,7 +16,7 @@ import (
 
 const cacheControlNoCache = "public, max-age=0, must-revalidate"
 
-// Server represents the HTTP server.
+// Server provides the HTTP dashboard, API endpoints, and WebSocket connections.
 type Server struct {
 	port             int
 	router           *core.MetadataRouter
@@ -32,7 +32,7 @@ type Server struct {
 	darkAppleIconPNG []byte
 }
 
-// OutputStatus represents the status of an output.
+// OutputStatus holds output configuration and state for the dashboard API.
 type OutputStatus struct {
 	Name         string   `json:"name"`
 	Type         string   `json:"type"`
@@ -42,7 +42,7 @@ type OutputStatus struct {
 	CurrentInput string   `json:"currentInput,omitzero"`
 }
 
-// NewServer creates a new server instance.
+// NewServer initializes the server with pre-generated favicons and a dashboard WebSocket hub.
 func NewServer(port int, router *core.MetadataRouter, stationName, brandColor string) (*Server, error) {
 	faviconICO, err := generateFaviconICO(brandColor)
 	if err != nil {
@@ -87,7 +87,7 @@ func NewServer(port int, router *core.MetadataRouter, stationName, brandColor st
 	return s, nil
 }
 
-// Start starts the HTTP server.
+// Start launches the HTTP server and blocks until context cancellation.
 func (s *Server) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 
@@ -126,7 +126,7 @@ func (s *Server) Start(ctx context.Context) error {
 	return s.server.Shutdown(context.Background())
 }
 
-// noIndexMiddleware adds headers to prevent search engine indexing on all routes
+// noIndexMiddleware adds headers to prevent search engine indexing.
 func (s *Server) noIndexMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet, noimageindex")
@@ -134,7 +134,7 @@ func (s *Server) noIndexMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// dynamicInputHandler handles the /input/dynamic endpoint.
+// dynamicInputHandler accepts metadata updates via HTTP GET parameters.
 func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 	inputName := req.URL.Query().Get("input")
 	title := req.URL.Query().Get("title")
@@ -173,7 +173,7 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// dashboardHandler serves the HTML dashboard
+// dashboardHandler serves the HTML dashboard.
 func (s *Server) dashboardHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -197,6 +197,7 @@ func (s *Server) faviconHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
+// faviconDarkHandler serves the dark mode variant of the ICO favicon.
 func (s *Server) faviconDarkHandler(w http.ResponseWriter, _ *http.Request) {
 	if len(s.darkFaviconICO) == 0 {
 		http.Error(w, "favicon not available", http.StatusInternalServerError)
@@ -226,6 +227,7 @@ func (s *Server) iconSVGHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
+// iconSVGDarkHandler serves the dark mode variant of the SVG icon.
 func (s *Server) iconSVGDarkHandler(w http.ResponseWriter, _ *http.Request) {
 	if len(s.darkIconSVG) == 0 {
 		http.Error(w, "icon not available", http.StatusInternalServerError)
@@ -255,6 +257,7 @@ func (s *Server) appleTouchIconHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
+// appleTouchIconDarkHandler serves the dark mode variant of the Apple touch icon.
 func (s *Server) appleTouchIconDarkHandler(w http.ResponseWriter, _ *http.Request) {
 	if len(s.darkAppleIconPNG) == 0 {
 		http.Error(w, "apple touch icon not available", http.StatusInternalServerError)
@@ -269,7 +272,7 @@ func (s *Server) appleTouchIconDarkHandler(w http.ResponseWriter, _ *http.Reques
 	}
 }
 
-// registerOutputRoutes registers routes from outputs that implement RouteRegistrar
+// registerOutputRoutes adds HTTP handlers from outputs implementing RouteRegistrar.
 func (s *Server) registerOutputRoutes(mux *http.ServeMux) {
 	outputs := s.router.GetOutputs()
 	for _, output := range outputs {
@@ -279,7 +282,7 @@ func (s *Server) registerOutputRoutes(mux *http.ServeMux) {
 	}
 }
 
-// getDashboardData returns the current dashboard data for WebSocket broadcasts.
+// getDashboardData builds the input/output status payload for WebSocket broadcasts.
 func (s *Server) getDashboardData() any {
 	inputStatuses := s.router.GetInputStatus()
 
@@ -316,7 +319,7 @@ func (s *Server) getDashboardData() any {
 	}
 }
 
-// startPeriodicDashboardUpdates sends dashboard status updates every second over WebSocket
+// startPeriodicDashboardUpdates broadcasts status to all connected dashboard clients.
 func (s *Server) startPeriodicDashboardUpdates() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()

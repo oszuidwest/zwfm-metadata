@@ -14,6 +14,7 @@ Metadata routing middleware for radio stations that routes metadata from inputs 
 - [Configuration](#configuration)
   - [Global Settings](#global-settings)
 - [Inputs](#inputs)
+  - [Input Feature Comparison](#input-feature-comparison)
   - [Dynamic Input](#dynamic-input)
   - [URL Input](#url-input)
   - [Text Input](#text-input)
@@ -193,17 +194,18 @@ Control where formatted metadata is sent.
 
 ### Output Feature Comparison
 
-| Output Type | Purpose | Enhanced Metadata | Template Support | Authentication |
-|-------------|---------|-------------------|------------------|----------------|
-| **Icecast** | Update streaming server metadata | ❌ | ❌ | Basic Auth |
-| **File** | Write to local filesystem | ❌ | ❌ | N/A |
-| **URL** | Send via HTTP GET/POST | ✅ | ✅ (GET in URL, POST via payloadMapping) | Bearer Token |
-| **HTTP** | Serve metadata via GET endpoints | ✅ | ✅ (via payloadMapping) | N/A |
-| **DL Plus** | DAB/DAB+ radio text | ✅ | ❌ | N/A |
-| **WebSocket** | Real-time browser/app updates | ✅ | ✅ (via payloadMapping) | N/A |
-| **StereoTool** | Update RDS RadioText | ❌ | ❌ | N/A |
+| Output Type | Purpose | Template Support | Authentication |
+|-------------|---------|------------------|----------------|
+| **Icecast** | Update streaming server metadata | ❌ | Basic Auth |
+| **File** | Write to local filesystem | ❌ | N/A |
+| **URL** | Send via HTTP GET/POST | ✅ (GET in URL, POST via payloadMapping) | Bearer Token |
+| **HTTP** | Serve metadata via GET endpoints | ✅ (via payloadMapping) | N/A |
+| **DL Plus** | DAB/DAB+ radio text | ❌ | N/A |
+| **WebSocket** | Real-time browser/app updates | ✅ (via payloadMapping) | N/A |
+| **StereoTool** | Update RDS RadioText | ❌ | N/A |
 
-- **Enhanced Metadata**: Receives full metadata details (title, artist, duration, etc.) rather than just formatted text
+All outputs receive full metadata (artist, title, duration, etc.) via StructuredText. The table shows additional capabilities:
+
 - **Template Support**: Can use Go template functions to transform values (e.g., `{{.title | upper}}`, `{{printf "%.20s" .title}}`)
 - **Authentication**: Security mechanisms supported
 
@@ -213,7 +215,7 @@ All output types support:
 - `inputs` (required) - Array of input names in priority order
 - `formatters` (optional) - Array of formatter names to apply
 
-**Note on Templates**: Template functions (like `{{.title | upper}}`) are only available in outputs with template support (URL, HTTP, WebSocket). Other outputs (File, Icecast, StereoTool, DL Plus) receive only the formatted text after formatters are applied and cannot use template syntax.
+**Note on Templates**: Template functions (like `{{.title | upper}}`) are only available in outputs with template support (URL, HTTP, WebSocket). Other outputs use the formatted text directly and cannot use template syntax in their configuration.
 
 #### Icecast Output
 
@@ -246,7 +248,7 @@ Updates streaming server metadata
 
 #### File Output
 
-Writes to the filesystem. Receives formatted text only (no template support).
+Writes metadata to the filesystem.
 
 ```json
 {
@@ -474,7 +476,6 @@ Serves metadata via GET endpoints with multiple response formats
 ##### Response Types
 - **JSON**: Standard metadata object with all fields
 - **XML**: XML with escaped content
-- **YAML**: YAML format for configuration files
 - **Plaintext**: Just the formatted metadata text
 
 #### WebSocket Output
@@ -529,7 +530,7 @@ Generates DL Plus format for DAB/DAB+ transmission
   "type": "dlplus",
   "name": "dlplus-output",
   "inputs": ["radio-live", "nowplaying-api", "default-text"],
-  "formatters": [],
+  "formatters": ["ucwords"],
   "settings": {
     "delay": 0,
     "filename": "/tmp/dlplus.txt"
@@ -555,13 +556,11 @@ Artist - Song Title
 ```
 
 The output automatically:
-- Detects artist and title positions in the formatted text
+- Calculates accurate artist and title positions from StructuredText field boundaries
 - Generates correct DL_PLUS_TAG entries (type 4 for ARTIST, type 1 for TITLE)
 - Sets DL_PLUS_ITEM_RUNNING=1 for tracks (with artist+title), 0 for station/program info
 - Alternates DL_PLUS_ITEM_TOGGLE between 0 and 1 on each update to indicate content changes
-- Handles prefixes and suffixes correctly
-
-**Important**: Do not use formatters with DL Plus output. Formatters that modify the text (like `rds`, `uppercase`, `lowercase`) will cause artist/title detection to fail because the original metadata no longer matches the transformed text. DAB/DAB+ supports Extended ASCII characters, so the `rds` formatter's ASCII transliteration is not needed.
+- Preserves accurate positions even after formatters modify the text
 
 Note: ODR-PadEnc automatically re-reads DL files before each transmission.
 
@@ -597,7 +596,7 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 
 ### Custom Payload Mapping
 
-Both **URL** (POST method) and **WebSocket** outputs support custom payload mapping to transform the output format to match any JSON structure that your API expects.
+**URL** (POST method), **HTTP**, and **WebSocket** outputs support custom payload mapping to transform the output format to match any JSON structure that your API expects.
 
 #### How It Works
 - **Static values**: Any string without `{{}}` is used as-is
@@ -788,10 +787,10 @@ Output:
 
 ## Formatters
 
-Apply text transformations to metadata before sending it to outputs.
+Transform metadata fields (artist, title) before sending to outputs. Formatters operate on individual fields within StructuredText, preserving field boundaries for accurate position tracking.
 
 **Formatters vs Templates**:
-- **Formatters** apply to ALL output types and transform the text before any output processing
+- **Formatters** apply to ALL output types and transform fields before output processing
 - **Templates** (e.g., `{{.title | upper}}`) are only available in URL, HTTP, and WebSocket outputs
 - Use formatters when you want the same transformation for all outputs, use templates for output-specific formatting
 
@@ -841,7 +840,7 @@ Smart processing for RDS compliance:
 
 ### Usage
 
-Formatters can be applied individually or chained together in sequence. When multiple formatters are specified, each formatter receives the output of the previous formatter.
+Formatters can be applied individually or chained together in sequence. When multiple formatters are specified, each formatter modifies the StructuredText fields in sequence.
 
 #### Single Formatter
 ```json
@@ -927,7 +926,8 @@ Set `"debug": true` in `config.json` for detailed logging.
 
 See `EXTENDING.md` for detailed guidance on adding new inputs, outputs, and formatters. Key patterns include:
 
-- Using `utils.ConvertMetadata()` for consistent metadata handling across outputs
+- All outputs receive `*core.StructuredText` with full metadata access
+- Using `utils.ConvertStructuredText()` for JSON/webhook payloads
 - Embedding base types (`core.InputBase`, `core.OutputBase`) for common functionality
 - Using `core.PassiveComponent` for components without background tasks
 
