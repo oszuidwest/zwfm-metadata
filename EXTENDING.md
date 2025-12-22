@@ -60,8 +60,8 @@ This guide covers how to add new inputs, outputs, and formatters to the ZuidWest
 The ZuidWest FM metadata system consists of three main extension points:
 
 - **Inputs** - Source metadata from various systems (APIs, files, static text)
-- **Outputs** - Send formatted metadata to destinations (streaming servers, files, webhooks)  
-- **Formatters** - Transform metadata text (uppercase, lowercase, RDS compliance, etc.)
+- **Outputs** - Send formatted metadata to destinations (streaming servers, files, webhooks)
+- **Formatters** - Transform metadata fields (uppercase, lowercase, RDS compliance, etc.)
 
 All components communicate through the central `MetadataRouter` which handles:
 - Priority-based fallback between inputs
@@ -307,9 +307,7 @@ Create a new file in the `outputs/` directory:
 package outputs
 
 import (
-    "bytes"
     "context"
-    "encoding/json"
     "fmt"
     "io"
     "log/slog"
@@ -409,7 +407,10 @@ func (m *MyCustomOutput) sendToDestination(metadata string) error {
 If your output needs to expose HTTP endpoints:
 
 ```go
-import "net/http"
+import (
+    "encoding/json"
+    "net/http"
+)
 
 // RegisterRoutes implements the RouteRegistrar interface
 func (m *MyCustomOutput) RegisterRoutes(mux *http.ServeMux) {
@@ -418,11 +419,9 @@ func (m *MyCustomOutput) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (m *MyCustomOutput) handleHTTPRequest(w http.ResponseWriter, r *http.Request) {
-    // Get current metadata
-    currentMetadata := m.GetCurrentMetadata()
-
+    // Access stored metadata (you'll need to implement storage in your output)
     w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(currentMetadata)
+    json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 ```
 
@@ -565,10 +564,10 @@ Use in configuration:
 
 ### Formatters
 
-- **uppercase** - Converts text to UPPERCASE
-- **lowercase** - Converts text to lowercase
+- **uppercase** - Converts fields to UPPERCASE
+- **lowercase** - Converts fields to lowercase
 - **ucwords** - Capitalizes First Letter Of Each Word
-- **rds** - RDS compliance (64-char limit with smart truncation)
+- **rds** - RDS compliance (64-char limit with smart field truncation)
 
 ## Complete Examples
 
@@ -1026,8 +1025,8 @@ func (o *MyOutput) Send(st *core.StructuredText) {
     // Convert to universal format for JSON APIs, webhooks, etc.
     universal := utils.ConvertStructuredText(st)
 
-    // Or with a type field:
-    universal := utils.ConvertStructuredTextWithType(st, "myoutput")
+    // Or with a type field (use one or the other, not both):
+    // universal := utils.ConvertStructuredTextWithType(st, "myoutput")
 
     // Send the universal metadata
     o.sendMetadata(*universal)
@@ -1088,10 +1087,10 @@ Configuration example with payload mapping:
   "name": "custom-api",
   "settings": {
     "payloadMapping": {
-      "song_name": "{{.Title}}",
-      "performer": "{{.Artist}}",
-      "current_time": "{{.UpdatedAt}}",
-      "metadata_source": "{{.Source}}"
+      "song_name": "{{.title}}",
+      "performer": "{{.artist}}",
+      "current_time": "{{.updated_at}}",
+      "metadata_source": "{{.source}}"
     }
   }
 }
