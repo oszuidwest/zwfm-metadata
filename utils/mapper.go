@@ -11,61 +11,57 @@ import (
 
 // bufferPool is a pool of reusable bytes.Buffer objects for template processing
 var bufferPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return new(bytes.Buffer)
 	},
 }
 
 // PayloadMapper handles custom payload transformation based on configuration.
 type PayloadMapper struct {
-	mapping map[string]interface{}
+	mapping map[string]any
 }
 
 // NewPayloadMapper creates a new payload mapper with the given mapping configuration.
-func NewPayloadMapper(mapping map[string]interface{}) *PayloadMapper {
+func NewPayloadMapper(mapping map[string]any) *PayloadMapper {
 	return &PayloadMapper{
 		mapping: mapping,
 	}
 }
 
 // MapPayload transforms the input data according to the configured mapping.
-func (pm *PayloadMapper) MapPayload(data interface{}) map[string]interface{} {
+func (pm *PayloadMapper) MapPayload(data any) map[string]any {
 	if pm.mapping == nil {
 		return nil
 	}
 
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	pm.processMapping(pm.mapping, result, data)
 	return result
 }
 
 // processMapping recursively processes the mapping configuration.
-func (pm *PayloadMapper) processMapping(mapping map[string]interface{}, result map[string]interface{}, data interface{}) {
+func (pm *PayloadMapper) processMapping(mapping map[string]any, result map[string]any, data any) {
 	for key, value := range mapping {
 		switch v := value.(type) {
 		case string:
-			// Check if string contains template syntax
 			if strings.Contains(v, "{{") && strings.Contains(v, "}}") {
 				processedValue := pm.processTemplate(v, data)
 				result[key] = processedValue
 			} else {
 				result[key] = v
 			}
-		case map[string]interface{}:
-			// Handle nested objects
-			nestedResult := make(map[string]interface{})
+		case map[string]any:
+			nestedResult := make(map[string]any)
 			pm.processMapping(v, nestedResult, data)
 			result[key] = nestedResult
 		default:
-			// Static values (numbers, booleans, etc.)
 			result[key] = value
 		}
 	}
 }
 
-// processTemplate executes a template string with the provided data
-func (pm *PayloadMapper) processTemplate(templateString string, data interface{}) string {
-	// Create template with custom functions
+// processTemplate executes a template string with the provided data.
+func (pm *PayloadMapper) processTemplate(templateString string, data any) string {
 	template, err := template.New("payload").Funcs(template.FuncMap{
 		"formatTime": func(t time.Time) string {
 			return t.Format(time.RFC3339)
@@ -76,7 +72,6 @@ func (pm *PayloadMapper) processTemplate(templateString string, data interface{}
 			}
 			return ""
 		},
-		// Add more helper functions as needed
 		"lower": strings.ToLower,
 		"upper": strings.ToUpper,
 		"trim":  strings.TrimSpace,
@@ -87,14 +82,12 @@ func (pm *PayloadMapper) processTemplate(templateString string, data interface{}
 		return templateString
 	}
 
-	// Get buffer from pool
 	templateBuffer := bufferPool.Get().(*bytes.Buffer)
 	defer func() {
 		templateBuffer.Reset()
 		bufferPool.Put(templateBuffer)
 	}()
 
-	// Execute template
 	if err := template.Execute(templateBuffer, data); err != nil {
 		slog.Error("Failed to execute template", "error", err, "template", templateString)
 		return templateString

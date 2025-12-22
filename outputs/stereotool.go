@@ -12,7 +12,7 @@ import (
 	"zwfm-metadata/core"
 )
 
-// StereoToolOutput handles sending metadata to StereoTool's RadioText.
+// StereoToolOutput sends metadata to StereoTool for RDS RadioText display.
 type StereoToolOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
@@ -20,7 +20,7 @@ type StereoToolOutput struct {
 	httpClient *http.Client
 }
 
-// NewStereoToolOutput creates a new StereoTool output.
+// NewStereoToolOutput creates a StereoToolOutput with the given name and settings.
 func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *StereoToolOutput {
 	output := &StereoToolOutput{
 		OutputBase: core.NewOutputBase(name),
@@ -31,27 +31,23 @@ func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *S
 	return output
 }
 
-// SendFormattedMetadata implements the Output interface (called by metadata router).
+// SendFormattedMetadata updates StereoTool's RadioText fields.
 func (i *StereoToolOutput) SendFormattedMetadata(formattedText string) {
-	// Check if value changed to avoid unnecessary HTTP requests
 	if !i.HasChanged(formattedText) {
 		return
 	}
 
-	// Update StereoTool's RadioText
 	if err := i.sendToStereoTool(formattedText); err != nil {
 		slog.Error("Failed to update StereoTool's RadioText", "output", i.GetName(), "error", err)
 	}
 }
 
-// sendToStereoTool sends the metadata to StereoTool's RadioText.
 func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 	fieldNames := map[int]string{
 		6751:  "Streaming Output Song",
 		15046: "FM RDS Radio Text",
 	}
 
-	// Create context for both requests
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -72,7 +68,6 @@ func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 		defer resp.Body.Close() //nolint:errcheck
 
 		if resp.StatusCode != http.StatusOK {
-			// Read error response for debugging
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			return fmt.Errorf("StereoTool API error for %s: status %d, response: %s", fieldName, resp.StatusCode, string(bodyBytes))
 		}

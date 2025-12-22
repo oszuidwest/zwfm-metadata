@@ -1,6 +1,7 @@
 package core
 
 import (
+	"strings"
 	"time"
 )
 
@@ -24,11 +25,11 @@ func (m *Metadata) Clone() *Metadata {
 	}
 
 	clone := &Metadata{
-		Name:      m.Name,
-		SongID:    m.SongID,
-		Artist:    m.Artist,
-		Title:     m.Title,
-		Duration:  m.Duration,
+		Name:      strings.Clone(m.Name),
+		SongID:    strings.Clone(m.SongID),
+		Artist:    strings.Clone(m.Artist),
+		Title:     strings.Clone(m.Title),
+		Duration:  strings.Clone(m.Duration),
 		UpdatedAt: m.UpdatedAt,
 	}
 

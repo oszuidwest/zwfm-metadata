@@ -2,7 +2,9 @@ package utils
 
 import (
 	"log/slog"
+	"maps"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -20,7 +22,7 @@ type WebSocketHub struct {
 	clients      map[*websocket.Conn]bool
 	mu           sync.RWMutex
 	upgrader     websocket.Upgrader
-	onConnect    func(*WebSocketConn) interface{}
+	onConnect    func(*WebSocketConn) any
 	onDisconnect func(*WebSocketConn)
 	pingInterval time.Duration
 	pongWait     time.Duration
@@ -34,7 +36,7 @@ func NewWebSocketHub(name string) *WebSocketHub {
 		clients: make(map[*websocket.Conn]bool),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
-				return true // Allow all origins in development
+				return true
 			},
 		},
 		pingInterval: 30 * time.Second,
@@ -44,7 +46,7 @@ func NewWebSocketHub(name string) *WebSocketHub {
 }
 
 // SetOnConnect sets the callback for new connections.
-func (h *WebSocketHub) SetOnConnect(fn func(*WebSocketConn) interface{}) {
+func (h *WebSocketHub) SetOnConnect(fn func(*WebSocketConn) any) {
 	h.onConnect = fn
 }
 
@@ -61,7 +63,6 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Add client
 	h.mu.Lock()
 	h.clients[conn] = true
 	clientCount := len(h.clients)
@@ -69,10 +70,8 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 
 	slog.Debug("WebSocket client connected", "hub", h.name, "clients", clientCount)
 
-	// Wrap connection
 	wsConn := &WebSocketConn{Conn: conn}
 
-	// Send initial data if callback is set
 	if h.onConnect != nil {
 		if data := h.onConnect(wsConn); data != nil {
 			if err := conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
@@ -87,7 +86,6 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// Setup ping/pong
 	if err := conn.SetReadDeadline(time.Now().Add(h.pongWait)); err != nil {
 		slog.Warn("Failed to set read deadline", "error", err)
 	}
@@ -98,15 +96,12 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		return nil
 	})
 
-	// Create done channel for cleanup
 	done := make(chan struct{})
 	defer close(done)
 
-	// Start ping ticker
 	ticker := time.NewTicker(h.pingInterval)
 	defer ticker.Stop()
 
-	// Ping sender goroutine
 	go func() {
 		for {
 			select {
@@ -126,7 +121,6 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		}
 	}()
 
-	// Read messages (mainly for detecting disconnection)
 	for {
 		_, _, err := conn.ReadMessage()
 		if err != nil {
@@ -134,13 +128,10 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// Cleanup on disconnect
-	// Close connection first to ensure no more writes can happen
 	if err := conn.Close(); err != nil {
 		slog.Warn("Failed to close connection", "error", err)
 	}
 
-	// Then remove from clients map
 	h.mu.Lock()
 	delete(h.clients, conn)
 	clientCount = len(h.clients)
@@ -154,12 +145,9 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 }
 
 // Broadcast sends data to all connected clients
-func (h *WebSocketHub) Broadcast(data interface{}) {
+func (h *WebSocketHub) Broadcast(data any) {
 	h.mu.RLock()
-	clients := make([]*websocket.Conn, 0, len(h.clients))
-	for client := range h.clients {
-		clients = append(clients, client)
-	}
+	clients := slices.Collect(maps.Keys(h.clients))
 	h.mu.RUnlock()
 
 	for _, client := range clients {
@@ -168,7 +156,6 @@ func (h *WebSocketHub) Broadcast(data interface{}) {
 			continue
 		}
 		if err := client.WriteJSON(data); err != nil {
-			// Remove disconnected client
 			h.mu.Lock()
 			delete(h.clients, client)
 			h.mu.Unlock()

@@ -8,21 +8,20 @@ import (
 	"zwfm-metadata/core"
 )
 
-// TextInput handles static text input.
+// TextInput provides static text metadata, typically used as a fallback source.
 type TextInput struct {
 	*core.InputBase
 	core.PassiveComponent
 	settings config.TextInputConfig
 }
 
-// NewTextInput creates a new text input.
+// NewTextInput creates a TextInput with pre-populated static metadata.
 func NewTextInput(name string, settings config.TextInputConfig) *TextInput {
 	input := &TextInput{
 		InputBase: core.NewInputBase(name),
 		settings:  settings,
 	}
 
-	// Set initial metadata
 	input.SetMetadata(&core.Metadata{
 		Name:      name,
 		Title:     settings.Text,

@@ -12,8 +12,6 @@ import (
 	"zwfm-metadata/core"
 	"zwfm-metadata/inputs"
 	"zwfm-metadata/utils"
-
-	"github.com/gorilla/mux"
 )
 
 const cacheControlNoCache = "public, max-age=0, must-revalidate"
@@ -41,7 +39,7 @@ type OutputStatus struct {
 	Delay        int      `json:"delay"`
 	Inputs       []string `json:"inputs"`
 	Formatters   []string `json:"formatters"`
-	CurrentInput string   `json:"currentInput,omitempty"`
+	CurrentInput string   `json:"currentInput,omitzero"`
 }
 
 // NewServer creates a new server instance.
@@ -80,13 +78,10 @@ func NewServer(port int, router *core.MetadataRouter, stationName, brandColor st
 		darkAppleIconPNG: darkAppleIconPNG,
 	}
 
-	// Set up dashboard WebSocket callbacks
 	s.dashboardHub.SetOnConnect(func(conn *utils.WebSocketConn) interface{} {
-		// Send initial dashboard state
 		return s.getDashboardData()
 	})
 
-	// Start periodic dashboard updates over WebSocket
 	go s.startPeriodicDashboardUpdates()
 
 	return s, nil
@@ -94,29 +89,23 @@ func NewServer(port int, router *core.MetadataRouter, stationName, brandColor st
 
 // Start starts the HTTP server.
 func (s *Server) Start(ctx context.Context) error {
-	router := mux.NewRouter()
+	mux := http.NewServeMux()
 
-	// Apply middleware to prevent search engine indexing on all routes
-	router.Use(s.noIndexMiddleware)
+	mux.HandleFunc("GET /favicon.ico", s.faviconHandler)
+	mux.HandleFunc("GET /favicon-dark.ico", s.faviconDarkHandler)
+	mux.HandleFunc("GET /icon.svg", s.iconSVGHandler)
+	mux.HandleFunc("GET /icon-dark.svg", s.iconSVGDarkHandler)
+	mux.HandleFunc("GET /apple-touch-icon.png", s.appleTouchIconHandler)
+	mux.HandleFunc("GET /apple-touch-icon-dark.png", s.appleTouchIconDarkHandler)
+	mux.HandleFunc("GET /{$}", s.dashboardHandler)
+	mux.HandleFunc("GET /input/dynamic", s.dynamicInputHandler)
+	mux.HandleFunc("GET /ws/dashboard", s.dashboardHub.HandleConnection)
 
-	// Route handlers
-	router.HandleFunc("/favicon.ico", s.faviconHandler).Methods("GET")
-	router.HandleFunc("/favicon-dark.ico", s.faviconDarkHandler).Methods("GET")
-	router.HandleFunc("/icon.svg", s.iconSVGHandler).Methods("GET")
-	router.HandleFunc("/icon-dark.svg", s.iconSVGDarkHandler).Methods("GET")
-	router.HandleFunc("/apple-touch-icon.png", s.appleTouchIconHandler).Methods("GET")
-	router.HandleFunc("/apple-touch-icon-dark.png", s.appleTouchIconDarkHandler).Methods("GET")
-	router.HandleFunc("/", s.dashboardHandler).Methods("GET")
-	router.HandleFunc("/input/dynamic", s.dynamicInputHandler).Methods("GET")
-	router.HandleFunc("/ws/dashboard", s.dashboardHub.HandleConnection).Methods("GET")
+	s.registerOutputRoutes(mux)
 
-	// Register WebSocket routes from outputs that implement RouteRegistrar
-	s.registerWebSocketRoutes(router)
-
-	// Create HTTP server
 	s.server = &http.Server{
 		Addr:              ":" + strconv.Itoa(s.port),
-		Handler:           router,
+		Handler:           s.noIndexMiddleware(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
@@ -125,17 +114,14 @@ func (s *Server) Start(ctx context.Context) error {
 
 	slog.Info("Starting web server", "port", s.port)
 
-	// Start server in a goroutine
 	go func() {
 		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("HTTP server encountered an error", "error", err)
 		}
 	}()
 
-	// Wait for context cancellation
 	<-ctx.Done()
 
-	// Shutdown gracefully
 	slog.Info("Shutting down web server")
 	return s.server.Shutdown(context.Background())
 }
@@ -150,7 +136,6 @@ func (s *Server) noIndexMiddleware(next http.Handler) http.Handler {
 
 // dynamicInputHandler handles the /input/dynamic endpoint.
 func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
-	// Get parameters from query string
 	inputName := req.URL.Query().Get("input")
 	title := req.URL.Query().Get("title")
 	artist := req.URL.Query().Get("artist")
@@ -158,34 +143,29 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 	duration := req.URL.Query().Get("duration")
 	secret := req.URL.Query().Get("secret")
 
-	// Validate required parameters
 	if inputName == "" {
 		http.Error(w, "Missing required parameter: input", http.StatusBadRequest)
 		return
 	}
 
-	// Get the input
 	input, exists := s.router.GetInput(inputName)
 	if !exists {
 		http.Error(w, fmt.Sprintf("Input '%s' not found", inputName), http.StatusNotFound)
 		return
 	}
 
-	// Check if it's a dynamic input
 	dynamicInput, ok := input.(*inputs.DynamicInput)
 	if !ok {
 		http.Error(w, fmt.Sprintf("Input '%s' is not a dynamic input", inputName), http.StatusBadRequest)
 		return
 	}
 
-	// Update the metadata
 	err := dynamicInput.UpdateMetadata(songID, artist, title, duration, secret)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Return success response
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	if _, err := fmt.Fprintf(w, "OK"); err != nil {
@@ -289,22 +269,20 @@ func (s *Server) appleTouchIconDarkHandler(w http.ResponseWriter, _ *http.Reques
 	}
 }
 
-// registerWebSocketRoutes registers WebSocket routes from outputs that implement RouteRegistrar
-func (s *Server) registerWebSocketRoutes(router *mux.Router) {
+// registerOutputRoutes registers routes from outputs that implement RouteRegistrar
+func (s *Server) registerOutputRoutes(mux *http.ServeMux) {
 	outputs := s.router.GetOutputs()
 	for _, output := range outputs {
 		if routeRegistrar, ok := output.(core.RouteRegistrar); ok {
-			routeRegistrar.RegisterRoutes(router)
+			routeRegistrar.RegisterRoutes(mux)
 		}
 	}
 }
 
 // getDashboardData returns the current dashboard data for WebSocket broadcasts.
-func (s *Server) getDashboardData() interface{} {
-	// Get input statuses
+func (s *Server) getDashboardData() any {
 	inputStatuses := s.router.GetInputStatus()
 
-	// Get output information
 	outputs := s.router.GetOutputs()
 	outputStatuses := make([]OutputStatus, 0, len(outputs))
 	activeFlows := 0
@@ -318,7 +296,6 @@ func (s *Server) getDashboardData() interface{} {
 			Formatters: s.router.GetOutputFormatterNames(output.GetName()),
 		}
 
-		// Get current input for this output
 		currentInput := s.router.GetCurrentInputForOutput(output.GetName())
 		if currentInput != "" {
 			outputStatus.CurrentInput = currentInput
@@ -328,7 +305,6 @@ func (s *Server) getDashboardData() interface{} {
 		outputStatuses = append(outputStatuses, outputStatus)
 	}
 
-	// Return as anonymous struct
 	return struct {
 		Inputs      []core.InputStatus `json:"inputs"`
 		Outputs     []OutputStatus     `json:"outputs"`

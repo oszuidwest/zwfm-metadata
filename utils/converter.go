@@ -7,16 +7,16 @@ import (
 
 // UniversalMetadata represents the common metadata structure used across all outputs.
 type UniversalMetadata struct {
-	Type              string     `json:"type,omitempty" xml:"type,omitempty"`
+	Type              string     `json:"type,omitzero" xml:"type,omitempty"`
 	FormattedMetadata string     `json:"formatted_metadata" xml:"formatted_metadata"`
-	SongID            string     `json:"songID,omitempty" xml:"songID,omitempty"`
+	SongID            string     `json:"songID,omitzero" xml:"songID,omitempty"`
 	Title             string     `json:"title" xml:"title"`
-	Artist            string     `json:"artist,omitempty" xml:"artist,omitempty"`
-	Duration          string     `json:"duration,omitempty" xml:"duration,omitempty"`
+	Artist            string     `json:"artist,omitzero" xml:"artist,omitempty"`
+	Duration          string     `json:"duration,omitzero" xml:"duration,omitempty"`
 	UpdatedAt         time.Time  `json:"updated_at" xml:"updated_at"`
-	ExpiresAt         *time.Time `json:"expires_at,omitempty" xml:"expires_at,omitempty"`
-	Source            string     `json:"source,omitempty" xml:"source,omitempty"`
-	SourceType        string     `json:"source_type,omitempty" xml:"source_type,omitempty"`
+	ExpiresAt         *time.Time `json:"expires_at,omitzero" xml:"expires_at,omitempty"`
+	Source            string     `json:"source,omitzero" xml:"source,omitempty"`
+	SourceType        string     `json:"source_type,omitzero" xml:"source_type,omitempty"`
 }
 
 // ConvertMetadata converts core.Metadata to UniversalMetadata.
@@ -42,8 +42,8 @@ func ConvertMetadataWithType(formattedText string, metadata *core.Metadata, meta
 }
 
 // ToTemplateData converts UniversalMetadata to template data for payload mapping.
-func (um *UniversalMetadata) ToTemplateData() map[string]interface{} {
-	data := map[string]interface{}{
+func (um *UniversalMetadata) ToTemplateData() map[string]any {
+	data := map[string]any{
 		"formatted_metadata": um.FormattedMetadata,
 		"songID":             um.SongID,
 		"title":              um.Title,

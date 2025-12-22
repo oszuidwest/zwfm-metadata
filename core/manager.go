@@ -1,10 +1,11 @@
 package core
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 	"zwfm-metadata/formatters"
@@ -18,10 +19,10 @@ type InputPrefixSuffix struct {
 
 // CleanMetadata represents user-facing metadata without internal fields.
 type CleanMetadata struct {
-	SongID   string `json:"songID,omitempty"`
-	Artist   string `json:"artist,omitempty"`
+	SongID   string `json:"songID,omitzero"`
+	Artist   string `json:"artist,omitzero"`
 	Title    string `json:"title"`
-	Duration string `json:"duration,omitempty"`
+	Duration string `json:"duration,omitzero"`
 }
 
 // InputStatus represents the status of an input including prefix/suffix.
@@ -32,9 +33,9 @@ type InputStatus struct {
 	Suffix    string         `json:"suffix"`
 	Available bool           `json:"available"`
 	Status    string         `json:"status"` // "available", "expired", or "unavailable"
-	UpdatedAt *time.Time     `json:"updatedAt,omitempty"`
-	ExpiresAt *time.Time     `json:"expiresAt,omitempty"`
-	Metadata  *CleanMetadata `json:"metadata,omitempty"`
+	UpdatedAt *time.Time     `json:"updatedAt,omitzero"`
+	ExpiresAt *time.Time     `json:"expiresAt,omitzero"`
+	Metadata  *CleanMetadata `json:"metadata,omitzero"`
 }
 
 // ScheduledUpdate represents a future update to be processed.
@@ -192,7 +193,6 @@ func (mr *MetadataRouter) GetInputStatus() []InputStatus {
 			Available: metadata != nil && metadata.IsAvailable(),
 		}
 
-		// Determine status
 		if metadata == nil || metadata.Title == "" {
 			status.Status = "unavailable"
 		} else if metadata.IsExpired() {
@@ -202,12 +202,9 @@ func (mr *MetadataRouter) GetInputStatus() []InputStatus {
 			status.Status = "available"
 		}
 
-		// Add clean metadata and timestamps only if metadata exists
 		if metadata != nil {
 			status.UpdatedAt = &metadata.UpdatedAt
 			status.ExpiresAt = metadata.ExpiresAt
-
-			// Only include metadata if there's actual content
 			if metadata.Title != "" {
 				status.Metadata = &CleanMetadata{
 					SongID:   metadata.SongID,
@@ -221,9 +218,8 @@ func (mr *MetadataRouter) GetInputStatus() []InputStatus {
 		statuses = append(statuses, status)
 	}
 
-	// Sort input statuses alphabetically by name
-	sort.Slice(statuses, func(i, j int) bool {
-		return statuses[i].Name < statuses[j].Name
+	slices.SortFunc(statuses, func(a, b InputStatus) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 
 	return statuses
@@ -248,9 +244,8 @@ func (mr *MetadataRouter) GetOutputs() []Output {
 		outputs = append(outputs, output)
 	}
 
-	// Sort outputs alphabetically by name for consistent ordering
-	sort.Slice(outputs, func(i, j int) bool {
-		return outputs[i].GetName() < outputs[j].GetName()
+	slices.SortFunc(outputs, func(a, b Output) int {
+		return cmp.Compare(a.GetName(), b.GetName())
 	})
 
 	return outputs
@@ -298,31 +293,22 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 		return fmt.Errorf("cannot start: no inputs configured")
 	}
 
-	// Start timeline processor
 	go mr.startTimelineProcessor(ctx)
-
-	// Start expiration checker
 	go mr.startExpirationChecker(ctx)
 
-	// Start all inputs and subscribe to their metadata updates
 	for name, input := range mr.inputs {
-		// Start the input
 		go func(n string, i Input) {
 			if err := i.Start(ctx); err != nil {
 				slog.Error("Failed to start input", "name", n, "error", err)
 			}
 		}(name, input)
 
-		// Subscribe to input metadata updates
 		metadataChannel := make(chan *Metadata, 10)
 		mr.inputSubscriptions[name] = metadataChannel
 		input.Subscribe(metadataChannel)
-
-		// Handle metadata updates for this input
 		go mr.handleInputMetadata(ctx, name, metadataChannel)
 	}
 
-	// Start all outputs
 	for name, output := range mr.outputs {
 		go func(n string, o Output) {
 			if err := o.Start(ctx); err != nil {
@@ -331,10 +317,7 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 		}(name, output)
 	}
 
-	// Release lock before processing initial metadata
 	mr.mu.Unlock()
-
-	// Trigger initial metadata processing for inputs that already have metadata (like text inputs)
 	mr.processInitialMetadata()
 
 	slog.Info("Started centralized metadata router")
@@ -342,78 +325,67 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 	return nil
 }
 
-// processInitialMetadata triggers initial updates for inputs that already have metadata.
+// processInitialMetadata schedules updates for inputs that already have metadata (e.g., text inputs).
 func (mr *MetadataRouter) processInitialMetadata() {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
 
-	// Process each input that already has metadata available
 	for inputName, input := range mr.inputs {
 		metadata := input.GetMetadata()
 		if metadata != nil && metadata.IsAvailable() {
-			// Schedule initial updates for all outputs that use this input
 			mr.scheduleInputChangeUpdates(inputName, metadata)
 			slog.Debug("Processed initial metadata for input", "input", inputName, "title", metadata.Title)
 		}
 	}
 }
 
-// handleInputMetadata handles metadata updates from inputs.
+// handleInputMetadata listens for metadata updates and schedules output updates.
 func (mr *MetadataRouter) handleInputMetadata(ctx context.Context, inputName string, metadataChannel chan *Metadata) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case metadata := <-metadataChannel:
-			// Schedule updates for all outputs that use this input
 			mr.scheduleInputChangeUpdates(inputName, metadata)
 		}
 	}
 }
 
-// scheduleInputChangeUpdates schedules updates for outputs when input metadata changes.
+// scheduleInputChangeUpdates schedules delayed updates for outputs affected by input changes.
 func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata *Metadata) {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
 
 	for outputName, output := range mr.outputs {
-		// Check if this output uses this input
 		if !mr.outputUsesInput(outputName, inputName) {
 			continue
 		}
 
-		// Get output's inputs in priority order
 		inputNames, exists := mr.outputInputs[outputName]
 		if !exists {
 			continue
 		}
 
-		// Check if this input is the highest priority available input
 		isHighestPriority := false
 		for _, name := range inputNames {
 			if input, exists := mr.inputs[name]; exists {
 				inputMetadata := input.GetMetadata()
 				if inputMetadata != nil && inputMetadata.IsAvailable() {
-					// Found an available input
 					if name == inputName {
-						// This is the highest priority available input
 						isHighestPriority = true
 					}
-					break // Stop at first available input
+					break
 				}
 			}
 		}
 
-		// Only schedule update if this is the highest priority available input
 		if !isHighestPriority {
 			continue
 		}
 
-		// Cancel any existing updates for this output
 		cancelToken := fmt.Sprintf("%s_%d", outputName, time.Now().UnixNano())
 		mr.cancelScheduledUpdates(outputName)
 
-		// Schedule new update with delay
 		delay := time.Duration(output.GetDelay()) * time.Second
 		executeAt := time.Now().Add(delay)
 
@@ -436,22 +408,11 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 	}
 }
 
-// outputUsesInput reports whether an output uses a specific input.
 func (mr *MetadataRouter) outputUsesInput(outputName string, inputName string) bool {
 	inputNames, exists := mr.outputInputs[outputName]
-	if !exists {
-		return false
-	}
-
-	for _, name := range inputNames {
-		if name == inputName {
-			return true
-		}
-	}
-	return false
+	return exists && slices.Contains(inputNames, inputName)
 }
 
-// cancelScheduledUpdates cancels all pending updates for an output.
 func (mr *MetadataRouter) cancelScheduledUpdates(outputName string) {
 	mr.timeline.cancelUpdatesForOutput(outputName)
 }
@@ -473,25 +434,21 @@ func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	}
 }
 
-// checkForExpirations finds expired inputs and schedules fallback updates (with delays).
+// checkForExpirations schedules fallback updates for outputs whose current input has expired.
 func (mr *MetadataRouter) checkForExpirations() {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
 
 	for outputName, output := range mr.outputs {
-		// Skip if there are already pending updates for this output
 		if mr.timeline.hasScheduledUpdatesForOutput(outputName) {
 			continue
 		}
 
-		// Get the current input for this output
 		currentInputName, hasCurrentInput := mr.currentInputs[outputName]
 		if !hasCurrentInput {
-			// No current input set, skip
 			continue
 		}
 
-		// Check if the current input has expired
 		currentInput, exists := mr.inputs[currentInputName]
 		if !exists {
 			continue
@@ -499,17 +456,14 @@ func (mr *MetadataRouter) checkForExpirations() {
 
 		currentMetadata := currentInput.GetMetadata()
 		if currentMetadata != nil && currentMetadata.IsAvailable() {
-			// Current input is still available, no need for fallback
 			continue
 		}
 
-		// Current input has expired, find next available input
 		inputNames, exists := mr.outputInputs[outputName]
 		if !exists {
 			continue
 		}
 
-		// Find the first available (non-expired) metadata
 		var fallbackMetadata *Metadata
 		var fallbackInputName string
 		for _, inputName := range inputNames {
@@ -523,14 +477,11 @@ func (mr *MetadataRouter) checkForExpirations() {
 			}
 		}
 
-		// Check if we have fallback metadata and if it would be different from what we last sent
 		if fallbackMetadata != nil && fallbackInputName != currentInputName {
 			formattedText := mr.formatMetadataForOutput(outputName, fallbackMetadata, fallbackInputName)
 			if formattedText != "" {
-				// Only schedule if content is different from what we last sent
 				lastSent := mr.lastSentContent[outputName]
 				if formattedText != lastSent {
-					// Schedule fallback with delay
 					delay := time.Duration(output.GetDelay()) * time.Second
 					executeAt := time.Now().Add(delay)
 
@@ -548,26 +499,23 @@ func (mr *MetadataRouter) checkForExpirations() {
 				}
 			}
 		} else if fallbackMetadata == nil {
-			// No fallback available - clear the current input
 			mr.currentInputs[outputName] = ""
 			slog.Info("Output has no available inputs - cleared current input", "output", outputName)
 		}
 	}
 }
 
-// formatMetadataForOutput formats metadata for a specific output using its formatters and input prefix/suffix.
+// formatMetadataForOutput applies prefix/suffix and formatters to produce final output text.
 func (mr *MetadataRouter) formatMetadataForOutput(outputName string, metadata *Metadata, inputName string) string {
 	if metadata == nil {
 		return ""
 	}
 
-	// Get the base formatted string
 	formattedText := metadata.FormatString()
 	if formattedText == "" {
 		return ""
 	}
 
-	// Apply input-specific prefix/suffix
 	if prefixSuffix, exists := mr.inputPrefixSuffix[inputName]; exists {
 		if prefixSuffix.Prefix != "" {
 			formattedText = prefixSuffix.Prefix + formattedText
@@ -577,13 +525,11 @@ func (mr *MetadataRouter) formatMetadataForOutput(outputName string, metadata *M
 		}
 	}
 
-	// Apply output-specific formatters
 	outputFormatters, exists := mr.outputFormatters[outputName]
 	if !exists {
 		return formattedText
 	}
 
-	// Apply each formatter in sequence
 	for _, formatter := range outputFormatters {
 		formattedText = formatter.Format(formattedText)
 	}
@@ -591,9 +537,9 @@ func (mr *MetadataRouter) formatMetadataForOutput(outputName string, metadata *M
 	return formattedText
 }
 
-// startTimelineProcessor processes scheduled updates from the timeline.
+// startTimelineProcessor runs a background loop that executes scheduled updates.
 func (mr *MetadataRouter) startTimelineProcessor(ctx context.Context) {
-	ticker := time.NewTicker(100 * time.Millisecond) // Check every 100ms for precision
+	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
 	slog.Info("Started timeline processor (100ms interval)")
@@ -608,26 +554,22 @@ func (mr *MetadataRouter) startTimelineProcessor(ctx context.Context) {
 	}
 }
 
-// processReadyUpdates executes all updates that are ready to be processed.
+// processReadyUpdates executes all scheduled updates whose time has arrived.
 func (mr *MetadataRouter) processReadyUpdates() {
 	now := time.Now()
 	readyUpdates := mr.timeline.getReadyUpdates(now)
 
-	// Process all ready updates concurrently (async)
 	var wg sync.WaitGroup
 	for _, update := range readyUpdates {
-		wg.Add(1)
-		go func(update ScheduledUpdate) {
-			defer wg.Done()
+		wg.Go(func() {
 			mr.executeUpdate(update)
-		}(update)
+		})
 	}
 	wg.Wait()
 }
 
-// executeUpdate processes a single scheduled update.
+// executeUpdate sends formatted metadata to an output if content has changed.
 func (mr *MetadataRouter) executeUpdate(update ScheduledUpdate) {
-	// Find which input this metadata came from
 	var inputName string
 	var inputType string
 	mr.mu.RLock()
@@ -640,28 +582,23 @@ func (mr *MetadataRouter) executeUpdate(update ScheduledUpdate) {
 	}
 	mr.mu.RUnlock()
 
-	// Format metadata for this output
 	formattedText := mr.formatMetadataForOutput(update.OutputName, update.Metadata, inputName)
 	if formattedText == "" {
 		return
 	}
 
-	// Check if content has changed from what we last sent
 	mr.mu.Lock()
 	lastSent := mr.lastSentContent[update.OutputName]
 	if formattedText == lastSent {
 		mr.mu.Unlock()
-		return // No change, skip update
+		return
 	}
-	// Update tracking before unlocking
 	mr.lastSentContent[update.OutputName] = formattedText
 	mr.currentInputs[update.OutputName] = inputName
 	mr.mu.Unlock()
 
-	// Execute the update
 	slog.Debug("Executing update for output", "update_type", update.UpdateType, "output", update.OutputName, "text", formattedText)
 
-	// Check if output supports enhanced metadata processing
 	if enhancedOutput, ok := update.Output.(EnhancedOutput); ok {
 		enhancedOutput.SendEnhancedMetadata(formattedText, update.Metadata, inputName, inputType)
 	} else {
@@ -669,30 +606,20 @@ func (mr *MetadataRouter) executeUpdate(update ScheduledUpdate) {
 	}
 }
 
-// Timeline methods
-
-// addUpdate adds an update to the timeline in chronological order.
 func (t *Timeline) addUpdate(update ScheduledUpdate) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Insert in chronological order
-	insertIndex := sort.Search(len(t.updates), func(i int) bool {
-		return t.updates[i].ExecuteAt.After(update.ExecuteAt)
+	insertIndex, _ := slices.BinarySearchFunc(t.updates, update, func(a, b ScheduledUpdate) int {
+		return a.ExecuteAt.Compare(b.ExecuteAt)
 	})
-
-	// Insert at the correct position
-	t.updates = append(t.updates, ScheduledUpdate{})
-	copy(t.updates[insertIndex+1:], t.updates[insertIndex:])
-	t.updates[insertIndex] = update
+	t.updates = slices.Insert(t.updates, insertIndex, update)
 }
 
-// getReadyUpdates returns and removes all updates that should be executed now.
 func (t *Timeline) getReadyUpdates(now time.Time) []ScheduledUpdate {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Find all updates that are ready
 	readyCount := 0
 	for i, update := range t.updates {
 		if update.ExecuteAt.After(now) {
@@ -705,41 +632,28 @@ func (t *Timeline) getReadyUpdates(now time.Time) []ScheduledUpdate {
 		return nil
 	}
 
-	// Extract ready updates
 	ready := make([]ScheduledUpdate, readyCount)
 	copy(ready, t.updates[:readyCount])
-
-	// Remove from timeline
 	t.updates = t.updates[readyCount:]
 
 	return ready
 }
 
-// cancelUpdatesForOutput removes all scheduled updates for a specific output.
 func (t *Timeline) cancelUpdatesForOutput(outputName string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Filter out updates for this output
-	filtered := make([]ScheduledUpdate, 0, len(t.updates))
-	cancelCount := 0
-
-	for _, update := range t.updates {
-		if update.OutputName != outputName {
-			filtered = append(filtered, update)
-		} else {
-			cancelCount++
-		}
-	}
-
-	t.updates = filtered
+	initialLen := len(t.updates)
+	t.updates = slices.DeleteFunc(t.updates, func(update ScheduledUpdate) bool {
+		return update.OutputName == outputName
+	})
+	cancelCount := initialLen - len(t.updates)
 
 	if cancelCount > 0 {
 		slog.Debug("Cancelled pending updates for output", "count", cancelCount, "output", outputName)
 	}
 }
 
-// hasScheduledUpdatesForOutput reports whether an output has any pending updates.
 func (t *Timeline) hasScheduledUpdatesForOutput(outputName string) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()

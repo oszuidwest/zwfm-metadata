@@ -6,17 +6,16 @@ import (
 )
 
 // ParseJSONSettings is a generic function to parse JSON settings.
-func ParseJSONSettings[T any](settings interface{}) (*T, error) {
+func ParseJSONSettings[T any](settings any) (*T, error) {
 	var result T
 
-	// Handle different input types
 	var settingsJSON []byte
 	var err error
 
 	switch v := settings.(type) {
 	case json.RawMessage:
 		settingsJSON = v
-	case map[string]interface{}:
+	case map[string]any:
 		settingsJSON, err = json.Marshal(v)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal settings: %w", err)
