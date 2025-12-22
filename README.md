@@ -14,6 +14,7 @@ Metadata routing middleware for radio stations that routes metadata from inputs 
 - [Configuration](#configuration)
   - [Global Settings](#global-settings)
 - [Inputs](#inputs)
+  - [Input Feature Comparison](#input-feature-comparison)
   - [Dynamic Input](#dynamic-input)
   - [URL Input](#url-input)
   - [Text Input](#text-input)
@@ -475,7 +476,6 @@ Serves metadata via GET endpoints with multiple response formats
 ##### Response Types
 - **JSON**: Standard metadata object with all fields
 - **XML**: XML with escaped content
-- **YAML**: YAML format for configuration files
 - **Plaintext**: Just the formatted metadata text
 
 #### WebSocket Output
@@ -556,11 +556,11 @@ Artist - Song Title
 ```
 
 The output automatically:
-- Detects artist and title positions in the formatted text
+- Calculates accurate artist and title positions from StructuredText field boundaries
 - Generates correct DL_PLUS_TAG entries (type 4 for ARTIST, type 1 for TITLE)
 - Sets DL_PLUS_ITEM_RUNNING=1 for tracks (with artist+title), 0 for station/program info
 - Alternates DL_PLUS_ITEM_TOGGLE between 0 and 1 on each update to indicate content changes
-- Handles prefixes and suffixes correctly
+- Preserves accurate positions even after formatters modify the text
 
 Note: ODR-PadEnc automatically re-reads DL files before each transmission.
 
@@ -596,7 +596,7 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 
 ### Custom Payload Mapping
 
-Both **URL** (POST method) and **WebSocket** outputs support custom payload mapping to transform the output format to match any JSON structure that your API expects.
+**URL** (POST method), **HTTP**, and **WebSocket** outputs support custom payload mapping to transform the output format to match any JSON structure that your API expects.
 
 #### How It Works
 - **Static values**: Any string without `{{}}` is used as-is
@@ -787,10 +787,10 @@ Output:
 
 ## Formatters
 
-Apply text transformations to metadata before sending it to outputs.
+Transform metadata fields (artist, title) before sending to outputs. Formatters operate on individual fields within StructuredText, preserving field boundaries for accurate position tracking.
 
 **Formatters vs Templates**:
-- **Formatters** apply to ALL output types and transform the text before any output processing
+- **Formatters** apply to ALL output types and transform fields before output processing
 - **Templates** (e.g., `{{.title | upper}}`) are only available in URL, HTTP, and WebSocket outputs
 - Use formatters when you want the same transformation for all outputs, use templates for output-specific formatting
 
@@ -840,7 +840,7 @@ Smart processing for RDS compliance:
 
 ### Usage
 
-Formatters can be applied individually or chained together in sequence. When multiple formatters are specified, each formatter receives the output of the previous formatter.
+Formatters can be applied individually or chained together in sequence. When multiple formatters are specified, each formatter modifies the StructuredText fields in sequence.
 
 #### Single Formatter
 ```json
