@@ -9,7 +9,6 @@ import (
 func WriteFile(filename string, content []byte) error {
 	cleanPath := filepath.Clean(filename)
 
-	// Ensure directory exists
 	if dir := filepath.Dir(cleanPath); dir != "." {
 		if err := os.MkdirAll(dir, 0750); err != nil {
 			return err

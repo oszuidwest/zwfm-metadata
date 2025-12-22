@@ -10,20 +10,17 @@ import (
 	"unicode"
 )
 
-// RDSFormatter limits text to 64 characters for RDS compliance.
+// RDSFormatter truncates text to 64 characters with smart simplification for radio display.
 type RDSFormatter struct{}
 
-// Format implements the Formatter interface with smart truncation.
+// Format applies progressive simplification to fit text within 64 characters.
 func (r *RDSFormatter) Format(text string) string {
-	// First strip HTML tags and decode entities for plain text
 	text = stripHTMLTags(text)
 
-	// If already within limit, return as is
 	if len(text) <= 64 {
 		return text
 	}
 
-	// Try progressive simplification strategies
 	processedText := text
 
 	// 1. Remove content in parentheses progressively from right to left
@@ -140,9 +137,7 @@ func (r *RDSFormatter) Format(text string) string {
 	return processedText
 }
 
-// stripHTMLTags removes all HTML tags and decodes entities.
 func stripHTMLTags(text string) string {
-	// Parse HTML and extract text content
 	doc, err := html.Parse(strings.NewReader(text))
 	if err != nil {
 		// If parsing fails, return original text
@@ -150,12 +145,9 @@ func stripHTMLTags(text string) string {
 	}
 
 	result := extractText(doc)
-
-	// Filter out invisible/control characters and convert newlines for RDS displays
 	return filterVisibleText(result)
 }
 
-// extractText recursively extracts text content from HTML nodes.
 func extractText(n *html.Node) string {
 	if n.Type == html.TextNode {
 		return n.Data
@@ -169,25 +161,18 @@ func extractText(n *html.Node) string {
 	return result.String()
 }
 
-// filterVisibleText removes invisible and control characters, keeping only ASCII characters.
-// Accented and special characters should be transliterated to ASCII before calling this function.
 func filterVisibleText(text string) string {
-	// First, transliterate accented and special characters to ASCII
 	text = transliterateToASCII(text)
 
 	var result strings.Builder
 	for _, r := range text {
-		// Keep only ASCII printable characters (32-126) and basic whitespace
 		if (r >= 32 && r <= 126) || r == ' ' {
 			result.WriteRune(r)
 		} else if r == '\n' || r == '\r' || r == '\t' {
-			// Convert whitespace to spaces for single-line RDS output
 			result.WriteRune(' ')
 		}
-		// Skip any non-ASCII characters that remain after transliteration
 	}
 
-	// Normalize multiple spaces to single spaces
 	text = regexp.MustCompile(`\s+`).ReplaceAllString(result.String(), " ")
 	return strings.TrimSpace(text)
 }

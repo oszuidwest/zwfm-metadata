@@ -12,14 +12,14 @@ import (
 	"zwfm-metadata/core"
 )
 
-// DynamicInput handles dynamic HTTP input.
+// DynamicInput receives metadata via HTTP API calls with configurable expiration.
 type DynamicInput struct {
 	*core.InputBase
 	core.PassiveComponent
 	settings config.DynamicInputConfig
 }
 
-// NewDynamicInput creates a new dynamic input.
+// NewDynamicInput creates a DynamicInput with the given name and settings.
 func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicInput {
 	return &DynamicInput{
 		InputBase: core.NewInputBase(name),
@@ -35,12 +35,10 @@ func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicIn
 //
 // Invalid formats will cause immediate expiration or fixed fallback if configured.
 func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret string) error {
-	// Check secret
 	if d.settings.Secret != "" && secret != d.settings.Secret {
 		return fmt.Errorf("invalid secret")
 	}
 
-	// Check required fields - only title is required
 	if title == "" {
 		return fmt.Errorf("title is required")
 	}
@@ -54,7 +52,6 @@ func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret st
 		UpdatedAt: time.Now(),
 	}
 
-	// Calculate expiration
 	switch d.settings.Expiration.Type {
 	case "dynamic":
 		expiresAt := d.calculateDynamicExpiration(duration)
@@ -86,9 +83,7 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 	duration = strings.TrimSpace(duration)
 	var secondsFormatRe = regexp.MustCompile(`^\d+(?:[.,]\d+)?$`)
 
-	// Check format and parse accordingly
 	if secondsFormatRe.MatchString(duration) {
-		// Seconds format (e.g., "272" or "272.5" or "272,5")
 		fs, err := strconv.ParseFloat(strings.ReplaceAll(duration, ",", "."), 64)
 		if err != nil {
 			slog.Error("Error converting numerical value to Float duration", "input", d.GetName(), "duration", duration, "error", err)
@@ -140,13 +135,11 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 		return time.Now() // Immediate expiration
 	}
 
-	// Validate minimum duration
 	if totalSeconds <= 0 {
 		slog.Error("Duration must be greater than 0 seconds - will expire immediately", "input", d.GetName(), "duration", duration)
-		return time.Now() // Immediate expiration
+		return time.Now()
 	}
 
-	// Round up to next minute
 	minutes := int(math.Ceil(float64(totalSeconds) / 60.0))
 
 	expiresAt := time.Now().Add(time.Duration(minutes) * time.Minute)

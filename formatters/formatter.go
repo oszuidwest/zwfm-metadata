@@ -6,23 +6,22 @@ import (
 	"fmt"
 )
 
-// Formatter defines the interface for text transformations.
+// Formatter transforms metadata text for output-specific requirements.
 type Formatter interface {
 	Format(text string) string
 }
 
-// FormatterFactory is a function type that creates a new formatter instance.
+// FormatterFactory creates new Formatter instances for the registry.
 type FormatterFactory func() Formatter
 
-// formatterRegistry holds all registered formatters
 var formatterRegistry = map[string]FormatterFactory{}
 
-// RegisterFormatter registers a new formatter factory.
+// RegisterFormatter adds a formatter factory to the global registry.
 func RegisterFormatter(name string, factory FormatterFactory) {
 	formatterRegistry[name] = factory
 }
 
-// GetFormatter returns a formatter by name.
+// GetFormatter creates a formatter instance by name from the registry.
 func GetFormatter(name string) (Formatter, error) {
 	factory, exists := formatterRegistry[name]
 	if !exists {

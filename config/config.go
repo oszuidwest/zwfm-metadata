@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-// Config represents the main configuration.
+// Config holds application settings including web server port, inputs, outputs, and formatters.
 type Config struct {
 	WebServerPort int            `json:"webServerPort"`
 	Debug         bool           `json:"debug,omitempty"`
@@ -21,25 +21,25 @@ type Config struct {
 	Formatters    []string       `json:"formatters,omitempty"`
 }
 
-// InputConfig represents input configuration.
+// InputConfig defines a metadata source with its type, name, and type-specific settings.
 type InputConfig struct {
-	Type     string                 `json:"type"`
-	Name     string                 `json:"name"`
-	Prefix   string                 `json:"prefix,omitempty"`
-	Suffix   string                 `json:"suffix,omitempty"`
-	Settings map[string]interface{} `json:"settings"`
+	Type     string         `json:"type"`
+	Name     string         `json:"name"`
+	Prefix   string         `json:"prefix,omitempty"`
+	Suffix   string         `json:"suffix,omitempty"`
+	Settings map[string]any `json:"settings"`
 }
 
-// OutputConfig represents output configuration.
+// OutputConfig defines a metadata destination with its type, linked inputs, and type-specific settings.
 type OutputConfig struct {
-	Type       string                 `json:"type"`
-	Name       string                 `json:"name"`
-	Inputs     []string               `json:"inputs"`
-	Formatters []string               `json:"formatters,omitempty"`
-	Settings   map[string]interface{} `json:"settings"`
+	Type       string         `json:"type"`
+	Name       string         `json:"name"`
+	Inputs     []string       `json:"inputs"`
+	Formatters []string       `json:"formatters,omitempty"`
+	Settings   map[string]any `json:"settings"`
 }
 
-// DynamicInputConfig represents configuration for dynamic input.
+// DynamicInputConfig holds settings for HTTP API-driven metadata updates with optional expiration.
 type DynamicInputConfig struct {
 	Secret     string `json:"secret"`
 	Expiration struct {
@@ -48,7 +48,7 @@ type DynamicInputConfig struct {
 	} `json:"expiration"`
 }
 
-// URLInputConfig represents configuration for URL input.
+// URLInputConfig holds settings for polling external URLs with optional JSON parsing.
 type URLInputConfig struct {
 	URL             string `json:"url"`
 	JSONParsing     bool   `json:"jsonParsing"`
@@ -58,12 +58,12 @@ type URLInputConfig struct {
 	PollingInterval int    `json:"pollingInterval"`
 }
 
-// TextInputConfig represents configuration for text input.
+// TextInputConfig holds settings for static text metadata, typically used as fallback.
 type TextInputConfig struct {
 	Text string `json:"text"`
 }
 
-// IcecastOutputConfig represents configuration for Icecast output.
+// IcecastOutputConfig holds connection settings for updating Icecast stream metadata.
 type IcecastOutputConfig struct {
 	Delay      int    `json:"delay"`
 	Server     string `json:"server"`
@@ -73,57 +73,56 @@ type IcecastOutputConfig struct {
 	Mountpoint string `json:"mountpoint"`
 }
 
-// FileOutputConfig represents configuration for file output.
+// FileOutputConfig holds settings for writing metadata to local files.
 type FileOutputConfig struct {
 	Delay    int    `json:"delay"`
 	Filename string `json:"filename"`
 }
 
-// URLOutputConfig represents configuration for flexible URL output (GET or POST).
+// URLOutputConfig holds settings for sending metadata via HTTP GET or POST requests.
 type URLOutputConfig struct {
-	Delay          int                    `json:"delay"`
-	URL            string                 `json:"url"`
-	Method         string                 `json:"method,omitempty"` // GET or POST (required)
-	BearerToken    string                 `json:"bearerToken,omitempty"`
-	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"` // Only for POST
+	Delay          int            `json:"delay"`
+	URL            string         `json:"url"`
+	Method         string         `json:"method,omitempty"` // GET or POST (required)
+	BearerToken    string         `json:"bearerToken,omitempty"`
+	PayloadMapping map[string]any `json:"payloadMapping,omitempty"` // Only for POST
 }
 
-// DLPlusOutputConfig represents configuration for DL Plus output.
+// DLPlusOutputConfig holds settings for DAB/DAB+ DL Plus text output.
 type DLPlusOutputConfig struct {
 	Delay    int    `json:"delay"`
 	Filename string `json:"filename"`
 }
 
-// WebSocketOutputConfig represents configuration for WebSocket output.
+// WebSocketOutputConfig holds settings for real-time WebSocket metadata broadcasting.
 type WebSocketOutputConfig struct {
-	Delay          int                    `json:"delay"`
-	Path           string                 `json:"path"`
-	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
+	Delay          int            `json:"delay"`
+	Path           string         `json:"path"`
+	PayloadMapping map[string]any `json:"payloadMapping,omitempty"`
 }
 
-// HTTPOutputConfig represents configuration for HTTP output.
+// HTTPOutputConfig holds settings for serving metadata via HTTP GET endpoints.
 type HTTPOutputConfig struct {
 	Delay     int            `json:"delay"`
 	Endpoints []HTTPEndpoint `json:"endpoints"`
 }
 
-// HTTPEndpoint represents a single HTTP endpoint configuration.
+// HTTPEndpoint defines a single HTTP GET endpoint with response format and optional payload mapping.
 type HTTPEndpoint struct {
-	Path           string                 `json:"path"`
-	ResponseType   string                 `json:"responseType,omitempty"` // json, xml, plaintext, custom
-	PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
+	Path           string         `json:"path"`
+	ResponseType   string         `json:"responseType,omitempty"` // json, xml, plaintext, custom
+	PayloadMapping map[string]any `json:"payloadMapping,omitempty"`
 }
 
-// StereoToolOutputConfig represents configuration for StereoTool output.
+// StereoToolOutputConfig holds connection settings for StereoTool RDS RadioText updates.
 type StereoToolOutputConfig struct {
 	Delay    int    `json:"delay"`
 	Hostname string `json:"hostname"`
 	Port     int    `json:"port"`
 }
 
-// LoadConfig loads configuration from a file.
+// LoadConfig reads and parses a JSON configuration file, applying defaults for unspecified values.
 func LoadConfig(filename string) (*Config, error) {
-	// Clean the path to prevent directory traversal
 	cleanPath := filepath.Clean(filename)
 
 	// #nosec G304 - This is intentionally loading user-specified config files
@@ -143,17 +142,12 @@ func LoadConfig(filename string) (*Config, error) {
 		return nil, fmt.Errorf("failed to decode config: %w", err)
 	}
 
-	// Set default port if not specified
 	if config.WebServerPort == 0 {
 		config.WebServerPort = 9000
 	}
-
-	// Set default station name if not specified
 	if config.StationName == "" {
 		config.StationName = "ZuidWest FM"
 	}
-
-	// Set default brand color if not specified
 	if config.BrandColor == "" {
 		config.BrandColor = "#e6007e"
 	}

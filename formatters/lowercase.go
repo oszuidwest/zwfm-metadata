@@ -2,10 +2,10 @@ package formatters
 
 import "strings"
 
-// LowercaseFormatter converts text to lowercase.
+// LowercaseFormatter converts all characters to lowercase.
 type LowercaseFormatter struct{}
 
-// Format implements the Formatter interface.
+// Format returns text in lowercase.
 func (l *LowercaseFormatter) Format(text string) string {
 	return strings.ToLower(text)
 }

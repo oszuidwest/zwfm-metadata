@@ -12,11 +12,9 @@ import (
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
-
-	"github.com/gorilla/mux"
 )
 
-// HTTPOutput handles serving metadata via GET endpoints.
+// HTTPOutput serves metadata via configurable HTTP GET endpoints.
 type HTTPOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
@@ -28,7 +26,7 @@ type HTTPOutput struct {
 	endpointMappers map[string]*utils.PayloadMapper // path -> pre-compiled mapper
 }
 
-// NewHTTPOutput creates a new HTTP output.
+// NewHTTPOutput creates an HTTPOutput with the given name and settings.
 func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 	output := &HTTPOutput{
 		OutputBase:      core.NewOutputBase(name),
@@ -36,7 +34,6 @@ func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 		endpointMappers: make(map[string]*utils.PayloadMapper),
 	}
 
-	// Pre-compile templates for endpoints that have payloadMapping
 	for _, endpoint := range settings.Endpoints {
 		if endpoint.PayloadMapping != nil {
 			output.endpointMappers[endpoint.Path] = utils.NewPayloadMapper(endpoint.PayloadMapping)
@@ -47,27 +44,23 @@ func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 	return output
 }
 
-// RegisterRoutes implements the RouteRegistrar interface.
-func (h *HTTPOutput) RegisterRoutes(router *mux.Router) {
+// RegisterRoutes registers HTTP GET endpoints on the server mux.
+func (h *HTTPOutput) RegisterRoutes(mux *http.ServeMux) {
 	for _, endpoint := range h.settings.Endpoints {
-		// Capture endpoint in closure to avoid loop variable issues
-		endpoint := endpoint
-		router.HandleFunc(endpoint.Path, func(w http.ResponseWriter, req *http.Request) {
+		mux.HandleFunc("GET "+endpoint.Path, func(w http.ResponseWriter, req *http.Request) {
 			h.handleEndpoint(w, req, endpoint)
-		}).Methods("GET")
+		})
 
 		slog.Info("HTTP endpoint registered", "output", h.GetName(), "path", endpoint.Path, "type", endpoint.ResponseType)
 	}
 }
 
-// SendFormattedMetadata implements the Output interface.
+// SendFormattedMetadata stores metadata for serving via HTTP endpoints.
 func (h *HTTPOutput) SendFormattedMetadata(formattedText string) {
-	// Check if value changed to avoid unnecessary processing
 	if !h.HasChanged(formattedText) {
 		return
 	}
 
-	// Create minimal metadata for fallback case
 	minimalMetadata := &core.Metadata{
 		Title:     formattedText, // Use formatted text as title fallback
 		UpdatedAt: time.Now(),
@@ -77,9 +70,8 @@ func (h *HTTPOutput) SendFormattedMetadata(formattedText string) {
 	h.storeCurrentMetadata(httpMetadata)
 }
 
-// SendEnhancedMetadata implements the EnhancedOutput interface.
+// SendEnhancedMetadata stores full metadata for serving via HTTP endpoints.
 func (h *HTTPOutput) SendEnhancedMetadata(formattedText string, metadata *core.Metadata, inputName, inputType string) {
-	// Check if value changed to avoid unnecessary processing
 	if !h.HasChanged(formattedText) {
 		return
 	}
@@ -88,16 +80,13 @@ func (h *HTTPOutput) SendEnhancedMetadata(formattedText string, metadata *core.M
 	h.storeCurrentMetadata(httpMetadata)
 }
 
-// handleEndpoint handles individual endpoint requests.
 func (h *HTTPOutput) handleEndpoint(w http.ResponseWriter, _ *http.Request, endpoint config.HTTPEndpoint) {
-	// Get current metadata
 	metadata := h.getCurrentMetadata()
 	if metadata == nil {
 		http.Error(w, "No metadata available", http.StatusNoContent)
 		return
 	}
 
-	// Generate response using pre-compiled templates
 	responseData, contentType, err := h.generateResponse(metadata, endpoint)
 	if err != nil {
 		slog.Error("Failed to generate HTTP response", "output", h.GetName(), "path", endpoint.Path, "error", err)
@@ -105,11 +94,9 @@ func (h *HTTPOutput) handleEndpoint(w http.ResponseWriter, _ *http.Request, endp
 		return
 	}
 
-	// Set headers (let reverse proxy handle caching)
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	// Write response
 	if _, err := w.Write(responseData); err != nil {
 		slog.Error("Failed to write HTTP response", "output", h.GetName(), "path", endpoint.Path, "error", err)
 	}
@@ -117,30 +104,21 @@ func (h *HTTPOutput) handleEndpoint(w http.ResponseWriter, _ *http.Request, endp
 	slog.Debug("Served HTTP response", "output", h.GetName(), "path", endpoint.Path, "content_type", contentType)
 }
 
-// generateResponse creates the response data based on endpoint configuration.
 func (h *HTTPOutput) generateResponse(metadata *utils.UniversalMetadata, endpoint config.HTTPEndpoint) ([]byte, string, error) {
-	// If payloadMapping is defined, use it (always takes priority)
 	if endpoint.PayloadMapping != nil {
 		return h.generateCustomResponse(metadata, endpoint)
 	}
-
-	// Use standard response types
 	return h.generateStandardResponse(metadata, endpoint.ResponseType)
 }
 
-// generateCustomResponse generates response using payloadMapping
 func (h *HTTPOutput) generateCustomResponse(metadata *utils.UniversalMetadata, endpoint config.HTTPEndpoint) ([]byte, string, error) {
-	// Use pre-compiled mapper (MUCH faster!)
 	mapper := h.endpointMappers[endpoint.Path]
 	if mapper == nil {
-		// Fallback if mapper not found (shouldn't happen)
 		mapper = utils.NewPayloadMapper(endpoint.PayloadMapping)
 	}
 
-	// Apply payload mapping with pre-compiled templates
 	result := mapper.MapPayload(metadata.ToTemplateData())
 
-	// Handle special cases for single-value responses
 	if len(result) == 1 {
 		for _, value := range result {
 			if str, ok := value.(string); ok {
@@ -148,12 +126,9 @@ func (h *HTTPOutput) generateCustomResponse(metadata *utils.UniversalMetadata, e
 			}
 		}
 	}
-
-	// Handle complex structures
 	return h.encodeResponse(result, endpoint.ResponseType)
 }
 
-// generateStandardResponse generates response using standard formats
 func (h *HTTPOutput) generateStandardResponse(metadata *utils.UniversalMetadata, responseType string) ([]byte, string, error) {
 	switch strings.ToLower(responseType) {
 	case "xml":
@@ -167,8 +142,7 @@ func (h *HTTPOutput) generateStandardResponse(metadata *utils.UniversalMetadata,
 	}
 }
 
-// encodeResponse encodes data based on response type
-func (h *HTTPOutput) encodeResponse(data interface{}, responseType string) ([]byte, string, error) {
+func (h *HTTPOutput) encodeResponse(data any, responseType string) ([]byte, string, error) {
 	switch strings.ToLower(responseType) {
 	case "xml":
 		if str, ok := data.(string); ok {
@@ -189,7 +163,6 @@ func (h *HTTPOutput) encodeResponse(data interface{}, responseType string) ([]by
 	}
 }
 
-// buildXMLString creates XML string from metadata.
 func (h *HTTPOutput) buildXMLString(metadata *utils.UniversalMetadata) string {
 	expiresAt := ""
 	if metadata.ExpiresAt != nil {
@@ -216,21 +189,18 @@ func (h *HTTPOutput) buildXMLString(metadata *utils.UniversalMetadata) string {
 	)
 }
 
-// storeCurrentMetadata stores the current metadata for endpoint requests
 func (h *HTTPOutput) storeCurrentMetadata(metadata *utils.UniversalMetadata) {
 	h.metadataMu.Lock()
 	defer h.metadataMu.Unlock()
 	h.currentMetadata = metadata
 }
 
-// getCurrentMetadata retrieves the current metadata for endpoint requests
 func (h *HTTPOutput) getCurrentMetadata() *utils.UniversalMetadata {
 	h.metadataMu.RLock()
 	defer h.metadataMu.RUnlock()
 	if h.currentMetadata == nil {
 		return nil
 	}
-	// Return a copy to avoid race conditions
 	metadata := *h.currentMetadata
 	return &metadata
 }
