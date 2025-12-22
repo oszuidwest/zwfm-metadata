@@ -193,17 +193,18 @@ Control where formatted metadata is sent.
 
 ### Output Feature Comparison
 
-| Output Type | Purpose | Enhanced Metadata | Template Support | Authentication |
-|-------------|---------|-------------------|------------------|----------------|
-| **Icecast** | Update streaming server metadata | ❌ | ❌ | Basic Auth |
-| **File** | Write to local filesystem | ❌ | ❌ | N/A |
-| **URL** | Send via HTTP GET/POST | ✅ | ✅ (GET in URL, POST via payloadMapping) | Bearer Token |
-| **HTTP** | Serve metadata via GET endpoints | ✅ | ✅ (via payloadMapping) | N/A |
-| **DL Plus** | DAB/DAB+ radio text | ✅ | ❌ | N/A |
-| **WebSocket** | Real-time browser/app updates | ✅ | ✅ (via payloadMapping) | N/A |
-| **StereoTool** | Update RDS RadioText | ❌ | ❌ | N/A |
+| Output Type | Purpose | Template Support | Authentication |
+|-------------|---------|------------------|----------------|
+| **Icecast** | Update streaming server metadata | ❌ | Basic Auth |
+| **File** | Write to local filesystem | ❌ | N/A |
+| **URL** | Send via HTTP GET/POST | ✅ (GET in URL, POST via payloadMapping) | Bearer Token |
+| **HTTP** | Serve metadata via GET endpoints | ✅ (via payloadMapping) | N/A |
+| **DL Plus** | DAB/DAB+ radio text | ❌ | N/A |
+| **WebSocket** | Real-time browser/app updates | ✅ (via payloadMapping) | N/A |
+| **StereoTool** | Update RDS RadioText | ❌ | N/A |
 
-- **Enhanced Metadata**: Receives full metadata details (title, artist, duration, etc.) rather than just formatted text
+All outputs receive full metadata (artist, title, duration, etc.) via StructuredText. The table shows additional capabilities:
+
 - **Template Support**: Can use Go template functions to transform values (e.g., `{{.title | upper}}`, `{{printf "%.20s" .title}}`)
 - **Authentication**: Security mechanisms supported
 
