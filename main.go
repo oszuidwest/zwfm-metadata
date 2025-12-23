@@ -71,7 +71,7 @@ func main() {
 	}
 
 	for _, outputCfg := range appConfig.Outputs {
-		output, err := createOutput(outputCfg)
+		output, err := createOutput(&outputCfg)
 		if err != nil {
 			slog.Error("Failed to create output", "name", outputCfg.Name, "error", err)
 			os.Exit(1)
@@ -156,7 +156,7 @@ func createInput(cfg config.InputConfig) (core.Input, error) {
 		if err != nil {
 			return nil, err
 		}
-		return inputs.NewURLInput(cfg.Name, *settings), nil
+		return inputs.NewURLInput(cfg.Name, settings), nil
 
 	case "text":
 		settings, err := utils.ParseJSONSettings[config.TextInputConfig](cfg.Settings)
@@ -170,14 +170,14 @@ func createInput(cfg config.InputConfig) (core.Input, error) {
 	}
 }
 
-func createOutput(cfg config.OutputConfig) (core.Output, error) {
+func createOutput(cfg *config.OutputConfig) (core.Output, error) {
 	switch cfg.Type {
 	case "icecast":
 		settings, err := utils.ParseJSONSettings[config.IcecastOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewIcecastOutput(cfg.Name, *settings), nil
+		return outputs.NewIcecastOutput(cfg.Name, settings), nil
 
 	case "file":
 		settings, err := utils.ParseJSONSettings[config.FileOutputConfig](cfg.Settings)

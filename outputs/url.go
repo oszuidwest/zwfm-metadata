@@ -87,10 +87,10 @@ func (u *URLOutput) Send(st *core.StructuredText) {
 	}
 
 	payload := utils.ConvertStructuredText(st)
-	u.sendRequest(*payload)
+	u.sendRequest(payload)
 }
 
-func (u *URLOutput) sendRequest(payload utils.UniversalMetadata) {
+func (u *URLOutput) sendRequest(payload *utils.UniversalMetadata) {
 	if u.settings.Method == "GET" {
 		u.sendGETRequest(payload)
 	} else {
@@ -113,7 +113,7 @@ func urlEncodeTemplateData(data map[string]any) map[string]any {
 	return encoded
 }
 
-func (u *URLOutput) sendGETRequest(payload utils.UniversalMetadata) {
+func (u *URLOutput) sendGETRequest(payload *utils.UniversalMetadata) {
 	var requestURL string
 
 	if u.urlTemplate != nil {
@@ -143,7 +143,7 @@ func (u *URLOutput) sendGETRequest(payload utils.UniversalMetadata) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", finalURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", finalURL, http.NoBody)
 	if err != nil {
 		slog.Error("Failed to create GET request", "output", u.GetName(), "error", err)
 		return
@@ -159,7 +159,7 @@ func (u *URLOutput) sendGETRequest(payload utils.UniversalMetadata) {
 		slog.Error("Failed to send GET request", "output", u.GetName(), "error", err)
 		return
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -170,13 +170,12 @@ func (u *URLOutput) sendGETRequest(payload utils.UniversalMetadata) {
 	slog.Debug("Successfully sent GET", "output", u.GetName(), "url", finalURL, "status", resp.StatusCode)
 }
 
-func (u *URLOutput) sendPOSTRequest(payload utils.UniversalMetadata) {
+func (u *URLOutput) sendPOSTRequest(payload *utils.UniversalMetadata) {
 	var payloadToSend any
 
 	if u.payloadMapper != nil {
-		payloadWithType := payload
-		payloadWithType.Type = "url"
-		payloadToSend = u.payloadMapper.MapPayload(payloadWithType.ToTemplateData())
+		payload.Type = "url"
+		payloadToSend = u.payloadMapper.MapPayload(payload.ToTemplateData())
 	} else {
 		payloadToSend = payload
 	}
@@ -209,7 +208,7 @@ func (u *URLOutput) sendPOSTRequest(payload utils.UniversalMetadata) {
 		slog.Error("Failed to send POST request", "output", u.GetName(), "error", err)
 		return
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		bodyBytes, _ := io.ReadAll(resp.Body)

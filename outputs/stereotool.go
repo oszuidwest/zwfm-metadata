@@ -54,27 +54,34 @@ func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 	defer cancel()
 
 	for id, fieldName := range fieldNames {
-		requestURL := fmt.Sprintf("http://%s:%d/json-1/lis{%q:{%q:%q,%q:%q}}",
-			i.settings.Hostname, i.settings.Port,
-			fmt.Sprintf("%d", id), "forced", "1", "new_value", url.QueryEscape(metadata))
-
-		req, err := http.NewRequestWithContext(ctx, "GET", requestURL, nil)
-		if err != nil {
-			return fmt.Errorf("failed to create request for %s: %w", fieldName, err)
+		if err := i.updateField(ctx, id, fieldName, metadata); err != nil {
+			return err
 		}
-
-		resp, err := i.httpClient.Do(req)
-		if err != nil {
-			return fmt.Errorf("failed to update %s: %w", fieldName, err)
-		}
-		defer resp.Body.Close() //nolint:errcheck
-
-		if resp.StatusCode != http.StatusOK {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("StereoTool API error for %s: status %d, response: %s", fieldName, resp.StatusCode, string(bodyBytes))
-		}
-
-		slog.Debug("Updated StereoTool field", "output", i.GetName(), "field", fieldName, "metadata", metadata)
 	}
+	return nil
+}
+
+func (i *StereoToolOutput) updateField(ctx context.Context, id int, fieldName, metadata string) error {
+	requestURL := fmt.Sprintf("http://%s:%d/json-1/lis{%q:{%q:%q,%q:%q}}",
+		i.settings.Hostname, i.settings.Port,
+		fmt.Sprintf("%d", id), "forced", "1", "new_value", url.QueryEscape(metadata))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", requestURL, http.NoBody)
+	if err != nil {
+		return fmt.Errorf("failed to create request for %s: %w", fieldName, err)
+	}
+
+	resp, err := i.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to update %s: %w", fieldName, err)
+	}
+	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("StereoTool API error for %s: status %d, response: %s", fieldName, resp.StatusCode, string(bodyBytes))
+	}
+
+	slog.Debug("Updated StereoTool field", "output", i.GetName(), "field", fieldName, "metadata", metadata)
 	return nil
 }

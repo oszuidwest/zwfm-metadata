@@ -23,10 +23,10 @@ type URLInput struct {
 }
 
 // NewURLInput creates a URLInput with the given name and settings.
-func NewURLInput(name string, settings config.URLInputConfig) *URLInput {
+func NewURLInput(name string, settings *config.URLInputConfig) *URLInput {
 	return &URLInput{
 		InputBase:  core.NewInputBase(name),
-		settings:   settings,
+		settings:   *settings,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
@@ -92,7 +92,7 @@ func (u *URLInput) poll() {
 		slog.Error("Failed to fetch data from URL input", "input", u.GetName(), "error", err)
 		return
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

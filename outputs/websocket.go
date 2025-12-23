@@ -41,7 +41,7 @@ func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *Web
 		output.metadataMu.RLock()
 		defer output.metadataMu.RUnlock()
 		if output.currentMetadata != nil {
-			return output.preparePayload(*output.currentMetadata)
+			return output.preparePayload(output.currentMetadata)
 		}
 		return nil
 	})
@@ -65,7 +65,7 @@ func (w *WebSocketOutput) Send(st *core.StructuredText) {
 	msg := utils.ConvertStructuredTextWithType(st, "metadata_update")
 
 	w.storeCurrentMetadata(msg)
-	w.broadcastMessage(*msg)
+	w.broadcastMessage(msg)
 }
 
 func (w *WebSocketOutput) storeCurrentMetadata(metadata *utils.UniversalMetadata) {
@@ -74,12 +74,12 @@ func (w *WebSocketOutput) storeCurrentMetadata(metadata *utils.UniversalMetadata
 	w.currentMetadata = metadata
 }
 
-func (w *WebSocketOutput) broadcastMessage(msg utils.UniversalMetadata) {
+func (w *WebSocketOutput) broadcastMessage(msg *utils.UniversalMetadata) {
 	payload := w.preparePayload(msg)
 	w.hub.Broadcast(payload)
 }
 
-func (w *WebSocketOutput) preparePayload(msg utils.UniversalMetadata) any {
+func (w *WebSocketOutput) preparePayload(msg *utils.UniversalMetadata) any {
 	if w.payloadMapper != nil {
 		payload := w.payloadMapper.MapPayload(msg.ToTemplateData())
 		if payload != nil {

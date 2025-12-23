@@ -140,7 +140,7 @@ func (mr *MetadataRouter) SetOutputFormatterNames(outputName string, formatterNa
 }
 
 // SetInputPrefixSuffix configures text to prepend and append to an input's metadata.
-func (mr *MetadataRouter) SetInputPrefixSuffix(inputName string, prefix, suffix string) {
+func (mr *MetadataRouter) SetInputPrefixSuffix(inputName, prefix, suffix string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.inputPrefixSuffix[inputName] = InputPrefixSuffix{
@@ -150,14 +150,14 @@ func (mr *MetadataRouter) SetInputPrefixSuffix(inputName string, prefix, suffix 
 }
 
 // SetInputType stores the input type identifier for dashboard display.
-func (mr *MetadataRouter) SetInputType(inputName string, inputType string) {
+func (mr *MetadataRouter) SetInputType(inputName, inputType string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.inputTypes[inputName] = inputType
 }
 
 // SetOutputType stores the output type identifier for dashboard display.
-func (mr *MetadataRouter) SetOutputType(outputName string, outputType string) {
+func (mr *MetadataRouter) SetOutputType(outputName, outputType string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.outputTypes[outputName] = outputType
@@ -397,7 +397,7 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 			CancelToken: cancelToken,
 		}
 
-		mr.timeline.addUpdate(update)
+		mr.timeline.addUpdate(&update)
 
 		if delay > 0 {
 			slog.Debug("Scheduled update for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
@@ -408,7 +408,7 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 }
 
 // outputUsesInput checks whether the given output has the specified input in its priority list.
-func (mr *MetadataRouter) outputUsesInput(outputName string, inputName string) bool {
+func (mr *MetadataRouter) outputUsesInput(outputName, inputName string) bool {
 	inputNames, exists := mr.outputInputs[outputName]
 	return exists && slices.Contains(inputNames, inputName)
 }
@@ -496,7 +496,7 @@ func (mr *MetadataRouter) checkForExpirations() {
 						CancelToken: fmt.Sprintf("%s_exp_%d", outputName, time.Now().UnixNano()),
 					}
 
-					mr.timeline.addUpdate(update)
+					mr.timeline.addUpdate(&update)
 					slog.Debug("Scheduled expiration fallback for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
 				}
 			}
@@ -560,14 +560,14 @@ func (mr *MetadataRouter) processReadyUpdates() {
 	var wg sync.WaitGroup
 	for _, update := range readyUpdates {
 		wg.Go(func() {
-			mr.executeUpdate(update)
+			mr.executeUpdate(&update)
 		})
 	}
 	wg.Wait()
 }
 
 // executeUpdate sends metadata to an output, skipping if content matches the last sent value.
-func (mr *MetadataRouter) executeUpdate(update ScheduledUpdate) {
+func (mr *MetadataRouter) executeUpdate(update *ScheduledUpdate) {
 	var inputName string
 	mr.mu.RLock()
 	for name, input := range mr.inputs {
@@ -601,14 +601,14 @@ func (mr *MetadataRouter) executeUpdate(update ScheduledUpdate) {
 }
 
 // addUpdate inserts an update into the timeline, maintaining chronological order.
-func (t *Timeline) addUpdate(update ScheduledUpdate) {
+func (t *Timeline) addUpdate(update *ScheduledUpdate) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	insertIndex, _ := slices.BinarySearchFunc(t.updates, update, func(a, b ScheduledUpdate) int {
+	insertIndex, _ := slices.BinarySearchFunc(t.updates, *update, func(a, b ScheduledUpdate) int {
 		return a.ExecuteAt.Compare(b.ExecuteAt)
 	})
-	t.updates = slices.Insert(t.updates, insertIndex, update)
+	t.updates = slices.Insert(t.updates, insertIndex, *update)
 }
 
 // getReadyUpdates removes and returns all updates scheduled at or before the given time.

@@ -145,12 +145,12 @@ func truncateAtWord(s string, maxRunes int) string {
 		return ""
 	}
 
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
+	chars := []rune(s)
+	if len(chars) <= maxRunes {
 		return s
 	}
 
-	truncated := runes[:maxRunes]
+	truncated := chars[:maxRunes]
 	for i := maxRunes - 1; i >= maxRunes-10 && i >= 0; i-- {
 		if truncated[i] == ' ' || truncated[i] == '-' || truncated[i] == ',' {
 			return strings.TrimSpace(string(truncated[:i]))

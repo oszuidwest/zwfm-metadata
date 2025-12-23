@@ -40,7 +40,7 @@ func (pm *PayloadMapper) MapPayload(data any) map[string]any {
 }
 
 // processMapping walks the mapping tree and applies templates to string values.
-func (pm *PayloadMapper) processMapping(mapping map[string]any, result map[string]any, data any) {
+func (pm *PayloadMapper) processMapping(mapping, result map[string]any, data any) {
 	for key, value := range mapping {
 		switch v := value.(type) {
 		case string:
@@ -62,7 +62,7 @@ func (pm *PayloadMapper) processMapping(mapping map[string]any, result map[strin
 
 // processTemplate executes a template string with the provided data.
 func (pm *PayloadMapper) processTemplate(templateString string, data any) string {
-	template, err := template.New("payload").Funcs(template.FuncMap{
+	tmpl, err := template.New("payload").Funcs(template.FuncMap{
 		"formatTime": func(t time.Time) string {
 			return t.Format(time.RFC3339)
 		},
@@ -88,7 +88,7 @@ func (pm *PayloadMapper) processTemplate(templateString string, data any) string
 		bufferPool.Put(templateBuffer)
 	}()
 
-	if err := template.Execute(templateBuffer, data); err != nil {
+	if err := tmpl.Execute(templateBuffer, data); err != nil {
 		slog.Error("Failed to execute template", "error", err, "template", templateString)
 		return templateString
 	}

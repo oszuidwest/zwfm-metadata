@@ -22,10 +22,10 @@ type IcecastOutput struct {
 }
 
 // NewIcecastOutput creates an IcecastOutput with the given name and settings.
-func NewIcecastOutput(name string, settings config.IcecastOutputConfig) *IcecastOutput {
+func NewIcecastOutput(name string, settings *config.IcecastOutputConfig) *IcecastOutput {
 	output := &IcecastOutput{
 		OutputBase: core.NewOutputBase(name),
-		settings:   settings,
+		settings:   *settings,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 	output.SetDelay(settings.Delay)
@@ -58,7 +58,7 @@ func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -70,7 +70,7 @@ func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
