@@ -179,13 +179,14 @@ func smartTruncate(st *core.StructuredText) {
 	const ellipsis = "..."
 	const ellipsisLen = 3
 
-	if artistLen <= available-minTitleLen-ellipsisLen {
+	switch {
+	case artistLen <= available-minTitleLen-ellipsisLen:
 		maxTitle := available - artistLen - ellipsisLen
 		st.Title = truncateAtWord(st.Title, maxTitle) + ellipsis
-	} else if titleLen <= available-minTitleLen-ellipsisLen {
+	case titleLen <= available-minTitleLen-ellipsisLen:
 		maxArtist := available - titleLen - ellipsisLen
 		st.Artist = truncateAtWord(st.Artist, maxArtist) + ellipsis
-	} else {
+	default:
 		halfAvailable := (available - ellipsisLen*2) / 2
 		st.Artist = truncateAtWord(st.Artist, halfAvailable) + ellipsis
 		st.Title = truncateAtWord(st.Title, halfAvailable) + ellipsis

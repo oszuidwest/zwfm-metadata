@@ -74,12 +74,13 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 
 	b.mu.Lock()
 
-	hasChanged := false
-	if b.metadata == nil && metadata != nil {
+	var hasChanged bool
+	switch {
+	case b.metadata == nil && metadata != nil:
 		hasChanged = true
-	} else if b.metadata != nil && metadata == nil {
+	case b.metadata != nil && metadata == nil:
 		hasChanged = true
-	} else if b.metadata != nil && metadata != nil {
+	case b.metadata != nil && metadata != nil:
 		hasChanged = b.metadata.Title != metadata.Title ||
 			b.metadata.Artist != metadata.Artist ||
 			b.metadata.SongID != metadata.SongID ||

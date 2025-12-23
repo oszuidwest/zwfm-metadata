@@ -192,12 +192,13 @@ func (mr *MetadataRouter) GetInputStatus() []InputStatus {
 			Available: metadata != nil && metadata.IsAvailable(),
 		}
 
-		if metadata == nil || metadata.Title == "" {
+		switch {
+		case metadata == nil || metadata.Title == "":
 			status.Status = "unavailable"
-		} else if metadata.IsExpired() {
+		case metadata.IsExpired():
 			status.Status = "expired"
 			status.Available = false
-		} else {
+		default:
 			status.Status = "available"
 		}
 
