@@ -25,6 +25,59 @@ var (
 	whitespaceReg = regexp.MustCompile(`\s+`)
 )
 
+// multiCharMappings maps Unicode characters that expand to multiple ASCII characters.
+var multiCharMappings = map[rune]string{
+	'ß': "ss", 'þ': "th", 'Þ': "TH",
+	'æ': "ae", 'Æ': "AE", 'œ': "oe", 'Œ': "OE",
+	'ĳ': "ij", 'Ĳ': "IJ",
+	'ﬁ': "fi", 'ﬂ': "fl", 'ﬀ': "ff", 'ﬃ': "ffi", 'ﬄ': "ffl",
+	'ﬅ': "st", 'ﬆ': "st",
+	'ǈ': "lj", 'ǉ': "Lj", 'Ǉ': "LJ",
+	'ǋ': "nj", 'ǌ': "Nj", 'Ǌ': "NJ",
+	'ǅ': "dz", 'ǆ': "Dz", 'Ǆ': "DZ",
+}
+
+// nonASCIIToASCII maps single non-ASCII characters to their ASCII equivalents.
+var nonASCIIToASCII = map[rune]rune{
+	// Nordic/Scandinavian
+	'ø': 'o', 'Ø': 'O', 'å': 'a', 'Å': 'A',
+	// Icelandic
+	'ð': 'd', 'Ð': 'D',
+	// Slavic/Vietnamese
+	'ł': 'l', 'Ł': 'L', 'đ': 'd', 'Đ': 'D', 'ħ': 'h', 'Ħ': 'H',
+	// Turkish
+	'ı': 'i', 'İ': 'I', 'ş': 's', 'Ş': 'S', 'ğ': 'g', 'Ğ': 'G',
+	// Catalan
+	'ŀ': 'l', 'Ŀ': 'L',
+	// Welsh
+	'ŵ': 'w', 'Ŵ': 'W', 'ŷ': 'y', 'Ŷ': 'Y',
+	// Romanian/Latvian
+	'ț': 't', 'Ț': 'T', 'ș': 's', 'Ș': 'S',
+	'ģ': 'g', 'Ģ': 'G', 'ķ': 'k', 'Ķ': 'K',
+	'ļ': 'l', 'Ļ': 'L', 'ņ': 'n', 'Ņ': 'N', 'ŗ': 'r', 'Ŗ': 'R',
+	// Czech/Slovak
+	'ď': 'd', 'Ď': 'D', 'ť': 't', 'Ť': 'T',
+	'ň': 'n', 'Ň': 'N', 'ř': 'r', 'Ř': 'R', 'ů': 'u', 'Ů': 'U',
+	// Estonian
+	'õ': 'o', 'Õ': 'O',
+	// Hungarian
+	'ő': 'o', 'Ő': 'O', 'ű': 'u', 'Ű': 'U',
+	// Sami
+	'ŋ': 'n', 'Ŋ': 'N', 'ŧ': 't', 'Ŧ': 'T',
+	// Esperanto
+	'ĉ': 'c', 'Ĉ': 'C', 'ĝ': 'g', 'Ĝ': 'G',
+	'ĥ': 'h', 'Ĥ': 'H', 'ĵ': 'j', 'Ĵ': 'J',
+	'ŝ': 's', 'Ŝ': 'S', 'ŭ': 'u', 'Ŭ': 'U',
+	// Spanish/Basque
+	'ñ': 'n', 'Ñ': 'N',
+	// Additional stroke variants
+	'ƀ': 'b', 'Ƀ': 'B', 'ɉ': 'j', 'Ɉ': 'J', 'ƶ': 'z', 'Ƶ': 'Z',
+	// Latin Extended Additional
+	'ḃ': 'b', 'Ḃ': 'B', 'ḋ': 'd', 'Ḋ': 'D',
+	'ḟ': 'f', 'Ḟ': 'F', 'ṁ': 'm', 'Ṁ': 'M',
+	'ṗ': 'p', 'Ṗ': 'P', 'ṡ': 's', 'Ṡ': 'S', 'ṫ': 't', 'Ṫ': 'T',
+}
+
 // RDSFormatter formats metadata for RDS RadioText display with 64-character limit.
 type RDSFormatter struct{}
 
@@ -223,56 +276,9 @@ func expandMultiCharMappings(text string) string {
 	result.Grow(len(text))
 
 	for _, r := range text {
-		switch r {
-		case 'ß':
-			result.WriteString("ss")
-		case 'þ':
-			result.WriteString("th")
-		case 'Þ':
-			result.WriteString("TH")
-		case 'æ':
-			result.WriteString("ae")
-		case 'Æ':
-			result.WriteString("AE")
-		case 'œ':
-			result.WriteString("oe")
-		case 'Œ':
-			result.WriteString("OE")
-		case 'ĳ':
-			result.WriteString("ij")
-		case 'Ĳ':
-			result.WriteString("IJ")
-		case 'ﬁ':
-			result.WriteString("fi")
-		case 'ﬂ':
-			result.WriteString("fl")
-		case 'ﬀ':
-			result.WriteString("ff")
-		case 'ﬃ':
-			result.WriteString("ffi")
-		case 'ﬄ':
-			result.WriteString("ffl")
-		case 'ﬅ', 'ﬆ':
-			result.WriteString("st")
-		case 'ǈ':
-			result.WriteString("lj")
-		case 'ǉ':
-			result.WriteString("Lj")
-		case 'Ǉ':
-			result.WriteString("LJ")
-		case 'ǋ':
-			result.WriteString("nj")
-		case 'ǌ':
-			result.WriteString("Nj")
-		case 'Ǌ':
-			result.WriteString("NJ")
-		case 'ǅ':
-			result.WriteString("dz")
-		case 'ǆ':
-			result.WriteString("Dz")
-		case 'Ǆ':
-			result.WriteString("DZ")
-		default:
+		if mapped, ok := multiCharMappings[r]; ok {
+			result.WriteString(mapped)
+		} else {
 			result.WriteRune(r)
 		}
 	}
@@ -285,210 +291,10 @@ func mapNonASCIIToASCII(r rune) rune {
 	if r <= 127 {
 		return r
 	}
-
-	switch r {
-	// Nordic/Scandinavian
-	case 'ø':
-		return 'o'
-	case 'Ø':
-		return 'O'
-	case 'å':
-		return 'a'
-	case 'Å':
-		return 'A'
-	// Icelandic
-	case 'ð':
-		return 'd'
-	case 'Ð':
-		return 'D'
-	// Slavic/Vietnamese
-	case 'ł':
-		return 'l'
-	case 'Ł':
-		return 'L'
-	case 'đ':
-		return 'd'
-	case 'Đ':
-		return 'D'
-	case 'ħ':
-		return 'h'
-	case 'Ħ':
-		return 'H'
-	// Turkish
-	case 'ı':
-		return 'i'
-	case 'İ':
-		return 'I'
-	case 'ş':
-		return 's'
-	case 'Ş':
-		return 'S'
-	case 'ğ':
-		return 'g'
-	case 'Ğ':
-		return 'G'
-	// Catalan
-	case 'ŀ':
-		return 'l'
-	case 'Ŀ':
-		return 'L'
-	// Welsh
-	case 'ŵ':
-		return 'w'
-	case 'Ŵ':
-		return 'W'
-	case 'ŷ':
-		return 'y'
-	case 'Ŷ':
-		return 'Y'
-	// Romanian/Latvian
-	case 'ț':
-		return 't'
-	case 'Ț':
-		return 'T'
-	case 'ș':
-		return 's'
-	case 'Ș':
-		return 'S'
-	case 'ģ':
-		return 'g'
-	case 'Ģ':
-		return 'G'
-	case 'ķ':
-		return 'k'
-	case 'Ķ':
-		return 'K'
-	case 'ļ':
-		return 'l'
-	case 'Ļ':
-		return 'L'
-	case 'ņ':
-		return 'n'
-	case 'Ņ':
-		return 'N'
-	case 'ŗ':
-		return 'r'
-	case 'Ŗ':
-		return 'R'
-	// Czech/Slovak
-	case 'ď':
-		return 'd'
-	case 'Ď':
-		return 'D'
-	case 'ť':
-		return 't'
-	case 'Ť':
-		return 'T'
-	case 'ň':
-		return 'n'
-	case 'Ň':
-		return 'N'
-	case 'ř':
-		return 'r'
-	case 'Ř':
-		return 'R'
-	case 'ů':
-		return 'u'
-	case 'Ů':
-		return 'U'
-	// Estonian
-	case 'õ':
-		return 'o'
-	case 'Õ':
-		return 'O'
-	// Hungarian
-	case 'ő':
-		return 'o'
-	case 'Ő':
-		return 'O'
-	case 'ű':
-		return 'u'
-	case 'Ű':
-		return 'U'
-	// Sami
-	case 'ŋ':
-		return 'n'
-	case 'Ŋ':
-		return 'N'
-	case 'ŧ':
-		return 't'
-	case 'Ŧ':
-		return 'T'
-	// Esperanto
-	case 'ĉ':
-		return 'c'
-	case 'Ĉ':
-		return 'C'
-	case 'ĝ':
-		return 'g'
-	case 'Ĝ':
-		return 'G'
-	case 'ĥ':
-		return 'h'
-	case 'Ĥ':
-		return 'H'
-	case 'ĵ':
-		return 'j'
-	case 'Ĵ':
-		return 'J'
-	case 'ŝ':
-		return 's'
-	case 'Ŝ':
-		return 'S'
-	case 'ŭ':
-		return 'u'
-	case 'Ŭ':
-		return 'U'
-	// Spanish/Basque
-	case 'ñ':
-		return 'n'
-	case 'Ñ':
-		return 'N'
-	// Additional stroke variants
-	case 'ƀ':
-		return 'b'
-	case 'Ƀ':
-		return 'B'
-	case 'ɉ':
-		return 'j'
-	case 'Ɉ':
-		return 'J'
-	case 'ƶ':
-		return 'z'
-	case 'Ƶ':
-		return 'Z'
-	// Latin Extended Additional
-	case 'ḃ':
-		return 'b'
-	case 'Ḃ':
-		return 'B'
-	case 'ḋ':
-		return 'd'
-	case 'Ḋ':
-		return 'D'
-	case 'ḟ':
-		return 'f'
-	case 'Ḟ':
-		return 'F'
-	case 'ṁ':
-		return 'm'
-	case 'Ṁ':
-		return 'M'
-	case 'ṗ':
-		return 'p'
-	case 'Ṗ':
-		return 'P'
-	case 'ṡ':
-		return 's'
-	case 'Ṡ':
-		return 'S'
-	case 'ṫ':
-		return 't'
-	case 'Ṫ':
-		return 'T'
-	default:
-		return -1
+	if mapped, ok := nonASCIIToASCII[r]; ok {
+		return mapped
 	}
+	return -1
 }
 
 func init() {
