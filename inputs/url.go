@@ -6,28 +6,27 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
+	"zwfm-metadata/utils"
 )
 
 // URLInput polls an external URL for metadata with optional JSON parsing.
 type URLInput struct {
 	*core.InputBase
-	settings   config.URLInputConfig
-	httpClient *http.Client
-	expiresAt  *time.Time
+	settings  config.URLInputConfig
+	expiresAt *time.Time
 }
 
 // NewURLInput creates a URLInput with the given name and settings.
 func NewURLInput(name string, settings *config.URLInputConfig) *URLInput {
 	return &URLInput{
-		InputBase:  core.NewInputBase(name),
-		settings:   *settings,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		InputBase: core.NewInputBase(name),
+		settings:  *settings,
 	}
 }
 
@@ -87,7 +86,7 @@ func (u *URLInput) poll() {
 		return
 	}
 
-	resp, err := u.httpClient.Get(u.settings.URL)
+	resp, err := utils.Get(context.Background(), u.settings.URL)
 	if err != nil {
 		slog.Error("Failed to fetch data from URL input", "input", u.GetName(), "error", err)
 		return

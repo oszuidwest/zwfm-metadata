@@ -106,44 +106,11 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 	}
 }
 
-// ChangeDetector tracks the last sent value to prevent duplicate updates.
-type ChangeDetector struct {
-	lastValue string
-	mu        sync.RWMutex
-}
-
-// HasChanged compares and stores the new value, returning true if it differs.
-func (c *ChangeDetector) HasChanged(newValue string) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if newValue != c.lastValue {
-		c.lastValue = newValue
-		return true
-	}
-	return false
-}
-
-// GetCurrentValue retrieves the last stored value.
-func (c *ChangeDetector) GetCurrentValue() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.lastValue
-}
-
-// SetCurrentValue updates the stored value without triggering change detection.
-func (c *ChangeDetector) SetCurrentValue(value string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.lastValue = value
-}
-
 // OutputBase provides the base implementation for metadata output destinations.
 type OutputBase struct {
-	name           string
-	inputs         []Input
-	changeDetector ChangeDetector
-	delay          int
+	name   string
+	inputs []Input
+	delay  int
 }
 
 // NewOutputBase initializes an OutputBase with the given name.
@@ -161,11 +128,6 @@ func (b *OutputBase) GetName() string {
 // SetInputs implements the Output interface.
 func (b *OutputBase) SetInputs(inputs []Input) {
 	b.inputs = inputs
-}
-
-// HasChanged delegates to the embedded ChangeDetector.
-func (b *OutputBase) HasChanged(newValue string) bool {
-	return b.changeDetector.HasChanged(newValue)
 }
 
 // SetDelay configures the output delay in seconds.

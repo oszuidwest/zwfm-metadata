@@ -29,15 +29,10 @@ func NewFileOutput(name string, settings config.FileOutputConfig) *FileOutput {
 
 // Send writes metadata to the configured file.
 func (f *FileOutput) Send(st *core.StructuredText) {
-	text := st.String()
-	if !f.HasChanged(text) {
-		return
-	}
-
-	if err := utils.WriteFile(f.settings.Filename, []byte(text)); err != nil {
+	if err := utils.WriteFile(f.settings.Filename, []byte(st.String())); err != nil {
 		slog.Error("Failed to write metadata to file", "output", f.GetName(), "error", err)
 		return
 	}
 
-	slog.Debug("Successfully wrote to file", "filename", f.settings.Filename, "metadata", text)
+	slog.Debug("Successfully wrote to file", "filename", f.settings.Filename, "metadata", st.String())
 }

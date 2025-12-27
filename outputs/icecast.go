@@ -7,18 +7,17 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"time"
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
+	"zwfm-metadata/utils"
 )
 
 // IcecastOutput sends metadata updates to Icecast streaming servers.
 type IcecastOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
-	settings   config.IcecastOutputConfig
-	httpClient *http.Client
+	settings config.IcecastOutputConfig
 }
 
 // NewIcecastOutput creates an IcecastOutput with the given name and settings.
@@ -26,7 +25,6 @@ func NewIcecastOutput(name string, settings *config.IcecastOutputConfig) *Icecas
 	output := &IcecastOutput{
 		OutputBase: core.NewOutputBase(name),
 		settings:   *settings,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 	output.SetDelay(settings.Delay)
 	return output
@@ -34,31 +32,26 @@ func NewIcecastOutput(name string, settings *config.IcecastOutputConfig) *Icecas
 
 // Send updates the Icecast server with new metadata.
 func (i *IcecastOutput) Send(st *core.StructuredText) {
-	text := st.String()
-	if !i.HasChanged(text) {
-		return
-	}
-
-	if err := i.sendToIcecast(text); err != nil {
+	if err := i.sendToIcecast(st.String()); err != nil {
 		slog.Error("Failed to update Icecast server", "output", i.GetName(), "error", err)
 	}
 }
 
 func (i *IcecastOutput) sendToIcecast(metadata string) error {
-	baseURL := fmt.Sprintf("http://%s:%d/admin/metadata", i.settings.Server, i.settings.Port)
+	reqURL := &url.URL{
+		Scheme: "http",
+		Host:   fmt.Sprintf("%s:%d", i.settings.Server, i.settings.Port),
+		Path:   "/admin/metadata",
+	}
 
 	params := url.Values{}
 	params.Set("mount", i.settings.Mountpoint)
 	params.Set("mode", "updinfo")
 	params.Set("song", metadata)
 	params.Set("charset", "UTF-8")
+	reqURL.RawQuery = params.Encode()
 
-	fullURL := baseURL + "?" + params.Encode()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, http.NoBody)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, reqURL.String(), http.NoBody)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -66,7 +59,7 @@ func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	req.SetBasicAuth(i.settings.Username, i.settings.Password)
 	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
 
-	resp, err := i.httpClient.Do(req)
+	resp, err := utils.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}

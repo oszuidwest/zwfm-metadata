@@ -50,6 +50,7 @@ type ScheduledUpdate struct {
 // Timeline maintains a sorted queue of scheduled updates for time-delayed processing.
 type Timeline struct {
 	updates []ScheduledUpdate
+	signal  chan struct{}
 	mu      sync.RWMutex
 }
 
@@ -85,7 +86,7 @@ func NewMetadataRouter() *MetadataRouter {
 		outputTypes:          make(map[string]string),
 		lastSentContent:      make(map[string]string),
 		currentInputs:        make(map[string]string),
-		timeline:             &Timeline{updates: make([]ScheduledUpdate, 0)},
+		timeline:             &Timeline{updates: make([]ScheduledUpdate, 0), signal: make(chan struct{}, 1)},
 		processorStop:        make(chan struct{}),
 	}
 }
@@ -536,18 +537,39 @@ func (mr *MetadataRouter) createStructuredText(outputName string, metadata *Meta
 	return st
 }
 
-// startTimelineProcessor polls the timeline and executes updates whose time has arrived.
+// startTimelineProcessor waits for scheduled updates and executes them when their time arrives.
 func (mr *MetadataRouter) startTimelineProcessor(ctx context.Context) {
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	slog.Info("Started timeline processor (100ms interval)")
+	slog.Info("Started timeline processor (event-based)")
 
 	for {
+		nextTime := mr.timeline.nextExecutionTime()
+
+		if nextTime.IsZero() {
+			// No updates scheduled, wait for signal
+			select {
+			case <-ctx.Done():
+				return
+			case <-mr.timeline.signal:
+				continue
+			}
+		}
+
+		waitDuration := time.Until(nextTime)
+		if waitDuration <= 0 {
+			// Update is ready now
+			mr.processReadyUpdates()
+			continue
+		}
+
+		timer := time.NewTimer(waitDuration)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-ticker.C:
+		case <-mr.timeline.signal:
+			timer.Stop()
+			continue
+		case <-timer.C:
 			mr.processReadyUpdates()
 		}
 	}
@@ -604,12 +626,28 @@ func (mr *MetadataRouter) executeUpdate(update *ScheduledUpdate) {
 // addUpdate inserts an update into the timeline, maintaining chronological order.
 func (t *Timeline) addUpdate(update *ScheduledUpdate) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	insertIndex, _ := slices.BinarySearchFunc(t.updates, *update, func(a, b ScheduledUpdate) int {
 		return a.ExecuteAt.Compare(b.ExecuteAt)
 	})
 	t.updates = slices.Insert(t.updates, insertIndex, *update)
+	t.mu.Unlock()
+
+	// Non-blocking signal to wake up the processor
+	select {
+	case t.signal <- struct{}{}:
+	default:
+	}
+}
+
+// nextExecutionTime returns the time of the earliest scheduled update, or zero if none.
+func (t *Timeline) nextExecutionTime() time.Time {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	if len(t.updates) == 0 {
+		return time.Time{}
+	}
+	return t.updates[0].ExecuteAt
 }
 
 // getReadyUpdates removes and returns all updates scheduled at or before the given time.
@@ -657,10 +695,7 @@ func (t *Timeline) hasScheduledUpdatesForOutput(outputName string) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	for _, update := range t.updates {
-		if update.OutputName == outputName {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(t.updates, func(u ScheduledUpdate) bool {
+		return u.OutputName == outputName
+	})
 }

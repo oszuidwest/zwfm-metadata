@@ -58,11 +58,6 @@ func (h *HTTPOutput) RegisterRoutes(mux *http.ServeMux) {
 
 // Send implements Output by caching metadata for HTTP endpoint responses.
 func (h *HTTPOutput) Send(st *core.StructuredText) {
-	text := st.String()
-	if !h.HasChanged(text) {
-		return
-	}
-
 	httpMetadata := utils.ConvertStructuredText(st)
 	h.storeCurrentMetadata(httpMetadata)
 }
