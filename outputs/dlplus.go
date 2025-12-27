@@ -36,11 +36,6 @@ func NewDLPlusOutput(name string, settings config.DLPlusOutputConfig) *DLPlusOut
 
 // Send writes metadata with DL Plus tags to the configured file.
 func (o *DLPlusOutput) Send(st *core.StructuredText) {
-	text := st.String()
-	if !o.HasChanged(text) {
-		return
-	}
-
 	content := o.buildDLPlusContent(st)
 
 	if err := utils.WriteFile(o.settings.Filename, []byte(content)); err != nil {

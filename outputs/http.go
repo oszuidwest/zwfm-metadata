@@ -45,7 +45,7 @@ func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 	return output
 }
 
-// RegisterRoutes implements RouteRegistrar to expose metadata via HTTP GET.
+// RegisterRoutes adds HTTP GET handlers for each configured endpoint to the mux.
 func (h *HTTPOutput) RegisterRoutes(mux *http.ServeMux) {
 	for _, endpoint := range h.settings.Endpoints {
 		mux.HandleFunc("GET "+endpoint.Path, func(w http.ResponseWriter, req *http.Request) {
@@ -56,13 +56,8 @@ func (h *HTTPOutput) RegisterRoutes(mux *http.ServeMux) {
 	}
 }
 
-// Send implements Output by caching metadata for HTTP endpoint responses.
+// Send caches the metadata for subsequent HTTP endpoint responses.
 func (h *HTTPOutput) Send(st *core.StructuredText) {
-	text := st.String()
-	if !h.HasChanged(text) {
-		return
-	}
-
 	httpMetadata := utils.ConvertStructuredText(st)
 	h.storeCurrentMetadata(httpMetadata)
 }

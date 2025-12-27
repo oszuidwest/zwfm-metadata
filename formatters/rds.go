@@ -81,7 +81,7 @@ var nonASCIIToASCII = map[rune]rune{
 // RDSFormatter formats metadata for RDS RadioText display with 64-character limit.
 type RDSFormatter struct{}
 
-// Format progressively simplifies text to fit the 64-character RDS limit.
+// Format transforms structured text to fit within RDS RadioText constraints.
 func (r *RDSFormatter) Format(st *core.StructuredText) {
 	st.Artist = cleanField(st.Artist)
 	st.Title = cleanField(st.Title)
@@ -252,8 +252,7 @@ func filterVisibleText(text string) string {
 	return strings.TrimSpace(result.String())
 }
 
-// transliterateToASCII converts characters to ASCII using Unicode normalization
-// combined with explicit mappings for characters without NFD decompositions.
+// transliterateToASCII converts non-ASCII characters to their closest ASCII equivalents.
 func transliterateToASCII(text string) string {
 	text = expandMultiCharMappings(text)
 

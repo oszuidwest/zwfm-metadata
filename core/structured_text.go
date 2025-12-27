@@ -64,9 +64,8 @@ func (st *StructuredText) Len() int {
 	return utf8.RuneCountInString(st.String())
 }
 
-// ArtistRange returns the start position and DL Plus-format length of the artist field.
-// The length follows DL Plus specification: (actual_length - 1).
-// Returns ok=false if artist is empty.
+// ArtistRange reports whether the artist field is present, and if so,
+// returns its start position and DL Plus-format length (actual_length - 1).
 func (st *StructuredText) ArtistRange() (start, length int, ok bool) {
 	if st == nil || st.Artist == "" {
 		return 0, 0, false
@@ -78,9 +77,8 @@ func (st *StructuredText) ArtistRange() (start, length int, ok bool) {
 	return start, runeLen - 1, true
 }
 
-// TitleRange returns the start position and DL Plus-format length of the title field.
-// The length follows DL Plus specification: (actual_length - 1).
-// Returns ok=false if title is empty.
+// TitleRange reports whether the title field is present, and if so,
+// returns its start position and DL Plus-format length (actual_length - 1).
 func (st *StructuredText) TitleRange() (start, length int, ok bool) {
 	if st == nil || st.Title == "" {
 		return 0, 0, false
@@ -107,7 +105,7 @@ func (st *StructuredText) IsRunning() bool {
 	return st != nil && st.Artist != "" && st.Title != ""
 }
 
-// Clone duplicates the StructuredText; Original is shared since it's read-only.
+// Clone duplicates the StructuredText with all its fields.
 func (st *StructuredText) Clone() *StructuredText {
 	if st == nil {
 		return nil

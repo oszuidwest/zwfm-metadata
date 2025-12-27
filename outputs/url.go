@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"text/template"
-	"time"
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
@@ -22,7 +21,6 @@ type URLOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
 	settings      config.URLOutputConfig
-	httpClient    *http.Client
 	payloadMapper *utils.PayloadMapper
 	urlTemplate   *template.Template
 }
@@ -71,7 +69,6 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 	output := &URLOutput{
 		OutputBase:    core.NewOutputBase(name),
 		settings:      settings,
-		httpClient:    &http.Client{Timeout: 10 * time.Second},
 		payloadMapper: mapper,
 		urlTemplate:   tmpl,
 	}
@@ -81,11 +78,6 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 
 // Send sends metadata via the configured HTTP method.
 func (u *URLOutput) Send(st *core.StructuredText) {
-	text := st.String()
-	if !u.HasChanged(text) {
-		return
-	}
-
 	payload := utils.ConvertStructuredText(st)
 	u.sendRequest(payload)
 }
@@ -140,21 +132,17 @@ func (u *URLOutput) sendGETRequest(payload *utils.UniversalMetadata) {
 
 	slog.Debug("Sending GET request", "output", u.GetName(), "url", finalURL)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", finalURL, http.NoBody)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, finalURL, http.NoBody)
 	if err != nil {
 		slog.Error("Failed to create GET request", "output", u.GetName(), "error", err)
 		return
 	}
 
-	req.Header.Set("User-Agent", utils.UserAgent())
 	if u.settings.BearerToken != "" {
 		req.Header.Set("Authorization", "Bearer "+u.settings.BearerToken)
 	}
 
-	resp, err := u.httpClient.Do(req)
+	resp, err := utils.Do(req)
 	if err != nil {
 		slog.Error("Failed to send GET request", "output", u.GetName(), "error", err)
 		return
@@ -188,22 +176,18 @@ func (u *URLOutput) sendPOSTRequest(payload *utils.UniversalMetadata) {
 
 	slog.Debug("Sending POST request", "output", u.GetName(), "url", u.settings.URL, "payload", string(jsonData))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "POST", u.settings.URL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, u.settings.URL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		slog.Error("Failed to create POST request", "output", u.GetName(), "error", err)
 		return
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", utils.UserAgent())
 	if u.settings.BearerToken != "" {
 		req.Header.Set("Authorization", "Bearer "+u.settings.BearerToken)
 	}
 
-	resp, err := u.httpClient.Do(req)
+	resp, err := utils.Do(req)
 	if err != nil {
 		slog.Error("Failed to send POST request", "output", u.GetName(), "error", err)
 		return

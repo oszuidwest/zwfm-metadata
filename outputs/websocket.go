@@ -57,11 +57,6 @@ func (w *WebSocketOutput) RegisterRoutes(mux *http.ServeMux) {
 
 // Send broadcasts metadata to all connected WebSocket clients.
 func (w *WebSocketOutput) Send(st *core.StructuredText) {
-	text := st.String()
-	if !w.HasChanged(text) {
-		return
-	}
-
 	msg := utils.ConvertStructuredTextWithType(st, "metadata_update")
 
 	w.storeCurrentMetadata(msg)

@@ -8,17 +8,17 @@ import (
 	"zwfm-metadata/core"
 )
 
-// FormatterFactory creates new Formatter instances for the registry.
+// FormatterFactory creates new Formatter instances.
 type FormatterFactory func() core.Formatter
 
 var formatterRegistry = map[string]FormatterFactory{}
 
-// RegisterFormatter adds a formatter factory to the global registry.
+// RegisterFormatter registers a formatter factory under the given name.
 func RegisterFormatter(name string, factory FormatterFactory) {
 	formatterRegistry[name] = factory
 }
 
-// GetFormatter creates a formatter instance by name from the registry.
+// GetFormatter returns a new formatter instance for the given name.
 func GetFormatter(name string) (core.Formatter, error) {
 	factory, exists := formatterRegistry[name]
 	if !exists {

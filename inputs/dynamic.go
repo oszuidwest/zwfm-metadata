@@ -108,8 +108,7 @@ func (d *DynamicInput) handleUnsupportedFormat(duration string) time.Time {
 // secondsFormatRe matches whole seconds or seconds with decimal places.
 var secondsFormatRe = regexp.MustCompile(`^\d+(?:[.,]\d+)?$`)
 
-// parseDurationToSeconds parses duration string to total seconds.
-// Returns (seconds, true) on success, (0, false) on failure.
+// parseDurationToSeconds parses a duration string to total seconds.
 func parseDurationToSeconds(duration string) (int, bool) {
 	if secondsFormatRe.MatchString(duration) {
 		return parseSecondsFormat(duration)
