@@ -121,7 +121,7 @@ type StereoToolOutputConfig struct {
 	Port     int    `json:"port"`
 }
 
-// LoadConfig reads and parses a JSON configuration file, applying defaults for unspecified values.
+// LoadConfig reads a configuration from the specified file.
 func LoadConfig(filename string) (*Config, error) {
 	cleanPath := filepath.Clean(filename)
 

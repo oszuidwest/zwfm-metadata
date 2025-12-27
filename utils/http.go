@@ -19,7 +19,7 @@ func Get(ctx context.Context, url string) (*http.Response, error) {
 	return httpClient.Do(req)
 }
 
-// Do executes a custom HTTP request with the shared client and sets the User-Agent header.
+// Do executes an HTTP request with standard configuration.
 func Do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("User-Agent", UserAgent())
 	return httpClient.Do(req)

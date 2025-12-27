@@ -32,7 +32,7 @@ func NewInputBase(name string) *InputBase {
 	}
 }
 
-// GetName implements the Input interface.
+// GetName returns the name of this input source.
 func (b *InputBase) GetName() string {
 	return b.name
 }
@@ -120,12 +120,12 @@ func NewOutputBase(name string) *OutputBase {
 	}
 }
 
-// GetName implements the Output interface.
+// GetName returns the name of this output destination.
 func (b *OutputBase) GetName() string {
 	return b.name
 }
 
-// SetInputs implements the Output interface.
+// SetInputs assigns the priority-ordered list of inputs for this output.
 func (b *OutputBase) SetInputs(inputs []Input) {
 	b.inputs = inputs
 }
@@ -135,7 +135,7 @@ func (b *OutputBase) SetDelay(delay int) {
 	b.delay = delay
 }
 
-// GetDelay implements the Output interface.
+// GetDelay returns the configured delay in seconds before output delivery.
 func (b *OutputBase) GetDelay() int {
 	return b.delay
 }

@@ -29,7 +29,7 @@ type WebSocketHub struct {
 	writeTimeout time.Duration
 }
 
-// NewWebSocketHub initializes a hub with default ping/pong timeouts.
+// NewWebSocketHub returns a new WebSocketHub with the given name.
 func NewWebSocketHub(name string) *WebSocketHub {
 	return &WebSocketHub{
 		name:    name,

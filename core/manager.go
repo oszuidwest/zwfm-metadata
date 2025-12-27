@@ -409,7 +409,7 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 	}
 }
 
-// outputUsesInput checks whether the given output has the specified input in its priority list.
+// outputUsesInput reports whether the given output has the specified input in its priority list.
 func (mr *MetadataRouter) outputUsesInput(outputName, inputName string) bool {
 	inputNames, exists := mr.outputInputs[outputName]
 	return exists && slices.Contains(inputNames, inputName)

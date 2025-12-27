@@ -21,7 +21,7 @@ type PayloadMapper struct {
 	mapping map[string]any
 }
 
-// NewPayloadMapper initializes a mapper with the given template configuration.
+// NewPayloadMapper returns a new PayloadMapper with the given mapping configuration.
 func NewPayloadMapper(mapping map[string]any) *PayloadMapper {
 	return &PayloadMapper{
 		mapping: mapping,
