@@ -1,4 +1,3 @@
-// Package web provides the HTTP server and dashboard for the metadata router.
 package web
 
 // dashboardHTML returns the HTML for the dashboard.
