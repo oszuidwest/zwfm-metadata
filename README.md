@@ -196,7 +196,7 @@ A static fallback
 All input types support:
 - `prefix` (optional) - Text prepended to metadata
 - `suffix` (optional) - Text appended to metadata
-- `filters` (optional) - Array of filters to suppress unwanted metadata (see [Input Filters](#input-filters))
+- `filters` (optional) - Array of filters to suppress unwanted metadata
 
 ### Input Filters
 
