@@ -79,9 +79,9 @@ func generateFaviconICOFromSVG(svg string) ([]byte, error) {
 		buf.Write([]byte{0x01, 0x00})
 		buf.Write([]byte{0x20, 0x00})
 
-		length := uint32(len(layer.data))
+		length := uint32(len(layer.data)) //nolint:gosec // PNG layer data is always small (< 10KB)
 		buf.Write([]byte{byte(length), byte(length >> 8), byte(length >> 16), byte(length >> 24)})
-		offset := uint32(dataOffset)
+		offset := uint32(dataOffset) //nolint:gosec // ICO header offset is always small (< 100KB)
 		buf.Write([]byte{byte(offset), byte(offset >> 8), byte(offset >> 16), byte(offset >> 24)})
 
 		dataOffset += len(layer.data)

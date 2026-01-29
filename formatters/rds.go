@@ -15,7 +15,7 @@ import (
 
 const maxRDSLength = 64
 
-// Common patterns compiled once for reuse
+// Common patterns compiled once for reuse.
 var (
 	parenRegex    = regexp.MustCompile(`\s*\([^)]*\)`)
 	bracketRegex  = regexp.MustCompile(`\s*\[[^\]]*\]`)

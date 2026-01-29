@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Build information (set via ldflags during build)
+// Build information (set via ldflags during build).
 var (
 	Version   = "dev"
 	Commit    = "unknown"
