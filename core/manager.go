@@ -43,6 +43,7 @@ type ScheduledUpdate struct {
 	OutputName  string
 	Output      Output
 	Metadata    *Metadata
+	InputName   string // source input name for filter lookup
 	UpdateType  string // "input_change" or "expiration_fallback"
 	CancelToken string // unique token to allow cancellation
 }
@@ -413,6 +414,7 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 			OutputName:  outputName,
 			Output:      output,
 			Metadata:    metadata,
+			InputName:   inputName,
 			UpdateType:  "input_change",
 			CancelToken: cancelToken,
 		}
@@ -512,6 +514,7 @@ func (mr *MetadataRouter) checkForExpirations() {
 						OutputName:  outputName,
 						Output:      output,
 						Metadata:    fallbackMetadata,
+						InputName:   fallbackInputName,
 						UpdateType:  "expiration_fallback",
 						CancelToken: fmt.Sprintf("%s_exp_%d", outputName, time.Now().UnixNano()),
 					}
@@ -617,17 +620,7 @@ func (mr *MetadataRouter) processReadyUpdates() {
 
 // executeUpdate sends metadata to an output, skipping if content matches the last sent value.
 func (mr *MetadataRouter) executeUpdate(update *ScheduledUpdate) {
-	var inputName string
-	mr.mu.RLock()
-	for name, input := range mr.inputs {
-		if input.GetMetadata() != nil && input.GetMetadata().Name == update.Metadata.Name {
-			inputName = name
-			break
-		}
-	}
-	mr.mu.RUnlock()
-
-	st := mr.createStructuredText(update.OutputName, update.Metadata, inputName)
+	st := mr.createStructuredText(update.OutputName, update.Metadata, update.InputName)
 	if st == nil || !st.HasContent() {
 		return
 	}
@@ -641,7 +634,7 @@ func (mr *MetadataRouter) executeUpdate(update *ScheduledUpdate) {
 		return
 	}
 	mr.lastSentContent[update.OutputName] = formattedText
-	mr.currentInputs[update.OutputName] = inputName
+	mr.currentInputs[update.OutputName] = update.InputName
 	mr.mu.Unlock()
 
 	slog.Debug("Executing update for output", "update_type", update.UpdateType, "output", update.OutputName, "text", formattedText)
