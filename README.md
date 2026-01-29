@@ -19,6 +19,7 @@ Metadata routing middleware for radio stations that routes metadata from inputs 
   - [URL Input](#url-input)
   - [Text Input](#text-input)
   - [Input Options](#input-options)
+  - [Input Filters](#input-filters)
 - [Outputs](#outputs)
   - [Output Feature Comparison](#output-feature-comparison)
   - [Output Configurations](#output-configurations)
@@ -195,6 +196,94 @@ A static fallback
 All input types support:
 - `prefix` (optional) - Text prepended to metadata
 - `suffix` (optional) - Text appended to metadata
+- `filters` (optional) - Array of filters to suppress unwanted metadata (see [Input Filters](#input-filters))
+
+### Input Filters
+
+Filters allow you to suppress or modify metadata from an input before it reaches any outputs. This is useful for filtering out unwanted content like test tracks, jingles, or placeholder artist names.
+
+```json
+{
+  "type": "dynamic",
+  "name": "radio-live",
+  "filters": [
+    {
+      "type": "suppress",
+      "field": "artist",
+      "pattern": "^(Unknown Artist|Various Artists)$",
+      "action": "clear"
+    },
+    {
+      "type": "suppress",
+      "field": "title",
+      "pattern": "(?i)\\b(test|jingle|promo|advert)\\b",
+      "action": "skip"
+    }
+  ],
+  "settings": {...}
+}
+```
+
+#### Filter Configuration
+
+- `type` (required) - Filter type. Currently only `"suppress"` is supported
+- `field` (required) - Which field to match: `"artist"`, `"title"`, or `"both"`
+- `pattern` (required) - Regular expression pattern to match against the field value
+- `action` (optional) - Action to take when pattern matches:
+  - `"clear"` (default) - Clear only the matching field, leaving other fields intact
+  - `"skip"` - Suppress the entire metadata update (clears all fields)
+
+#### Pattern Examples
+
+| Pattern | Matches | Use Case |
+|---------|---------|----------|
+| `^Unknown Artist$` | Exact match "Unknown Artist" | Clear placeholder artist names |
+| `(?i)\\btest\\b` | Case-insensitive word "test" | Skip test tracks |
+| `(?i)\\b(jingle\|promo\|advert)\\b` | Any of these words | Skip non-music content |
+| `^$` | Empty string | Clear or skip when field is empty |
+| `.*` | Any content | Always match (use with caution) |
+
+#### Filter Behavior
+
+- Filters run **before** formatters, so patterns match against the raw input metadata
+- Filters are applied per-input, affecting all outputs that use that input
+- Multiple filters can be configured per input; they are evaluated in order
+- When `action: "skip"` triggers, subsequent filters are not evaluated
+
+#### Examples
+
+**Clear unknown artists but keep the title:**
+```json
+{
+  "type": "suppress",
+  "field": "artist",
+  "pattern": "^(Unknown|Various|N/A)$",
+  "action": "clear"
+}
+```
+Result: `"Unknown - Great Song"` becomes `"Great Song"`
+
+**Skip jingles and promos entirely:**
+```json
+{
+  "type": "suppress",
+  "field": "title",
+  "pattern": "(?i)(jingle|promo|station.?id|sweeper)",
+  "action": "skip"
+}
+```
+Result: Metadata containing these words is not sent to any output
+
+**Filter both artist and title fields:**
+```json
+{
+  "type": "suppress",
+  "field": "both",
+  "pattern": "(?i)\\btest\\b",
+  "action": "skip"
+}
+```
+Result: Skips if either artist or title contains "test"
 
 ## Outputs
 
