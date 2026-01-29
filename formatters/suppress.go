@@ -1,7 +1,6 @@
 package formatters
 
 import (
-	"log/slog"
 	"regexp"
 
 	"zwfm-metadata/core"
@@ -33,42 +32,19 @@ func NewSuppressFormatter(field, pattern, action string) (*SuppressFormatter, er
 // Format checks if the metadata matches the suppression pattern and clears or marks for skip.
 func (s *SuppressFormatter) Format(st *core.StructuredText) {
 	var matched bool
-	var matchedField, matchedValue string
 
 	switch s.field {
 	case "artist":
-		if s.pattern.MatchString(st.Artist) {
-			matched = true
-			matchedField = "artist"
-			matchedValue = st.Artist
-		}
+		matched = s.pattern.MatchString(st.Artist)
 	case "title":
-		if s.pattern.MatchString(st.Title) {
-			matched = true
-			matchedField = "title"
-			matchedValue = st.Title
-		}
+		matched = s.pattern.MatchString(st.Title)
 	case "both":
-		if s.pattern.MatchString(st.Artist) {
-			matched = true
-			matchedField = "artist"
-			matchedValue = st.Artist
-		} else if s.pattern.MatchString(st.Title) {
-			matched = true
-			matchedField = "title"
-			matchedValue = st.Title
-		}
+		matched = s.pattern.MatchString(st.Artist) || s.pattern.MatchString(st.Title)
 	}
 
 	if !matched {
 		return
 	}
-
-	slog.Debug("Suppress filter matched",
-		"field", matchedField,
-		"value", matchedValue,
-		"pattern", s.pattern.String(),
-		"action", map[bool]string{true: "skip", false: "clear"}[s.skip])
 
 	if s.skip {
 		// Clear all fields to suppress the entire update
