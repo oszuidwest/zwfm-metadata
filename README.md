@@ -39,6 +39,14 @@ Metadata routing middleware for radio stations that routes metadata from inputs 
 
 ## Quick Start
 
+**For production use**, we recommend using [pre-built releases](https://github.com/oszuidwest/zwfm-metadata/releases) or [Docker images](https://github.com/oszuidwest/zwfm-metadata/pkgs/container/zwfm-metadata):
+
+```bash
+docker run -v $(pwd)/config.json:/app/config.json -p 9000:9000 ghcr.io/oszuidwest/zwfm-metadata:latest
+```
+
+**For development:**
+
 ```bash
 go build
 cp config-example.json config.json
