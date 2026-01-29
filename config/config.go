@@ -42,10 +42,10 @@ type OutputConfig struct {
 
 // FilterConfig defines a metadata filter with a type, target field, and pattern.
 type FilterConfig struct {
-	Type    string `json:"type"`              // Filter type: "suppress"
-	Field   string `json:"field"`             // Target field: "artist", "title", or "both"
-	Pattern string `json:"pattern"`           // Regex pattern to match
-	Action  string `json:"action,omitempty"`  // Action to take: "clear" (default) or "skip"
+	Type    string `json:"type"`
+	Field   string `json:"field"`
+	Pattern string `json:"pattern"`
+	Action  string `json:"action,omitempty"`
 }
 
 // DynamicInputConfig holds settings for HTTP API-driven metadata updates with optional expiration.
