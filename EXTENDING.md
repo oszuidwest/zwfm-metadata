@@ -578,18 +578,13 @@ func NewMyCustomFilter(threshold int) (*MyCustomFilter, error) {
     return &MyCustomFilter{threshold: threshold}, nil
 }
 
-// Type returns the filter type name for dashboard display.
-func (f *MyCustomFilter) Type() string {
-    return "mycustom"
-}
-
-// Decide examines the metadata and returns whether it should pass through.
-func (f *MyCustomFilter) Decide(st *core.StructuredText) core.FilterResult {
+// Decide examines the metadata and returns the action to take.
+func (f *MyCustomFilter) Decide(st *core.StructuredText) core.FilterAction {
     // Example: reject if title is too short
     if len(st.Title) < f.threshold {
-        return core.FilterResult{Pass: false, ClearAll: true}
+        return core.FilterReject
     }
-    return core.FilterResult{Pass: true}
+    return core.FilterPass
 }
 ```
 
@@ -642,17 +637,16 @@ Use in configuration:
 }
 ```
 
-### FilterResult Options
+### FilterAction Values
 
-The `core.FilterResult` struct controls what happens:
+The `core.FilterAction` enum controls what happens:
 
-| Field | Effect |
+| Value | Effect |
 |-------|--------|
-| `Pass: true` | Metadata continues to outputs |
-| `Pass: false` | Metadata is rejected, outputs keep previous content |
-| `ClearArtist: true` | Clears the Artist field but allows metadata through |
-| `ClearTitle: true` | Clears the Title field but allows metadata through |
-| `ClearAll: true` | Clears all fields (Artist, Title, Prefix, Suffix) |
+| `FilterPass` | Metadata continues to outputs unchanged |
+| `FilterClearArtist` | Clears the Artist field but allows metadata through |
+| `FilterClearTitle` | Clears the Title field but allows metadata through |
+| `FilterReject` | Metadata is rejected entirely, outputs keep previous content |
 
 ## Built-in Components
 
@@ -1057,16 +1051,17 @@ type Formatter interface {
 
 ```go
 type Filter interface {
-    Type() string                       // Return filter type name for dashboard display
-    Decide(st *StructuredText) FilterResult  // Examine metadata and decide action
+    Decide(st *StructuredText) FilterAction  // Examine metadata and decide action
 }
 
-type FilterResult struct {
-    Pass        bool  // Whether processing should continue
-    ClearArtist bool  // Whether to clear the Artist field
-    ClearTitle  bool  // Whether to clear the Title field
-    ClearAll    bool  // Whether to clear all fields (Artist, Title, Prefix, Suffix)
-}
+type FilterAction int
+
+const (
+    FilterPass        FilterAction = iota  // Allow metadata through unchanged
+    FilterClearArtist                      // Clear Artist field, allow through
+    FilterClearTitle                       // Clear Title field, allow through
+    FilterReject                           // Reject metadata entirely
+)
 ```
 
 ### core.StructuredText Type

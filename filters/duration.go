@@ -30,26 +30,20 @@ func init() {
 	})
 }
 
-// Type returns the filter type name.
-func (d *DurationFilter) Type() string {
-	return "duration"
-}
-
 // Decide checks if the metadata duration meets the minimum threshold.
-func (d *DurationFilter) Decide(st *core.StructuredText) core.FilterResult {
+func (d *DurationFilter) Decide(st *core.StructuredText) core.FilterAction {
 	if st.Original == nil || st.Original.Duration == "" {
-		return core.FilterResult{Pass: true} // No duration info, let it through
+		return core.FilterPass // No duration info, let it through
 	}
 
 	seconds, ok := utils.ParseDurationToSeconds(st.Original.Duration)
 	if !ok {
-		return core.FilterResult{Pass: true} // Unparseable duration, let it through
+		return core.FilterPass // Unparseable duration, let it through
 	}
 
 	if seconds < d.minSeconds {
-		// Too short, skip this update
-		return core.FilterResult{Pass: false, ClearAll: true}
+		return core.FilterReject // Too short, skip this update
 	}
 
-	return core.FilterResult{Pass: true}
+	return core.FilterPass
 }

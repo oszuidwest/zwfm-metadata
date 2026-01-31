@@ -64,29 +64,26 @@ func init() {
 	})
 }
 
-// Type returns the filter type name.
-func (p *PatternFilter) Type() string {
-	return "pattern"
-}
-
 // Decide checks if the metadata matches the pattern and returns the action to take.
-func (p *PatternFilter) Decide(st *core.StructuredText) core.FilterResult {
+func (p *PatternFilter) Decide(st *core.StructuredText) core.FilterAction {
 	// Cache match results to avoid duplicate regex evaluation
 	artistMatched := p.field != FieldTitle && p.pattern.MatchString(st.Artist)
 	titleMatched := p.field != FieldArtist && p.pattern.MatchString(st.Title)
 
 	if !artistMatched && !titleMatched {
-		return core.FilterResult{Pass: true}
+		return core.FilterPass
 	}
 
 	if p.action == ActionSkip {
-		return core.FilterResult{Pass: false, ClearAll: true}
+		return core.FilterReject
 	}
 
-	// action == ActionClear
-	return core.FilterResult{
-		Pass:        true,
-		ClearArtist: artistMatched,
-		ClearTitle:  titleMatched,
+	// action == ActionClear: clear only the matched field(s)
+	if artistMatched && titleMatched {
+		return core.FilterReject // Both matched, reject entirely
 	}
+	if artistMatched {
+		return core.FilterClearArtist
+	}
+	return core.FilterClearTitle
 }

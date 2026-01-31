@@ -159,22 +159,18 @@ func (mr *MetadataRouter) SetOutputFormatterNames(outputName string, formatterNa
 }
 
 // SetInputFilters configures the filter chain applied to an input's metadata.
-// Filter type names are automatically derived for dashboard display.
 func (mr *MetadataRouter) SetInputFilters(inputName string, filters []Filter) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.panicIfStarted("SetInputFilters")
 	mr.inputFilters[inputName] = filters
+}
 
-	// Derive filter names for dashboard display
-	filterNames := make([]string, len(filters))
-	for i, f := range filters {
-		name := f.Type()
-		if name == "" {
-			name = "custom"
-		}
-		filterNames[i] = name
-	}
+// SetInputFilterNames stores filter type names for dashboard display.
+func (mr *MetadataRouter) SetInputFilterNames(inputName string, filterNames []string) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	mr.panicIfStarted("SetInputFilterNames")
 	mr.inputFilterNames[inputName] = filterNames
 }
 
@@ -594,22 +590,26 @@ func (mr *MetadataRouter) checkForExpirations() {
 	}
 }
 
-// applyFilterResult applies the mutations specified in a FilterResult to a StructuredText.
-// If Pass is false, all fields are cleared regardless of ClearAll to prevent metadata leakage.
-func applyFilterResult(st *StructuredText, result FilterResult) {
-	// Safety: if filter rejects, always clear everything to prevent metadata leakage
-	if !result.Pass || result.ClearAll {
+// applyFilterAction applies the action specified by a filter to a StructuredText.
+// Returns true if processing should continue, false if metadata was rejected.
+func applyFilterAction(st *StructuredText, action FilterAction) bool {
+	switch action {
+	case FilterPass:
+		return true
+	case FilterClearArtist:
+		st.Artist = ""
+		return true
+	case FilterClearTitle:
+		st.Title = ""
+		return true
+	case FilterReject:
 		st.Artist = ""
 		st.Title = ""
 		st.Prefix = ""
 		st.Suffix = ""
-		return
-	}
-	if result.ClearArtist {
-		st.Artist = ""
-	}
-	if result.ClearTitle {
-		st.Title = ""
+		return false
+	default:
+		return true
 	}
 }
 
@@ -637,9 +637,8 @@ func (mr *MetadataRouter) createStructuredText(outputName string, metadata *Meta
 	// Apply input filters first - filters can reject metadata entirely
 	if inputFilters, exists := mr.inputFilters[inputName]; exists {
 		for _, filter := range inputFilters {
-			result := filter.Decide(st)
-			applyFilterResult(st, result)
-			if !result.Pass {
+			action := filter.Decide(st)
+			if !applyFilterAction(st, action) {
 				// Filter rejected the metadata - return StructuredText with cleared fields
 				return st
 			}
