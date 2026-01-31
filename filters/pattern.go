@@ -8,37 +8,35 @@ import (
 	"zwfm-metadata/core"
 )
 
-// Valid field values for SuppressFilter.
+// Valid field values for PatternFilter.
 const (
 	FieldArtist = "artist"
 	FieldTitle  = "title"
 	FieldBoth   = "both"
 )
 
-// Valid action values for SuppressFilter.
+// Valid action values for PatternFilter.
 const (
 	ActionClear = "clear"
 	ActionSkip  = "skip"
 )
 
-// SuppressFilter rejects or modifies metadata when fields match a regex pattern.
-type SuppressFilter struct {
+// PatternFilter rejects or modifies metadata when fields match a regex pattern.
+type PatternFilter struct {
 	field   string
 	pattern *regexp.Regexp
 	action  string
 }
 
-// NewSuppressFilter creates a filter that suppresses metadata based on regex matching.
+// NewPatternFilter creates a filter that matches metadata fields against a regex pattern.
 // field must be "artist", "title", or "both".
 // action must be "clear" (default) to empty the matching field, or "skip" to reject entirely.
-func NewSuppressFilter(field, pattern, action string) (*SuppressFilter, error) {
-	// Validate field
+func NewPatternFilter(field, pattern, action string) (*PatternFilter, error) {
 	field = strings.ToLower(field)
 	if field != FieldArtist && field != FieldTitle && field != FieldBoth {
 		return nil, fmt.Errorf("invalid field %q: must be %s, %s, or %s", field, FieldArtist, FieldTitle, FieldBoth)
 	}
 
-	// Validate and normalize action
 	action = strings.ToLower(action)
 	if action == "" {
 		action = ActionClear
@@ -47,61 +45,58 @@ func NewSuppressFilter(field, pattern, action string) (*SuppressFilter, error) {
 		return nil, fmt.Errorf("invalid action %q: must be %s or %s", action, ActionClear, ActionSkip)
 	}
 
-	// Compile regex pattern
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil, fmt.Errorf("invalid pattern %q: %w", pattern, err)
 	}
 
-	return &SuppressFilter{
+	return &PatternFilter{
 		field:   field,
 		pattern: re,
 		action:  action,
 	}, nil
 }
 
-// Filter checks if the metadata matches the suppression pattern.
+// Filter checks if the metadata matches the pattern.
 // Returns false to reject the metadata entirely (action="skip").
 // Returns true to continue processing, possibly with cleared fields (action="clear").
-func (s *SuppressFilter) Filter(st *core.StructuredText) bool {
+func (p *PatternFilter) Filter(st *core.StructuredText) bool {
 	var matched bool
 
-	switch s.field {
+	switch p.field {
 	case FieldArtist:
-		matched = s.pattern.MatchString(st.Artist)
+		matched = p.pattern.MatchString(st.Artist)
 	case FieldTitle:
-		matched = s.pattern.MatchString(st.Title)
+		matched = p.pattern.MatchString(st.Title)
 	case FieldBoth:
-		matched = s.pattern.MatchString(st.Artist) || s.pattern.MatchString(st.Title)
+		matched = p.pattern.MatchString(st.Artist) || p.pattern.MatchString(st.Title)
 	}
 
 	if !matched {
-		return true // No match, continue processing
+		return true
 	}
 
-	if s.action == ActionSkip {
-		// Reject entire update - clear all fields
+	if p.action == ActionSkip {
 		st.Artist = ""
 		st.Title = ""
 		st.Prefix = ""
 		st.Suffix = ""
-		return false // Reject
+		return false
 	}
 
-	// Action is "clear" - clear only the matching field(s), continue processing
-	switch s.field {
+	switch p.field {
 	case FieldArtist:
 		st.Artist = ""
 	case FieldTitle:
 		st.Title = ""
 	case FieldBoth:
-		if s.pattern.MatchString(st.Artist) {
+		if p.pattern.MatchString(st.Artist) {
 			st.Artist = ""
 		}
-		if s.pattern.MatchString(st.Title) {
+		if p.pattern.MatchString(st.Title) {
 			st.Title = ""
 		}
 	}
 
-	return true // Continue processing with cleared fields
+	return true
 }

@@ -11,13 +11,13 @@
       "suffix": " 🎵",
       "filters": [
         {
-          "type": "suppress",
+          "type": "pattern",
           "field": "artist",
           "pattern": "^(Unknown Artist|Various Artists)$",
           "action": "clear"
         },
         {
-          "type": "suppress",
+          "type": "pattern",
           "field": "title",
           "pattern": "(?i)\\b(test|jingle|promo|advert)\\b",
           "action": "skip"
@@ -37,7 +37,7 @@
       "suffix": "",
       "filters": [
         {
-          "type": "suppress",
+          "type": "pattern",
           "field": "artist",
           "pattern": "^(Unknown Artist|Various Artists)$",
           "action": "clear"

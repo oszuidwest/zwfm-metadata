@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"regexp"
-	"strconv"
-	"strings"
 	"time"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
+	"zwfm-metadata/utils"
 )
 
 // DynamicInput receives metadata via HTTP API calls with configurable expiration.
@@ -75,9 +73,7 @@ func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret st
 //
 // Leading zeros are optional. Invalid formats result in immediate expiration or fixed fallback if configured.
 func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
-	duration = strings.TrimSpace(duration)
-
-	totalSeconds, ok := parseDurationToSeconds(duration)
+	totalSeconds, ok := utils.ParseDurationToSeconds(duration)
 	if !ok {
 		return d.handleUnsupportedFormat(duration)
 	}
@@ -105,62 +101,3 @@ func (d *DynamicInput) handleUnsupportedFormat(duration string) time.Time {
 	return time.Now()
 }
 
-// secondsFormatRe matches whole seconds or seconds with decimal places.
-var secondsFormatRe = regexp.MustCompile(`^\d+(?:[.,]\d+)?$`)
-
-// parseDurationToSeconds parses a duration string to total seconds.
-func parseDurationToSeconds(duration string) (int, bool) {
-	if secondsFormatRe.MatchString(duration) {
-		return parseSecondsFormat(duration)
-	}
-	if strings.Contains(duration, ":") {
-		return parseTimeFormat(duration)
-	}
-	return 0, false
-}
-
-// parseSecondsFormat parses numeric duration like "272" or "272.5".
-func parseSecondsFormat(duration string) (int, bool) {
-	fs, err := strconv.ParseFloat(strings.ReplaceAll(duration, ",", "."), 64)
-	if err != nil {
-		slog.Error("Error converting numerical value to Float duration", "duration", duration, "error", err)
-		return 0, false
-	}
-	return int(math.Round(fs)), true
-}
-
-// parseTimeFormat parses MM:SS or HH:MM:SS format.
-func parseTimeFormat(duration string) (int, bool) {
-	parts := strings.Split(duration, ":")
-	switch len(parts) {
-	case 2:
-		return parseMMSS(parts)
-	case 3:
-		return parseHHMMSS(parts)
-	default:
-		return 0, false
-	}
-}
-
-// parseMMSS parses MM:SS format like "3:00" or "03:00".
-func parseMMSS(parts []string) (int, bool) {
-	minutes, errM := strconv.Atoi(parts[0])
-	seconds, errS := strconv.Atoi(parts[1])
-	if errM != nil || errS != nil || minutes < 0 || seconds < 0 || seconds >= 60 {
-		slog.Error("Invalid MM:SS duration format", "parts", parts, "expected", "MM:SS (e.g., '03:00')")
-		return 0, false
-	}
-	return minutes*60 + seconds, true
-}
-
-// parseHHMMSS parses HH:MM:SS format like "1:30:00" or "01:30:00".
-func parseHHMMSS(parts []string) (int, bool) {
-	hours, errH := strconv.Atoi(parts[0])
-	minutes, errM := strconv.Atoi(parts[1])
-	seconds, errS := strconv.Atoi(parts[2])
-	if errH != nil || errM != nil || errS != nil || hours < 0 || minutes < 0 || minutes >= 60 || seconds < 0 || seconds >= 60 {
-		slog.Error("Invalid HH:MM:SS duration format", "parts", parts, "expected", "HH:MM:SS (e.g., '01:30:00')")
-		return 0, false
-	}
-	return hours*3600 + minutes*60 + seconds, true
-}

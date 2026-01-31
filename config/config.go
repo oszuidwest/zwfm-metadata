@@ -40,12 +40,13 @@ type OutputConfig struct {
 	Settings   map[string]any `json:"settings"`
 }
 
-// FilterConfig defines a metadata filter with a type, target field, and pattern.
+// FilterConfig defines a metadata filter with a type and type-specific settings.
 type FilterConfig struct {
-	Type    string `json:"type"`
-	Field   string `json:"field"`
-	Pattern string `json:"pattern"`
-	Action  string `json:"action,omitempty"`
+	Type       string `json:"type"`
+	Field      string `json:"field,omitempty"`      // For suppress filter
+	Pattern    string `json:"pattern,omitempty"`    // For suppress filter
+	Action     string `json:"action,omitempty"`     // For suppress filter
+	MinSeconds int    `json:"minSeconds,omitempty"` // For duration filter
 }
 
 // DynamicInputConfig holds settings for HTTP API-driven metadata updates with optional expiration.
