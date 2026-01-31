@@ -25,13 +25,7 @@ func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicIn
 	}
 }
 
-// UpdateMetadata updates the metadata from HTTP request.
-// Duration parameter accepts the following formats (leading zeros optional):
-//   - Seconds: "272" or "272.5" or "272,5" (272 seconds)
-//   - MM:SS format: "3:00" or "03:00" (3 minutes)
-//   - HH:MM:SS format: "1:30:00" or "01:30:00" (1 hour 30 minutes)
-//
-// Invalid formats will cause immediate expiration or fixed fallback if configured.
+// UpdateMetadata updates the metadata from an HTTP request.
 func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret string) error {
 	if d.settings.Secret != "" && secret != d.settings.Secret {
 		return fmt.Errorf("invalid secret")
@@ -66,12 +60,6 @@ func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret st
 }
 
 // calculateDynamicExpiration parses duration and returns expiration time.
-// Accepts the following formats:
-//   - Seconds: "272" or "272.5" or "272,5" (272 seconds, with optional decimal/comma separator)
-//   - MM:SS: "3:00" or "03:00" (3 minutes)
-//   - HH:MM:SS: "1:30:00" or "01:30:00" (1 hour 30 minutes)
-//
-// Leading zeros are optional. Invalid formats result in immediate expiration or fixed fallback if configured.
 func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 	totalSeconds, ok := utils.ParseDurationToSeconds(duration)
 	if !ok {

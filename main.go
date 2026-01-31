@@ -95,6 +95,7 @@ func main() {
 	slog.Info("Shutting down...")
 }
 
+// setupInput configures an input and its filters on the router.
 func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error {
 	input, err := createInput(inputCfg)
 	if err != nil {
@@ -130,6 +131,7 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error
 	return nil
 }
 
+// setupOutput configures an output with its inputs and formatters on the router.
 func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) error {
 	output, err := createOutput(outputCfg)
 	if err != nil {
@@ -168,6 +170,7 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 	return nil
 }
 
+// createInput instantiates an input based on the configuration type.
 func createInput(cfg *config.InputConfig) (core.Input, error) {
 	switch cfg.Type {
 	case "dynamic":
@@ -196,6 +199,7 @@ func createInput(cfg *config.InputConfig) (core.Input, error) {
 	}
 }
 
+// createOutput instantiates an output based on the configuration type.
 func createOutput(cfg *config.OutputConfig) (core.Output, error) {
 	switch cfg.Type {
 	case "icecast":
@@ -252,10 +256,12 @@ func createOutput(cfg *config.OutputConfig) (core.Output, error) {
 	}
 }
 
+// unknownTypeError indicates an unrecognized input or output type in configuration.
 type unknownTypeError struct {
 	Type string
 }
 
+// Error returns the error message for an unknown type.
 func (e *unknownTypeError) Error() string {
 	return "unknown type: " + e.Type
 }
