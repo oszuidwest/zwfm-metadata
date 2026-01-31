@@ -43,9 +43,9 @@ type OutputConfig struct {
 // FilterConfig defines a metadata filter with a type and type-specific settings.
 type FilterConfig struct {
 	Type       string `json:"type"`
-	Field      string `json:"field,omitempty"`      // For suppress filter
-	Pattern    string `json:"pattern,omitempty"`    // For suppress filter
-	Action     string `json:"action,omitempty"`     // For suppress filter
+	Field      string `json:"field,omitempty"`      // For pattern filter
+	Pattern    string `json:"pattern,omitempty"`    // For pattern filter
+	Action     string `json:"action,omitempty"`     // For pattern filter
 	MinSeconds int    `json:"minSeconds,omitempty"` // For duration filter
 }
 
