@@ -200,7 +200,9 @@ All input types support:
 
 ### Input Filters
 
-Filters allow you to suppress or modify metadata from an input before it reaches any outputs. This is useful for filtering out unwanted content like test tracks, jingles, or placeholder artist names.
+Filters allow you to suppress or modify metadata from an input before it reaches any outputs. This is useful for filtering out unwanted content like test tracks, jingles, or placeholder artist names from playout systems that send metadata for all content.
+
+> **Architecture Note**: Filters and formatters serve different purposes. **Filters** decide whether metadata should pass through (accept/reject), while **formatters** transform the text. Filters are configured per-input and run before any formatters.
 
 ```json
 {
@@ -226,12 +228,17 @@ Filters allow you to suppress or modify metadata from an input before it reaches
 
 #### Filter Configuration
 
-- `type` (required) - Filter type. Currently only `"suppress"` is supported
-- `field` (required) - Which field to match: `"artist"`, `"title"`, or `"both"`
-- `pattern` (required) - Regular expression pattern to match against the field value
-- `action` (optional) - Action to take when pattern matches:
+- `type` (required) - Filter type. Currently only `"suppress"` is supported.
+- `field` (required) - Which field to match. Must be one of:
+  - `"artist"` - Match against the artist field only
+  - `"title"` - Match against the title field only
+  - `"both"` - Match against both fields (triggers if either matches)
+- `pattern` (required) - Regular expression pattern to match against the field value. Uses Go's [regexp syntax](https://pkg.go.dev/regexp/syntax).
+- `action` (optional) - Action to take when pattern matches. Must be one of:
   - `"clear"` (default) - Clear only the matching field, leaving other fields intact
-  - `"skip"` - Suppress the entire metadata update (clears all fields)
+  - `"skip"` - Reject the entire metadata update (no output receives this update)
+
+> **Validation**: Invalid `field` or `action` values will cause the application to fail at startup with a descriptive error message. Both parameters are case-insensitive (`"SKIP"` and `"skip"` are equivalent).
 
 #### Pattern Examples
 
@@ -242,13 +249,27 @@ Filters allow you to suppress or modify metadata from an input before it reaches
 | `(?i)\\b(jingle\|promo\|advert)\\b` | Any of these words | Skip non-music content |
 | `^$` | Empty string | Clear or skip when field is empty |
 | `.*` | Any content | Always match (use with caution) |
+| `(?i)^station\s*id$` | "Station ID" variations | Skip station identifications |
+| `[\x00-\x1F]` | Control characters | Skip malformed metadata |
 
 #### Filter Behavior
 
+**Processing Order:**
+1. Input receives raw metadata from the source
+2. Filters are evaluated in the order they are configured
+3. If a filter returns "skip", processing stops immediately and no output receives the update
+4. If all filters pass, the metadata proceeds to formatters and then outputs
+
+**Key Points:**
 - Filters run **before** formatters, so patterns match against the raw input metadata
 - Filters are applied per-input, affecting all outputs that use that input
 - Multiple filters can be configured per input; they are evaluated in order
-- When `action: "skip"` triggers, subsequent filters are not evaluated
+- When `action: "skip"` triggers, subsequent filters are **not evaluated**
+- When `action: "clear"` triggers, the cleared field becomes empty but processing continues
+- For `field: "both"` with `action: "clear"`, only the field(s) that actually match are cleared
+
+**Fallback Behavior:**
+When a filter causes an update to be skipped, the outputs continue displaying their previous content. The system does not automatically fall back to lower-priority inputs—the skip simply prevents the current update from being processed.
 
 #### Examples
 
@@ -261,7 +282,8 @@ Filters allow you to suppress or modify metadata from an input before it reaches
   "action": "clear"
 }
 ```
-Result: `"Unknown - Great Song"` becomes `"Great Song"`
+- Input: `Artist: "Unknown"`, `Title: "Great Song"`
+- Result: `Artist: ""`, `Title: "Great Song"` → Output shows: `"Great Song"`
 
 **Skip jingles and promos entirely:**
 ```json
@@ -272,7 +294,8 @@ Result: `"Unknown - Great Song"` becomes `"Great Song"`
   "action": "skip"
 }
 ```
-Result: Metadata containing these words is not sent to any output
+- Input: `Artist: "Radio Station"`, `Title: "Jingle 01"`
+- Result: Update is rejected, outputs keep showing previous content
 
 **Filter both artist and title fields:**
 ```json
@@ -283,7 +306,46 @@ Result: Metadata containing these words is not sent to any output
   "action": "skip"
 }
 ```
-Result: Skips if either artist or title contains "test"
+- Input: `Artist: "Test Artist"`, `Title: "Real Song"` → Skipped (artist matches)
+- Input: `Artist: "Real Artist"`, `Title: "Test Track"` → Skipped (title matches)
+- Input: `Artist: "Real Artist"`, `Title: "Real Song"` → Passes through
+
+**Clear placeholder values in both fields:**
+```json
+{
+  "type": "suppress",
+  "field": "both",
+  "pattern": "^(N/A|Unknown|TBA|-)$",
+  "action": "clear"
+}
+```
+- Input: `Artist: "N/A"`, `Title: "Unknown"` → Both cleared, results in empty output
+- Input: `Artist: "N/A"`, `Title: "Great Song"` → Artist cleared, shows: `"Great Song"`
+- Input: `Artist: "John Doe"`, `Title: "N/A"` → Title cleared, shows: `"John Doe"`
+
+**Multiple filters with different actions:**
+```json
+{
+  "filters": [
+    {
+      "type": "suppress",
+      "field": "title",
+      "pattern": "(?i)^(jingle|promo|advert)",
+      "action": "skip"
+    },
+    {
+      "type": "suppress",
+      "field": "artist",
+      "pattern": "^(Unknown Artist|Various)$",
+      "action": "clear"
+    }
+  ]
+}
+```
+Processing order:
+1. First, check if title starts with jingle/promo/advert → if yes, skip entirely
+2. If not skipped, check if artist is a placeholder → if yes, clear artist field
+3. Continue to formatters and outputs
 
 ## Outputs
 
@@ -997,9 +1059,11 @@ lowercase: "artist name - song title"
 ## Features
 
 - **Priority fallback**: Outputs use the first available input in the priority list
+- **Input filtering**: Suppress unwanted metadata (jingles, test tracks, placeholders) before it reaches outputs
 - **Configurable delays**: Synchronizes timing across different outputs
 - **Input expiration**: Dynamic inputs expire automatically
 - **Prefix/suffix support**: Adds station branding to inputs
+- **Text formatting**: Transform metadata with formatters (uppercase, title case, RDS compliance)
 - **Web dashboard**: Real-time status at http://localhost:9000 with WebSocket updates and a connection status indicator
 
 ## API
@@ -1021,9 +1085,11 @@ Set `"debug": true` in `config.json` for detailed logging.
 
 ### Extending
 
-See `EXTENDING.md` for detailed guidance on adding new inputs, outputs, and formatters. Key patterns include:
+See `EXTENDING.md` for detailed guidance on adding new inputs, outputs, formatters, and filters. Key patterns include:
 
 - All outputs receive `*core.StructuredText` with full metadata access
+- Filters implement `core.Filter` interface (accept/reject semantics)
+- Formatters implement `core.Formatter` interface (text transformation)
 - Using `utils.ConvertStructuredText()` for JSON/webhook payloads
 - Embedding base types (`core.InputBase`, `core.OutputBase`) for common functionality
 - Using `core.PassiveComponent` for components without background tasks
