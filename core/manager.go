@@ -62,8 +62,8 @@ type MetadataRouter struct {
 	outputInputs         map[string][]string       // output name -> input names
 	outputFormatters     map[string][]Formatter    // output name -> formatters
 	outputFormatterNames map[string][]string       // output name -> formatter names
-	inputFormatters      map[string][]Formatter    // input name -> formatters (filters)
-	inputFormatterNames  map[string][]string       // input name -> formatter names
+	inputFilters         map[string][]Filter       // input name -> filters
+	inputFilterNames     map[string][]string       // input name -> filter names
 	inputPrefixSuffix    map[string]InputPrefixSuffix
 	inputTypes           map[string]string // input name -> input type
 	outputTypes          map[string]string // output name -> output type
@@ -83,8 +83,8 @@ func NewMetadataRouter() *MetadataRouter {
 		outputInputs:         make(map[string][]string),
 		outputFormatters:     make(map[string][]Formatter),
 		outputFormatterNames: make(map[string][]string),
-		inputFormatters:      make(map[string][]Formatter),
-		inputFormatterNames:  make(map[string][]string),
+		inputFilters:         make(map[string][]Filter),
+		inputFilterNames:     make(map[string][]string),
 		inputPrefixSuffix:    make(map[string]InputPrefixSuffix),
 		inputTypes:           make(map[string]string),
 		outputTypes:          make(map[string]string),
@@ -144,18 +144,18 @@ func (mr *MetadataRouter) SetOutputFormatterNames(outputName string, formatterNa
 	mr.outputFormatterNames[outputName] = formatterNames
 }
 
-// SetInputFormatters configures the formatter chain (filters) applied to an input's metadata.
-func (mr *MetadataRouter) SetInputFormatters(inputName string, formatters []Formatter) {
+// SetInputFilters configures the filter chain applied to an input's metadata.
+func (mr *MetadataRouter) SetInputFilters(inputName string, filters []Filter) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
-	mr.inputFormatters[inputName] = formatters
+	mr.inputFilters[inputName] = filters
 }
 
-// SetInputFormatterNames stores formatter names for an input for dashboard display.
-func (mr *MetadataRouter) SetInputFormatterNames(inputName string, formatterNames []string) {
+// SetInputFilterNames stores filter names for an input for dashboard display.
+func (mr *MetadataRouter) SetInputFilterNames(inputName string, filterNames []string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
-	mr.inputFormatterNames[inputName] = formatterNames
+	mr.inputFilterNames[inputName] = filterNames
 }
 
 // SetInputPrefixSuffix configures text to prepend and append to an input's metadata.
@@ -546,10 +546,13 @@ func (mr *MetadataRouter) createStructuredText(outputName string, metadata *Meta
 	st.InputName = inputName
 	st.InputType = mr.inputTypes[inputName]
 
-	// Apply input formatters (filters) first
-	if inputFormatters, exists := mr.inputFormatters[inputName]; exists {
-		for _, formatter := range inputFormatters {
-			formatter.Format(st)
+	// Apply input filters first - filters can reject metadata entirely
+	if inputFilters, exists := mr.inputFilters[inputName]; exists {
+		for _, filter := range inputFilters {
+			if !filter.Filter(st) {
+				// Filter rejected the metadata - return empty StructuredText
+				return st
+			}
 		}
 	}
 
