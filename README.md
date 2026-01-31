@@ -267,6 +267,7 @@ Filters allow you to suppress or modify metadata from an input before it reaches
 - When `action: "skip"` triggers, subsequent filters are **not evaluated**
 - When `action: "clear"` triggers, the cleared field becomes empty but processing continues
 - For `field: "both"` with `action: "clear"`, only the field(s) that actually match are cleared
+- When `action: "clear"` results in both artist and title being empty, no update is sent (outputs keep previous content). This is because empty metadata is not valid.
 
 **Fallback Behavior:**
 When a filter causes an update to be skipped, the outputs continue displaying their previous content. The system does not automatically fall back to lower-priority inputs—the skip simply prevents the current update from being processed.
@@ -319,7 +320,7 @@ When a filter causes an update to be skipped, the outputs continue displaying th
   "action": "clear"
 }
 ```
-- Input: `Artist: "N/A"`, `Title: "Unknown"` → Both cleared, results in empty output
+- Input: `Artist: "N/A"`, `Title: "Unknown"` → Both cleared, no update sent (outputs keep previous content)
 - Input: `Artist: "N/A"`, `Title: "Great Song"` → Artist cleared, shows: `"Great Song"`
 - Input: `Artist: "John Doe"`, `Title: "N/A"` → Title cleared, shows: `"John Doe"`
 
