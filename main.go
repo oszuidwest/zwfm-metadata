@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
+	"zwfm-metadata/filters"
 	"zwfm-metadata/formatters"
 	"zwfm-metadata/inputs"
 	"zwfm-metadata/outputs"
@@ -103,29 +104,25 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) {
 	router.SetInputType(inputCfg.Name, inputCfg.Type)
 
 	// Add filters for this input
-	var inputFormatters []core.Formatter
+	var inputFilters []core.Filter
 	var filterNames []string
 	for i, filterCfg := range inputCfg.Filters {
 		if filterCfg.Type != "suppress" {
 			slog.Error("Unknown filter type", "type", filterCfg.Type, "input", inputCfg.Name)
 			os.Exit(1)
 		}
-		action := filterCfg.Action
-		if action == "" {
-			action = "clear"
-		}
-		filter, err := formatters.NewSuppressFormatter(filterCfg.Field, filterCfg.Pattern, action)
+		filter, err := filters.NewSuppressFilter(filterCfg.Field, filterCfg.Pattern, filterCfg.Action)
 		if err != nil {
 			slog.Error("Failed to create suppress filter", "input", inputCfg.Name, "index", i, "error", err)
 			os.Exit(1)
 		}
-		inputFormatters = append(inputFormatters, filter)
+		inputFilters = append(inputFilters, filter)
 		filterNames = append(filterNames, "suppress")
-		slog.Debug("Added suppress filter", "input", inputCfg.Name, "field", filterCfg.Field, "pattern", filterCfg.Pattern, "action", action)
+		slog.Debug("Added suppress filter", "input", inputCfg.Name, "field", filterCfg.Field, "pattern", filterCfg.Pattern, "action", filterCfg.Action)
 	}
-	if len(inputFormatters) > 0 {
-		router.SetInputFormatters(inputCfg.Name, inputFormatters)
-		router.SetInputFormatterNames(inputCfg.Name, filterNames)
+	if len(inputFilters) > 0 {
+		router.SetInputFilters(inputCfg.Name, inputFilters)
+		router.SetInputFilterNames(inputCfg.Name, filterNames)
 	}
 
 	if inputCfg.Prefix != "" || inputCfg.Suffix != "" {

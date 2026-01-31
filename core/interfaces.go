@@ -46,3 +46,12 @@ type RouteRegistrar interface {
 type Formatter interface {
 	Format(st *StructuredText)
 }
+
+// Filter examines metadata and decides whether it should proceed to outputs.
+// Unlike Formatter which transforms text, Filter determines if metadata passes through.
+type Filter interface {
+	// Filter examines the StructuredText and returns whether processing should continue.
+	// It may modify st (e.g., clearing specific fields) regardless of the return value.
+	// Returns true to continue processing, false to reject the metadata entirely.
+	Filter(st *StructuredText) (pass bool)
+}
