@@ -100,4 +100,3 @@ func (d *DynamicInput) handleUnsupportedFormat(duration string) time.Time {
 	slog.Error("Unsupported duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "seconds, MM:SS, or HH:MM:SS format only")
 	return time.Now()
 }
-
