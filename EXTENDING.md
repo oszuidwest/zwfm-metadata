@@ -600,7 +600,7 @@ Add an `init()` function to register your filter with the factory:
 ```go
 func init() {
     RegisterFilter("mycustom", func(cfg *config.FilterConfig) (core.Filter, error) {
-        return NewMyCustomFilter(cfg.MinSeconds) // or use a custom config field
+        return NewMyCustomFilter(cfg.Threshold)
     })
 }
 ```
