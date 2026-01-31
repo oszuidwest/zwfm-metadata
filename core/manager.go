@@ -70,6 +70,7 @@ type MetadataRouter struct {
 	currentInputs        map[string]string // output name -> current input name
 	timeline             *Timeline
 	processorStop        chan struct{}
+	started              bool // true after Start() is called; config maps become immutable
 	mu                   sync.RWMutex
 }
 
@@ -97,6 +98,7 @@ func NewMetadataRouter() *MetadataRouter {
 func (mr *MetadataRouter) AddInput(input Input) error {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
+	mr.panicIfStarted("AddInput")
 
 	name := input.GetName()
 	if _, exists := mr.inputs[name]; exists {
@@ -111,6 +113,7 @@ func (mr *MetadataRouter) AddInput(input Input) error {
 func (mr *MetadataRouter) AddOutput(output Output) error {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
+	mr.panicIfStarted("AddOutput")
 
 	name := output.GetName()
 	if _, exists := mr.outputs[name]; exists {
@@ -121,10 +124,18 @@ func (mr *MetadataRouter) AddOutput(output Output) error {
 	return nil
 }
 
+// panicIfStarted panics if configuration is attempted after Start() was called.
+func (mr *MetadataRouter) panicIfStarted(method string) {
+	if mr.started {
+		panic("MetadataRouter." + method + " called after Start() - configuration must happen before Start()")
+	}
+}
+
 // SetOutputInputs configures the priority-ordered list of inputs for an output.
 func (mr *MetadataRouter) SetOutputInputs(outputName string, inputNames []string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
+	mr.panicIfStarted("SetOutputInputs")
 	mr.outputInputs[outputName] = inputNames
 }
 
@@ -132,6 +143,7 @@ func (mr *MetadataRouter) SetOutputInputs(outputName string, inputNames []string
 func (mr *MetadataRouter) SetOutputFormatters(outputName string, formatters []Formatter) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
+	mr.panicIfStarted("SetOutputFormatters")
 	mr.outputFormatters[outputName] = formatters
 }
 
@@ -139,6 +151,7 @@ func (mr *MetadataRouter) SetOutputFormatters(outputName string, formatters []Fo
 func (mr *MetadataRouter) SetOutputFormatterNames(outputName string, formatterNames []string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
+	mr.panicIfStarted("SetOutputFormatterNames")
 	mr.outputFormatterNames[outputName] = formatterNames
 }
 
@@ -146,6 +159,7 @@ func (mr *MetadataRouter) SetOutputFormatterNames(outputName string, formatterNa
 func (mr *MetadataRouter) SetInputFilters(inputName string, filters []Filter) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
+	mr.panicIfStarted("SetInputFilters")
 	mr.inputFilters[inputName] = filters
 }
 
@@ -153,6 +167,7 @@ func (mr *MetadataRouter) SetInputFilters(inputName string, filters []Filter) {
 func (mr *MetadataRouter) SetInputPrefixSuffix(inputName, prefix, suffix string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
+	mr.panicIfStarted("SetInputPrefixSuffix")
 	mr.inputPrefixSuffix[inputName] = InputPrefixSuffix{
 		Prefix: prefix,
 		Suffix: suffix,
@@ -163,6 +178,7 @@ func (mr *MetadataRouter) SetInputPrefixSuffix(inputName, prefix, suffix string)
 func (mr *MetadataRouter) SetInputType(inputName, inputType string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
+	mr.panicIfStarted("SetInputType")
 	mr.inputTypes[inputName] = inputType
 }
 
@@ -170,6 +186,7 @@ func (mr *MetadataRouter) SetInputType(inputName, inputType string) {
 func (mr *MetadataRouter) SetOutputType(outputName, outputType string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
+	mr.panicIfStarted("SetOutputType")
 	mr.outputTypes[outputName] = outputType
 }
 
@@ -298,10 +315,17 @@ func (mr *MetadataRouter) GetCurrentInputForOutput(outputName string) string {
 func (mr *MetadataRouter) Start(ctx context.Context) error {
 	mr.mu.Lock()
 
+	if mr.started {
+		mr.mu.Unlock()
+		return fmt.Errorf("router already started")
+	}
+
 	if len(mr.inputs) == 0 {
 		mr.mu.Unlock()
 		return fmt.Errorf("cannot start: no inputs configured")
 	}
+
+	mr.started = true
 
 	go mr.startTimelineProcessor(ctx)
 	go mr.startExpirationChecker(ctx)
@@ -456,6 +480,9 @@ type expirationAction struct {
 }
 
 // checkForExpirations scans for expired inputs and schedules fallback updates when needed.
+// Uses two-phase locking: Phase 1 collects actions under RLock, Phase 2 executes writes.
+// NOTE: lastSentContent may change between phases, potentially causing extra scheduled updates.
+// This is harmless because executeUpdate deduplicates before sending (see lines 683-688).
 func (mr *MetadataRouter) checkForExpirations() {
 	// Phase 1: Collect actions under read lock
 	var actions []expirationAction
@@ -550,8 +577,10 @@ func (mr *MetadataRouter) checkForExpirations() {
 }
 
 // applyFilterResult applies the mutations specified in a FilterResult to a StructuredText.
+// If Pass is false, all fields are cleared regardless of ClearAll to prevent metadata leakage.
 func applyFilterResult(st *StructuredText, result FilterResult) {
-	if result.ClearAll {
+	// Safety: if filter rejects, always clear everything to prevent metadata leakage
+	if !result.Pass || result.ClearAll {
 		st.Artist = ""
 		st.Title = ""
 		st.Prefix = ""
@@ -568,7 +597,7 @@ func applyFilterResult(st *StructuredText, result FilterResult) {
 
 // createStructuredText builds a StructuredText from metadata with prefix/suffix and formatters applied.
 // NOTE: This method reads inputPrefixSuffix, inputTypes, inputFilters, and outputFormatters
-// without locks. These maps MUST be immutable after Start() is called.
+// without locks. These maps are immutable after Start() - enforced by panicIfStarted in Set* methods.
 func (mr *MetadataRouter) createStructuredText(outputName string, metadata *Metadata, inputName string) *StructuredText {
 	if metadata == nil {
 		return nil
