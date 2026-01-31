@@ -64,6 +64,11 @@ func init() {
 	})
 }
 
+// Type returns the filter type name.
+func (p *PatternFilter) Type() string {
+	return "pattern"
+}
+
 // Decide checks if the metadata matches the pattern and returns the action to take.
 func (p *PatternFilter) Decide(st *core.StructuredText) core.FilterResult {
 	// Cache match results to avoid duplicate regex evaluation

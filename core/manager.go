@@ -159,18 +159,18 @@ func (mr *MetadataRouter) SetOutputFormatterNames(outputName string, formatterNa
 }
 
 // SetInputFilters configures the filter chain applied to an input's metadata.
+// Filter type names are automatically derived for dashboard display.
 func (mr *MetadataRouter) SetInputFilters(inputName string, filters []Filter) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.panicIfStarted("SetInputFilters")
 	mr.inputFilters[inputName] = filters
-}
 
-// SetInputFilterNames stores filter type names for dashboard display.
-func (mr *MetadataRouter) SetInputFilterNames(inputName string, filterNames []string) {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
-	mr.panicIfStarted("SetInputFilterNames")
+	// Derive filter names for dashboard display
+	filterNames := make([]string, len(filters))
+	for i, f := range filters {
+		filterNames[i] = f.Type()
+	}
 	mr.inputFilterNames[inputName] = filterNames
 }
 
@@ -222,6 +222,9 @@ func (mr *MetadataRouter) GetInputStatus() []InputStatus {
 		prefixSuffix := mr.inputPrefixSuffix[name]
 		inputType := mr.inputTypes[name]
 		filterNames := mr.inputFilterNames[name]
+		if filterNames == nil {
+			filterNames = []string{}
+		}
 
 		status := InputStatus{
 			Name:      name,
@@ -309,17 +312,6 @@ func (mr *MetadataRouter) GetOutputFormatterNames(outputName string) []string {
 
 	if formatterNames, exists := mr.outputFormatterNames[outputName]; exists {
 		return formatterNames
-	}
-	return []string{}
-}
-
-// GetInputFilterNames retrieves the filter type names configured for an input.
-func (mr *MetadataRouter) GetInputFilterNames(inputName string) []string {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
-
-	if filterNames, exists := mr.inputFilterNames[inputName]; exists {
-		return filterNames
 	}
 	return []string{}
 }
@@ -499,7 +491,6 @@ type expirationAction struct {
 	outputName       string
 	output           Output
 	fallbackMetadata *Metadata
-	fallbackInput    string
 	shouldClear      bool // true if we should clear currentInputs (no fallback available)
 }
 
@@ -560,7 +551,6 @@ func (mr *MetadataRouter) checkForExpirations() {
 						outputName:       outputName,
 						output:           output,
 						fallbackMetadata: fallbackMetadata,
-						fallbackInput:    fallbackInputName,
 					})
 				}
 			}

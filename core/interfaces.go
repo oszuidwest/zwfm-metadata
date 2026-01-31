@@ -59,6 +59,8 @@ type FilterResult struct {
 // Unlike Formatter which transforms text, Filter determines if metadata passes through.
 // Filters should NOT mutate StructuredText directly - return FilterResult instead.
 type Filter interface {
+	// Type returns the filter type name for display purposes.
+	Type() string
 	// Decide examines StructuredText and returns what action to take.
 	Decide(st *StructuredText) FilterResult
 }

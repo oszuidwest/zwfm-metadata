@@ -30,6 +30,11 @@ func init() {
 	})
 }
 
+// Type returns the filter type name.
+func (d *DurationFilter) Type() string {
+	return "duration"
+}
+
 // Decide checks if the metadata duration meets the minimum threshold.
 func (d *DurationFilter) Decide(st *core.StructuredText) core.FilterResult {
 	if st.Original == nil || st.Original.Duration == "" {

@@ -110,18 +110,15 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error
 
 	// Add filters for this input
 	var inputFilters []core.Filter
-	var filterNames []string
 	for i, filterCfg := range inputCfg.Filters {
 		filter, err := filters.GetFilter(&filterCfg)
 		if err != nil {
 			return fmt.Errorf("failed to create %s filter for input %q (index %d): %w", filterCfg.Type, inputCfg.Name, i, err)
 		}
 		inputFilters = append(inputFilters, filter)
-		filterNames = append(filterNames, filterCfg.Type)
 	}
 	if len(inputFilters) > 0 {
 		router.SetInputFilters(inputCfg.Name, inputFilters)
-		router.SetInputFilterNames(inputCfg.Name, filterNames)
 	}
 
 	if inputCfg.Prefix != "" || inputCfg.Suffix != "" {
