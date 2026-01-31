@@ -433,6 +433,13 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 			continue
 		}
 
+		// Check if filters would reject this metadata BEFORE canceling pending updates.
+		// This preserves valid pending updates when new metadata is filtered out.
+		if mr.wouldFiltersReject(inputName, metadata) {
+			slog.Debug("Skipping update due to filter rejection", "input", inputName, "output", outputName)
+			continue
+		}
+
 		cancelToken := fmt.Sprintf("%s_%d", outputName, time.Now().UnixNano())
 		mr.cancelScheduledUpdates(outputName)
 
@@ -611,6 +618,32 @@ func applyFilterAction(st *StructuredText, action FilterAction) bool {
 	default:
 		return true
 	}
+}
+
+// wouldFiltersReject checks if filters would reject metadata without modifying anything.
+// Used to avoid canceling valid pending updates when new metadata would be rejected.
+func (mr *MetadataRouter) wouldFiltersReject(inputName string, metadata *Metadata) bool {
+	if metadata == nil {
+		return true
+	}
+
+	inputFilters, exists := mr.inputFilters[inputName]
+	if !exists || len(inputFilters) == 0 {
+		return false
+	}
+
+	// Create temporary StructuredText for filter evaluation
+	st := NewStructuredText(metadata)
+	if !st.HasContent() {
+		return true
+	}
+
+	for _, filter := range inputFilters {
+		if filter.Decide(st) == FilterReject {
+			return true
+		}
+	}
+	return false
 }
 
 // createStructuredText builds a StructuredText from metadata with prefix/suffix and formatters applied.
