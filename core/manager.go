@@ -620,30 +620,44 @@ func applyFilterAction(st *StructuredText, action FilterAction) bool {
 	}
 }
 
-// wouldFiltersReject checks if filters would reject metadata without modifying anything.
+// wouldFiltersReject checks if filters would reject metadata or clear all content.
 // Used to avoid canceling valid pending updates when new metadata would be rejected.
+// This mirrors the filter evaluation in createStructuredText to catch both explicit
+// rejections and cumulative field clearing (e.g., one filter clears artist, another title).
 func (mr *MetadataRouter) wouldFiltersReject(inputName string, metadata *Metadata) bool {
 	if metadata == nil {
 		return true
 	}
 
-	inputFilters, exists := mr.inputFilters[inputName]
-	if !exists || len(inputFilters) == 0 {
-		return false
-	}
-
-	// Create temporary StructuredText for filter evaluation
+	// Create temporary StructuredText with same context as execution time
 	st := NewStructuredText(metadata)
 	if !st.HasContent() {
 		return true
 	}
 
+	// Set prefix/suffix and input type to match execution-time context
+	if prefixSuffix, exists := mr.inputPrefixSuffix[inputName]; exists {
+		st.Prefix = prefixSuffix.Prefix
+		st.Suffix = prefixSuffix.Suffix
+	}
+	st.InputName = inputName
+	st.InputType = mr.inputTypes[inputName]
+
+	// Apply all filters, checking for both explicit rejection and cumulative clearing
+	inputFilters, exists := mr.inputFilters[inputName]
+	if !exists || len(inputFilters) == 0 {
+		return false
+	}
+
 	for _, filter := range inputFilters {
-		if filter.Decide(st) == FilterReject {
-			return true
+		action := filter.Decide(st)
+		if !applyFilterAction(st, action) {
+			return true // Explicit rejection
 		}
 	}
-	return false
+
+	// Check if filters cumulatively cleared all content
+	return !st.HasContent()
 }
 
 // createStructuredText builds a StructuredText from metadata with prefix/suffix and formatters applied.
