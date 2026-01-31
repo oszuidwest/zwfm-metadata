@@ -207,6 +207,7 @@ func dashboardJS() string {
         const TAG_CLASSES = {
             input: 'bg-gray-100 dark:bg-gray-700 px-3.5 py-1.5 rounded-full text-sm text-gray-800 dark:text-gray-200 font-medium ring-1 ring-gray-300 dark:ring-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors',
             formatter: 'bg-brand/15 dark:bg-brand/25 px-3.5 py-1.5 rounded-full text-sm text-brand dark:text-brand font-semibold ring-1 ring-brand/30 dark:ring-brand/50 hover:bg-brand/20 dark:hover:bg-brand/35 transition-colors',
+            filter: 'bg-brand/15 dark:bg-brand/25 px-3.5 py-1.5 rounded-full text-sm text-brand dark:text-brand font-semibold ring-1 ring-brand/30 dark:ring-brand/50 hover:bg-brand/20 dark:hover:bg-brand/35 transition-colors',
             type: 'backdrop-blur-sm bg-white/20 dark:bg-white/10 px-4 py-1.5 rounded-full text-sm font-medium text-white ring-1 ring-white/40 dark:ring-white/30 shadow-sm'
         };
 
@@ -395,11 +396,23 @@ func dashboardJS() string {
                     parts.push(createLabeledField('Suffix', input.suffix, 'text-gray-500 dark:text-gray-400', 'font-mono text-gray-700 dark:text-gray-300'));
                 }
                 if (parts.length > 0) {
-                    prefixSuffixHtml = '<div class="mt-3 space-y-1">' + 
-                        parts.map(p => '<div class="text-sm">' + p + '</div>').join('') + 
+                    prefixSuffixHtml = '<div class="mt-3 space-y-1">' +
+                        parts.map(p => '<div class="text-sm">' + p + '</div>').join('') +
                         '</div>';
                 }
-                
+
+                // Build filter tags
+                let filterHtml = '';
+                if (input.filters && input.filters.length > 0) {
+                    const filterTags = input.filters
+                        .map(filter => createBadge(filter, TAG_CLASSES.filter))
+                        .join(' ');
+                    filterHtml = '<div class="mt-3">' +
+                        '<div class="text-gray-700 dark:text-gray-300 text-sm mb-2 font-semibold">Filters</div>' +
+                        '<div class="flex flex-wrap gap-2">' + filterTags + '</div>' +
+                        '</div>';
+                }
+
                 // Check for changes
                 const prevInput = previousData.inputs[input.name];
                 const hasChanged = hasDataChanged(input, prevInput, ['status', 'metadata']);
@@ -407,6 +420,7 @@ func dashboardJS() string {
                 // Build content
                 const content = createStatusBadge(input.status, STATUS_CONFIG) +
                     prefixSuffixHtml +
+                    filterHtml +
                     metadataHtml +
                     '<div class="text-gray-500 dark:text-gray-400 text-sm mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">' +
                         '<div>Updated: <span class="' + (input.status === 'available' ? 'text-gray-700 dark:text-gray-300 font-medium' : '') + '">' +
