@@ -9,6 +9,20 @@
       "name": "radio-live",
       "prefix": "🎵 Now Playing: ",
       "suffix": " 🎵",
+      "filters": [
+        {
+          "type": "pattern",
+          "field": "artist",
+          "pattern": "^(Unknown Artist|Various Artists)$",
+          "action": "clear"
+        },
+        {
+          "type": "pattern",
+          "field": "title",
+          "pattern": "(?i)\\b(test|jingle|promo|advert)\\b",
+          "action": "skip"
+        }
+      ],
       "settings": {
         "secret": "supersecret123",
         "expiration": {
@@ -21,6 +35,14 @@
       "name": "radio-automation",
       "prefix": "",
       "suffix": "",
+      "filters": [
+        {
+          "type": "pattern",
+          "field": "artist",
+          "pattern": "^(Unknown Artist|Various Artists)$",
+          "action": "clear"
+        }
+      ],
       "settings": {
         "secret": "automation-secret",
         "expiration": {

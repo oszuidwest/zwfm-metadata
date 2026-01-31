@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
+	"zwfm-metadata/filters"
 	"zwfm-metadata/formatters"
 	"zwfm-metadata/inputs"
 	"zwfm-metadata/outputs"
@@ -49,65 +50,11 @@ func main() {
 	router := core.NewMetadataRouter()
 
 	for _, inputCfg := range appConfig.Inputs {
-		input, err := createInput(inputCfg)
-		if err != nil {
-			slog.Error("Failed to create input", "name", inputCfg.Name, "error", err)
-			os.Exit(1)
-		}
-
-		if err := router.AddInput(input); err != nil {
-			slog.Error("Failed to add input", "name", inputCfg.Name, "error", err)
-			os.Exit(1)
-		}
-
-		router.SetInputType(inputCfg.Name, inputCfg.Type)
-
-		if inputCfg.Prefix != "" || inputCfg.Suffix != "" {
-			router.SetInputPrefixSuffix(inputCfg.Name, inputCfg.Prefix, inputCfg.Suffix)
-			slog.Info("Added input", "name", inputCfg.Name, "type", inputCfg.Type, "prefix", inputCfg.Prefix, "suffix", inputCfg.Suffix)
-		} else {
-			slog.Info("Added input", "name", inputCfg.Name, "type", inputCfg.Type)
-		}
+		setupInput(router, &inputCfg)
 	}
 
 	for _, outputCfg := range appConfig.Outputs {
-		output, err := createOutput(&outputCfg)
-		if err != nil {
-			slog.Error("Failed to create output", "name", outputCfg.Name, "error", err)
-			os.Exit(1)
-		}
-
-		var outputInputs []core.Input
-		for _, inputName := range outputCfg.Inputs {
-			input, exists := router.GetInput(inputName)
-			if !exists {
-				slog.Error("Input not found for output", "input", inputName, "output", outputCfg.Name)
-				os.Exit(1)
-			}
-			outputInputs = append(outputInputs, input)
-		}
-		output.SetInputs(outputInputs)
-		router.SetOutputInputs(outputCfg.Name, outputCfg.Inputs)
-
-		var outputFormatters []core.Formatter
-		for _, formatterName := range outputCfg.Formatters {
-			formatter, err := formatters.GetFormatter(formatterName)
-			if err != nil {
-				slog.Error("Failed to get formatter", "formatter", formatterName, "error", err)
-				os.Exit(1)
-			}
-			outputFormatters = append(outputFormatters, formatter)
-		}
-		router.SetOutputFormatters(outputCfg.Name, outputFormatters)
-		router.SetOutputFormatterNames(outputCfg.Name, outputCfg.Formatters)
-
-		if err := router.AddOutput(output); err != nil {
-			slog.Error("Failed to add output", "name", outputCfg.Name, "error", err)
-			os.Exit(1)
-		}
-		router.SetOutputType(outputCfg.Name, outputCfg.Type)
-
-		slog.Info("Added output", "name", outputCfg.Name, "type", outputCfg.Type, "delay", output.GetDelay())
+		setupOutput(router, &outputCfg)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -142,7 +89,104 @@ func main() {
 	slog.Info("Shutting down...")
 }
 
-func createInput(cfg config.InputConfig) (core.Input, error) {
+func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) {
+	input, err := createInput(inputCfg)
+	if err != nil {
+		slog.Error("Failed to create input", "name", inputCfg.Name, "error", err)
+		os.Exit(1)
+	}
+
+	if err := router.AddInput(input); err != nil {
+		slog.Error("Failed to add input", "name", inputCfg.Name, "error", err)
+		os.Exit(1)
+	}
+
+	router.SetInputType(inputCfg.Name, inputCfg.Type)
+
+	// Add filters for this input
+	var inputFilters []core.Filter
+	var filterNames []string
+	for i, filterCfg := range inputCfg.Filters {
+		var filter core.Filter
+		var err error
+
+		switch filterCfg.Type {
+		case "pattern":
+			filter, err = filters.NewPatternFilter(filterCfg.Field, filterCfg.Pattern, filterCfg.Action)
+			if err != nil {
+				slog.Error("Failed to create pattern filter", "input", inputCfg.Name, "index", i, "error", err)
+				os.Exit(1)
+			}
+			slog.Debug("Added pattern filter", "input", inputCfg.Name, "field", filterCfg.Field, "pattern", filterCfg.Pattern, "action", filterCfg.Action)
+		case "duration":
+			filter, err = filters.NewDurationFilter(filterCfg.MinSeconds)
+			if err != nil {
+				slog.Error("Failed to create duration filter", "input", inputCfg.Name, "index", i, "error", err)
+				os.Exit(1)
+			}
+			slog.Debug("Added duration filter", "input", inputCfg.Name, "minSeconds", filterCfg.MinSeconds)
+		default:
+			slog.Error("Unknown filter type", "type", filterCfg.Type, "input", inputCfg.Name)
+			os.Exit(1)
+		}
+
+		inputFilters = append(inputFilters, filter)
+		filterNames = append(filterNames, filterCfg.Type)
+	}
+	if len(inputFilters) > 0 {
+		router.SetInputFilters(inputCfg.Name, inputFilters)
+		router.SetInputFilterNames(inputCfg.Name, filterNames)
+	}
+
+	if inputCfg.Prefix != "" || inputCfg.Suffix != "" {
+		router.SetInputPrefixSuffix(inputCfg.Name, inputCfg.Prefix, inputCfg.Suffix)
+		slog.Info("Added input", "name", inputCfg.Name, "type", inputCfg.Type, "prefix", inputCfg.Prefix, "suffix", inputCfg.Suffix)
+	} else {
+		slog.Info("Added input", "name", inputCfg.Name, "type", inputCfg.Type)
+	}
+}
+
+func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) {
+	output, err := createOutput(outputCfg)
+	if err != nil {
+		slog.Error("Failed to create output", "name", outputCfg.Name, "error", err)
+		os.Exit(1)
+	}
+
+	var outputInputs []core.Input
+	for _, inputName := range outputCfg.Inputs {
+		input, exists := router.GetInput(inputName)
+		if !exists {
+			slog.Error("Input not found for output", "input", inputName, "output", outputCfg.Name)
+			os.Exit(1)
+		}
+		outputInputs = append(outputInputs, input)
+	}
+	output.SetInputs(outputInputs)
+	router.SetOutputInputs(outputCfg.Name, outputCfg.Inputs)
+
+	var outputFormatters []core.Formatter
+	for _, formatterName := range outputCfg.Formatters {
+		formatter, err := formatters.GetFormatter(formatterName)
+		if err != nil {
+			slog.Error("Failed to get formatter", "formatter", formatterName, "error", err)
+			os.Exit(1)
+		}
+		outputFormatters = append(outputFormatters, formatter)
+	}
+	router.SetOutputFormatters(outputCfg.Name, outputFormatters)
+	router.SetOutputFormatterNames(outputCfg.Name, outputCfg.Formatters)
+
+	if err := router.AddOutput(output); err != nil {
+		slog.Error("Failed to add output", "name", outputCfg.Name, "error", err)
+		os.Exit(1)
+	}
+	router.SetOutputType(outputCfg.Name, outputCfg.Type)
+
+	slog.Info("Added output", "name", outputCfg.Name, "type", outputCfg.Type, "delay", output.GetDelay())
+}
+
+func createInput(cfg *config.InputConfig) (core.Input, error) {
 	switch cfg.Type {
 	case "dynamic":
 		settings, err := utils.ParseJSONSettings[config.DynamicInputConfig](cfg.Settings)
