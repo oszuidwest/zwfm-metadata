@@ -63,7 +63,6 @@ type MetadataRouter struct {
 	outputFormatters     map[string][]Formatter    // output name -> formatters
 	outputFormatterNames map[string][]string       // output name -> formatter names
 	inputFilters         map[string][]Filter       // input name -> filters
-	inputFilterNames     map[string][]string       // input name -> filter names
 	inputPrefixSuffix    map[string]InputPrefixSuffix
 	inputTypes           map[string]string // input name -> input type
 	outputTypes          map[string]string // output name -> output type
@@ -84,7 +83,6 @@ func NewMetadataRouter() *MetadataRouter {
 		outputFormatters:     make(map[string][]Formatter),
 		outputFormatterNames: make(map[string][]string),
 		inputFilters:         make(map[string][]Filter),
-		inputFilterNames:     make(map[string][]string),
 		inputPrefixSuffix:    make(map[string]InputPrefixSuffix),
 		inputTypes:           make(map[string]string),
 		outputTypes:          make(map[string]string),
@@ -149,13 +147,6 @@ func (mr *MetadataRouter) SetInputFilters(inputName string, filters []Filter) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.inputFilters[inputName] = filters
-}
-
-// SetInputFilterNames stores filter names for an input for dashboard display.
-func (mr *MetadataRouter) SetInputFilterNames(inputName string, filterNames []string) {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
-	mr.inputFilterNames[inputName] = filterNames
 }
 
 // SetInputPrefixSuffix configures text to prepend and append to an input's metadata.
@@ -455,11 +446,21 @@ func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	}
 }
 
+// expirationAction holds information about an action to take for an expired input.
+type expirationAction struct {
+	outputName       string
+	output           Output
+	fallbackMetadata *Metadata
+	fallbackInput    string
+	shouldClear      bool // true if we should clear currentInputs (no fallback available)
+}
+
 // checkForExpirations scans for expired inputs and schedules fallback updates when needed.
 func (mr *MetadataRouter) checkForExpirations() {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
+	// Phase 1: Collect actions under read lock
+	var actions []expirationAction
 
+	mr.mu.RLock()
 	for outputName, output := range mr.outputs {
 		if mr.timeline.hasScheduledUpdatesForOutput(outputName) {
 			continue
@@ -504,30 +505,70 @@ func (mr *MetadataRouter) checkForExpirations() {
 				formattedText := st.String()
 				lastSent := mr.lastSentContent[outputName]
 				if formattedText != lastSent {
-					delay := time.Duration(output.GetDelay()) * time.Second
-					executeAt := time.Now().Add(delay)
-
-					update := ScheduledUpdate{
-						ExecuteAt:   executeAt,
-						OutputName:  outputName,
-						Output:      output,
-						Metadata:    fallbackMetadata,
-						UpdateType:  "expiration_fallback",
-						CancelToken: fmt.Sprintf("%s_exp_%d", outputName, time.Now().UnixNano()),
-					}
-
-					mr.timeline.addUpdate(&update)
-					slog.Debug("Scheduled expiration fallback for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
+					actions = append(actions, expirationAction{
+						outputName:       outputName,
+						output:           output,
+						fallbackMetadata: fallbackMetadata,
+						fallbackInput:    fallbackInputName,
+					})
 				}
 			}
 		} else if fallbackMetadata == nil {
-			mr.currentInputs[outputName] = ""
-			slog.Info("Output has no available inputs - cleared current input", "output", outputName)
+			actions = append(actions, expirationAction{
+				outputName:  outputName,
+				shouldClear: true,
+			})
 		}
+	}
+	mr.mu.RUnlock()
+
+	// Phase 2: Process actions (writes require full lock)
+	for _, action := range actions {
+		if action.shouldClear {
+			mr.mu.Lock()
+			mr.currentInputs[action.outputName] = ""
+			mr.mu.Unlock()
+			slog.Info("Output has no available inputs - cleared current input", "output", action.outputName)
+			continue
+		}
+
+		delay := time.Duration(action.output.GetDelay()) * time.Second
+		executeAt := time.Now().Add(delay)
+
+		update := ScheduledUpdate{
+			ExecuteAt:   executeAt,
+			OutputName:  action.outputName,
+			Output:      action.output,
+			Metadata:    action.fallbackMetadata,
+			UpdateType:  "expiration_fallback",
+			CancelToken: fmt.Sprintf("%s_exp_%d", action.outputName, time.Now().UnixNano()),
+		}
+
+		mr.timeline.addUpdate(&update)
+		slog.Debug("Scheduled expiration fallback for output", "output", action.outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
+	}
+}
+
+// applyFilterResult applies the mutations specified in a FilterResult to a StructuredText.
+func applyFilterResult(st *StructuredText, result FilterResult) {
+	if result.ClearAll {
+		st.Artist = ""
+		st.Title = ""
+		st.Prefix = ""
+		st.Suffix = ""
+		return
+	}
+	if result.ClearArtist {
+		st.Artist = ""
+	}
+	if result.ClearTitle {
+		st.Title = ""
 	}
 }
 
 // createStructuredText builds a StructuredText from metadata with prefix/suffix and formatters applied.
+// NOTE: This method reads inputPrefixSuffix, inputTypes, inputFilters, and outputFormatters
+// without locks. These maps MUST be immutable after Start() is called.
 func (mr *MetadataRouter) createStructuredText(outputName string, metadata *Metadata, inputName string) *StructuredText {
 	if metadata == nil {
 		return nil
@@ -549,8 +590,10 @@ func (mr *MetadataRouter) createStructuredText(outputName string, metadata *Meta
 	// Apply input filters first - filters can reject metadata entirely
 	if inputFilters, exists := mr.inputFilters[inputName]; exists {
 		for _, filter := range inputFilters {
-			if !filter.Filter(st) {
-				// Filter rejected the metadata - return empty StructuredText
+			result := filter.Decide(st)
+			applyFilterResult(st, result)
+			if !result.Pass {
+				// Filter rejected the metadata - return StructuredText with cleared fields
 				return st
 			}
 		}

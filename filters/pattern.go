@@ -57,46 +57,24 @@ func NewPatternFilter(field, pattern, action string) (*PatternFilter, error) {
 	}, nil
 }
 
-// Filter checks if the metadata matches the pattern.
-// Returns false to reject the metadata entirely (action="skip").
-// Returns true to continue processing, possibly with cleared fields (action="clear").
-func (p *PatternFilter) Filter(st *core.StructuredText) bool {
-	var matched bool
+// Decide checks if the metadata matches the pattern and returns the action to take.
+func (p *PatternFilter) Decide(st *core.StructuredText) core.FilterResult {
+	// Cache match results to avoid duplicate regex evaluation
+	artistMatched := p.field != FieldTitle && p.pattern.MatchString(st.Artist)
+	titleMatched := p.field != FieldArtist && p.pattern.MatchString(st.Title)
 
-	switch p.field {
-	case FieldArtist:
-		matched = p.pattern.MatchString(st.Artist)
-	case FieldTitle:
-		matched = p.pattern.MatchString(st.Title)
-	case FieldBoth:
-		matched = p.pattern.MatchString(st.Artist) || p.pattern.MatchString(st.Title)
-	}
-
-	if !matched {
-		return true
+	if !artistMatched && !titleMatched {
+		return core.FilterResult{Pass: true}
 	}
 
 	if p.action == ActionSkip {
-		st.Artist = ""
-		st.Title = ""
-		st.Prefix = ""
-		st.Suffix = ""
-		return false
+		return core.FilterResult{Pass: false, ClearAll: true}
 	}
 
-	switch p.field {
-	case FieldArtist:
-		st.Artist = ""
-	case FieldTitle:
-		st.Title = ""
-	case FieldBoth:
-		if p.pattern.MatchString(st.Artist) {
-			st.Artist = ""
-		}
-		if p.pattern.MatchString(st.Title) {
-			st.Title = ""
-		}
+	// action == ActionClear
+	return core.FilterResult{
+		Pass:        true,
+		ClearArtist: artistMatched,
+		ClearTitle:  titleMatched,
 	}
-
-	return true
 }

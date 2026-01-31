@@ -23,27 +23,21 @@ func NewDurationFilter(minSeconds int) (*DurationFilter, error) {
 	}, nil
 }
 
-// Filter checks if the metadata duration meets the minimum threshold.
-// Returns false to skip updates with duration below the threshold.
-// If duration is missing or unparseable, the update passes through.
-func (d *DurationFilter) Filter(st *core.StructuredText) bool {
+// Decide checks if the metadata duration meets the minimum threshold.
+func (d *DurationFilter) Decide(st *core.StructuredText) core.FilterResult {
 	if st.Original == nil || st.Original.Duration == "" {
-		return true // No duration info, let it through
+		return core.FilterResult{Pass: true} // No duration info, let it through
 	}
 
 	seconds, ok := utils.ParseDurationToSeconds(st.Original.Duration)
 	if !ok {
-		return true // Unparseable duration, let it through
+		return core.FilterResult{Pass: true} // Unparseable duration, let it through
 	}
 
 	if seconds < d.minSeconds {
 		// Too short, skip this update
-		st.Artist = ""
-		st.Title = ""
-		st.Prefix = ""
-		st.Suffix = ""
-		return false
+		return core.FilterResult{Pass: false, ClearAll: true}
 	}
 
-	return true
+	return core.FilterResult{Pass: true}
 }

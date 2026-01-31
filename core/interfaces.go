@@ -47,11 +47,18 @@ type Formatter interface {
 	Format(st *StructuredText)
 }
 
+// FilterResult contains the decision and optional mutations to apply.
+type FilterResult struct {
+	Pass        bool // Whether processing should continue
+	ClearArtist bool // Whether to clear the Artist field
+	ClearTitle  bool // Whether to clear the Title field
+	ClearAll    bool // Whether to clear all fields (Artist, Title, Prefix, Suffix)
+}
+
 // Filter examines metadata and decides whether it should proceed to outputs.
 // Unlike Formatter which transforms text, Filter determines if metadata passes through.
+// Filters should NOT mutate StructuredText directly - return FilterResult instead.
 type Filter interface {
-	// Filter examines the StructuredText and returns whether processing should continue.
-	// It may modify st (e.g., clearing specific fields) regardless of the return value.
-	// Returns true to continue processing, false to reject the metadata entirely.
-	Filter(st *StructuredText) (pass bool)
+	// Decide examines StructuredText and returns what action to take.
+	Decide(st *StructuredText) FilterResult
 }

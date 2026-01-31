@@ -50,11 +50,17 @@ func main() {
 	router := core.NewMetadataRouter()
 
 	for _, inputCfg := range appConfig.Inputs {
-		setupInput(router, &inputCfg)
+		if err := setupInput(router, &inputCfg); err != nil {
+			slog.Error("Input setup failed", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	for _, outputCfg := range appConfig.Outputs {
-		setupOutput(router, &outputCfg)
+		if err := setupOutput(router, &outputCfg); err != nil {
+			slog.Error("Output setup failed", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -89,23 +95,20 @@ func main() {
 	slog.Info("Shutting down...")
 }
 
-func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) {
+func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error {
 	input, err := createInput(inputCfg)
 	if err != nil {
-		slog.Error("Failed to create input", "name", inputCfg.Name, "error", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create input %q: %w", inputCfg.Name, err)
 	}
 
 	if err := router.AddInput(input); err != nil {
-		slog.Error("Failed to add input", "name", inputCfg.Name, "error", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to add input %q: %w", inputCfg.Name, err)
 	}
 
 	router.SetInputType(inputCfg.Name, inputCfg.Type)
 
 	// Add filters for this input
 	var inputFilters []core.Filter
-	var filterNames []string
 	for i, filterCfg := range inputCfg.Filters {
 		var filter core.Filter
 		var err error
@@ -114,28 +117,23 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) {
 		case "pattern":
 			filter, err = filters.NewPatternFilter(filterCfg.Field, filterCfg.Pattern, filterCfg.Action)
 			if err != nil {
-				slog.Error("Failed to create pattern filter", "input", inputCfg.Name, "index", i, "error", err)
-				os.Exit(1)
+				return fmt.Errorf("failed to create pattern filter for input %q (index %d): %w", inputCfg.Name, i, err)
 			}
 			slog.Debug("Added pattern filter", "input", inputCfg.Name, "field", filterCfg.Field, "pattern", filterCfg.Pattern, "action", filterCfg.Action)
 		case "duration":
 			filter, err = filters.NewDurationFilter(filterCfg.MinSeconds)
 			if err != nil {
-				slog.Error("Failed to create duration filter", "input", inputCfg.Name, "index", i, "error", err)
-				os.Exit(1)
+				return fmt.Errorf("failed to create duration filter for input %q (index %d): %w", inputCfg.Name, i, err)
 			}
 			slog.Debug("Added duration filter", "input", inputCfg.Name, "minSeconds", filterCfg.MinSeconds)
 		default:
-			slog.Error("Unknown filter type", "type", filterCfg.Type, "input", inputCfg.Name)
-			os.Exit(1)
+			return fmt.Errorf("unknown filter type %q for input %q", filterCfg.Type, inputCfg.Name)
 		}
 
 		inputFilters = append(inputFilters, filter)
-		filterNames = append(filterNames, filterCfg.Type)
 	}
 	if len(inputFilters) > 0 {
 		router.SetInputFilters(inputCfg.Name, inputFilters)
-		router.SetInputFilterNames(inputCfg.Name, filterNames)
 	}
 
 	if inputCfg.Prefix != "" || inputCfg.Suffix != "" {
@@ -144,21 +142,21 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) {
 	} else {
 		slog.Info("Added input", "name", inputCfg.Name, "type", inputCfg.Type)
 	}
+
+	return nil
 }
 
-func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) {
+func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) error {
 	output, err := createOutput(outputCfg)
 	if err != nil {
-		slog.Error("Failed to create output", "name", outputCfg.Name, "error", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create output %q: %w", outputCfg.Name, err)
 	}
 
 	var outputInputs []core.Input
 	for _, inputName := range outputCfg.Inputs {
 		input, exists := router.GetInput(inputName)
 		if !exists {
-			slog.Error("Input not found for output", "input", inputName, "output", outputCfg.Name)
-			os.Exit(1)
+			return fmt.Errorf("input %q not found for output %q", inputName, outputCfg.Name)
 		}
 		outputInputs = append(outputInputs, input)
 	}
@@ -169,8 +167,7 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) {
 	for _, formatterName := range outputCfg.Formatters {
 		formatter, err := formatters.GetFormatter(formatterName)
 		if err != nil {
-			slog.Error("Failed to get formatter", "formatter", formatterName, "error", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to get formatter %q: %w", formatterName, err)
 		}
 		outputFormatters = append(outputFormatters, formatter)
 	}
@@ -178,12 +175,13 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) {
 	router.SetOutputFormatterNames(outputCfg.Name, outputCfg.Formatters)
 
 	if err := router.AddOutput(output); err != nil {
-		slog.Error("Failed to add output", "name", outputCfg.Name, "error", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to add output %q: %w", outputCfg.Name, err)
 	}
 	router.SetOutputType(outputCfg.Name, outputCfg.Type)
 
 	slog.Info("Added output", "name", outputCfg.Name, "type", outputCfg.Type, "delay", output.GetDelay())
+
+	return nil
 }
 
 func createInput(cfg *config.InputConfig) (core.Input, error) {
