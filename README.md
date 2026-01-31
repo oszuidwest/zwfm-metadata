@@ -196,11 +196,11 @@ A static fallback
 All input types support:
 - `prefix` (optional) - Text prepended to metadata
 - `suffix` (optional) - Text appended to metadata
-- `filters` (optional) - Array of filters to suppress unwanted metadata
+- `filters` (optional) - Array of filters to skip or modify unwanted metadata
 
 ### Input Filters
 
-Filters allow you to suppress or modify metadata from an input before it reaches any outputs. This is useful for filtering out unwanted content like test tracks, jingles, or placeholder artist names from playout systems that send metadata for all content.
+Filters allow you to skip or modify metadata from an input before it reaches any outputs. This is useful for filtering out unwanted content like test tracks, jingles, or placeholder artist names from playout systems that send metadata for all content.
 
 > **Architecture Note**: Filters and formatters serve different purposes. **Filters** decide whether metadata should pass through (accept/reject), while **formatters** transform the text. Filters are configured per-input and run before any formatters.
 
@@ -210,13 +210,17 @@ Filters allow you to suppress or modify metadata from an input before it reaches
   "name": "radio-live",
   "filters": [
     {
-      "type": "suppress",
+      "type": "duration",
+      "minSeconds": 30
+    },
+    {
+      "type": "pattern",
       "field": "artist",
       "pattern": "^(Unknown Artist|Various Artists)$",
       "action": "clear"
     },
     {
-      "type": "suppress",
+      "type": "pattern",
       "field": "title",
       "pattern": "(?i)\\b(test|jingle|promo|advert)\\b",
       "action": "skip"
@@ -226,9 +230,13 @@ Filters allow you to suppress or modify metadata from an input before it reaches
 }
 ```
 
-#### Filter Configuration
+#### Filter Types
 
-- `type` (required) - Filter type. Currently only `"suppress"` is supported.
+##### Pattern Filter
+
+Matches metadata fields against regex patterns to clear or skip updates.
+
+- `type` (required) - Must be `"pattern"`
 - `field` (required) - Which field to match. Must be one of:
   - `"artist"` - Match against the artist field only
   - `"title"` - Match against the title field only
@@ -239,6 +247,24 @@ Filters allow you to suppress or modify metadata from an input before it reaches
   - `"skip"` - Reject the entire metadata update (no output receives this update)
 
 > **Validation**: Invalid `field` or `action` values will cause the application to fail at startup with a descriptive error message. Both parameters are case-insensitive (`"SKIP"` and `"skip"` are equivalent).
+
+##### Duration Filter
+
+Skips metadata updates where the track duration is below a minimum threshold. Useful for filtering out jingles, bumpers, and other short content.
+
+```json
+{
+  "type": "duration",
+  "minSeconds": 30
+}
+```
+
+- `type` (required) - Must be `"duration"`
+- `minSeconds` (required) - Minimum duration in seconds. Tracks shorter than this are skipped.
+
+Duration formats supported: `"272"` (seconds), `"3:45"` (MM:SS), `"1:30:00"` (HH:MM:SS).
+
+> **Note**: If duration is missing or unparseable, the update passes through (not skipped).
 
 #### Pattern Examples
 
@@ -277,7 +303,7 @@ When a filter causes an update to be skipped, the outputs continue displaying th
 **Clear unknown artists but keep the title:**
 ```json
 {
-  "type": "suppress",
+  "type": "pattern",
   "field": "artist",
   "pattern": "^(Unknown|Various|N/A)$",
   "action": "clear"
@@ -289,7 +315,7 @@ When a filter causes an update to be skipped, the outputs continue displaying th
 **Skip jingles and promos entirely:**
 ```json
 {
-  "type": "suppress",
+  "type": "pattern",
   "field": "title",
   "pattern": "(?i)(jingle|promo|station.?id|sweeper)",
   "action": "skip"
@@ -301,7 +327,7 @@ When a filter causes an update to be skipped, the outputs continue displaying th
 **Filter both artist and title fields:**
 ```json
 {
-  "type": "suppress",
+  "type": "pattern",
   "field": "both",
   "pattern": "(?i)\\btest\\b",
   "action": "skip"
@@ -314,7 +340,7 @@ When a filter causes an update to be skipped, the outputs continue displaying th
 **Clear placeholder values in both fields:**
 ```json
 {
-  "type": "suppress",
+  "type": "pattern",
   "field": "both",
   "pattern": "^(N/A|Unknown|TBA|-)$",
   "action": "clear"
@@ -329,13 +355,13 @@ When a filter causes an update to be skipped, the outputs continue displaying th
 {
   "filters": [
     {
-      "type": "suppress",
+      "type": "pattern",
       "field": "title",
       "pattern": "(?i)^(jingle|promo|advert)",
       "action": "skip"
     },
     {
-      "type": "suppress",
+      "type": "pattern",
       "field": "artist",
       "pattern": "^(Unknown Artist|Various)$",
       "action": "clear"

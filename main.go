@@ -107,18 +107,31 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) {
 	var inputFilters []core.Filter
 	var filterNames []string
 	for i, filterCfg := range inputCfg.Filters {
-		if filterCfg.Type != "suppress" {
+		var filter core.Filter
+		var err error
+
+		switch filterCfg.Type {
+		case "pattern":
+			filter, err = filters.NewPatternFilter(filterCfg.Field, filterCfg.Pattern, filterCfg.Action)
+			if err != nil {
+				slog.Error("Failed to create pattern filter", "input", inputCfg.Name, "index", i, "error", err)
+				os.Exit(1)
+			}
+			slog.Debug("Added pattern filter", "input", inputCfg.Name, "field", filterCfg.Field, "pattern", filterCfg.Pattern, "action", filterCfg.Action)
+		case "duration":
+			filter, err = filters.NewDurationFilter(filterCfg.MinSeconds)
+			if err != nil {
+				slog.Error("Failed to create duration filter", "input", inputCfg.Name, "index", i, "error", err)
+				os.Exit(1)
+			}
+			slog.Debug("Added duration filter", "input", inputCfg.Name, "minSeconds", filterCfg.MinSeconds)
+		default:
 			slog.Error("Unknown filter type", "type", filterCfg.Type, "input", inputCfg.Name)
 			os.Exit(1)
 		}
-		filter, err := filters.NewSuppressFilter(filterCfg.Field, filterCfg.Pattern, filterCfg.Action)
-		if err != nil {
-			slog.Error("Failed to create suppress filter", "input", inputCfg.Name, "index", i, "error", err)
-			os.Exit(1)
-		}
+
 		inputFilters = append(inputFilters, filter)
-		filterNames = append(filterNames, "suppress")
-		slog.Debug("Added suppress filter", "input", inputCfg.Name, "field", filterCfg.Field, "pattern", filterCfg.Pattern, "action", filterCfg.Action)
+		filterNames = append(filterNames, filterCfg.Type)
 	}
 	if len(inputFilters) > 0 {
 		router.SetInputFilters(inputCfg.Name, inputFilters)
