@@ -3,6 +3,7 @@ package filters
 import (
 	"fmt"
 
+	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
 )
@@ -21,6 +22,12 @@ func NewDurationFilter(minSeconds int) (*DurationFilter, error) {
 	return &DurationFilter{
 		minSeconds: minSeconds,
 	}, nil
+}
+
+func init() {
+	RegisterFilter("duration", func(cfg *config.FilterConfig) (core.Filter, error) {
+		return NewDurationFilter(cfg.MinSeconds)
+	})
 }
 
 // Decide checks if the metadata duration meets the minimum threshold.

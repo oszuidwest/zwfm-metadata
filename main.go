@@ -110,7 +110,7 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error
 	// Add filters for this input
 	var inputFilters []core.Filter
 	for i, filterCfg := range inputCfg.Filters {
-		filter, err := createFilter(&filterCfg)
+		filter, err := filters.GetFilter(&filterCfg)
 		if err != nil {
 			return fmt.Errorf("failed to create %s filter for input %q (index %d): %w", filterCfg.Type, inputCfg.Name, i, err)
 		}
@@ -166,17 +166,6 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 	slog.Info("Added output", "name", outputCfg.Name, "type", outputCfg.Type, "delay", output.GetDelay())
 
 	return nil
-}
-
-func createFilter(cfg *config.FilterConfig) (core.Filter, error) {
-	switch cfg.Type {
-	case "pattern":
-		return filters.NewPatternFilter(cfg.Field, cfg.Pattern, cfg.Action)
-	case "duration":
-		return filters.NewDurationFilter(cfg.MinSeconds)
-	default:
-		return nil, &unknownTypeError{Type: cfg.Type}
-	}
 }
 
 func createInput(cfg *config.InputConfig) (core.Input, error) {

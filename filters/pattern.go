@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 )
 
@@ -55,6 +56,12 @@ func NewPatternFilter(field, pattern, action string) (*PatternFilter, error) {
 		pattern: re,
 		action:  action,
 	}, nil
+}
+
+func init() {
+	RegisterFilter("pattern", func(cfg *config.FilterConfig) (core.Filter, error) {
+		return NewPatternFilter(cfg.Field, cfg.Pattern, cfg.Action)
+	})
 }
 
 // Decide checks if the metadata matches the pattern and returns the action to take.
