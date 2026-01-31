@@ -27,6 +27,11 @@ This guide covers how to add new inputs, outputs, and formatters to the ZuidWest
   - [Step 1: Create Formatter Structure](#step-1-create-formatter-structure)
   - [Step 2: Register Formatter](#step-2-register-formatter)
   - [Step 3: Test Your Formatter](#step-3-test-your-formatter)
+- [Adding a New Filter](#adding-a-new-filter)
+  - [Step 1: Create Filter Structure](#step-1-create-filter-structure)
+  - [Step 2: Register Filter](#step-2-register-filter)
+  - [Step 3: Add Configuration Support](#step-3-add-configuration-support-1)
+  - [Step 4: Test Your Filter](#step-4-test-your-filter)
 - [Built-in Components](#built-in-components)
   - [Inputs](#inputs)
   - [Outputs](#outputs)
@@ -40,6 +45,7 @@ This guide covers how to add new inputs, outputs, and formatters to the ZuidWest
   - [core.Output Interface](#coreoutput-interface)
   - [core.RouteRegistrar Interface](#corerouteregistrar-interface)
   - [core.Formatter Interface](#coreformatter-interface)
+  - [core.Filter Interface](#corefilter-interface)
   - [core.StructuredText Type](#corestructuredtext-type)
 - [Design Patterns](#design-patterns)
   - [Base Class Embedding](#base-class-embedding)
@@ -57,11 +63,12 @@ This guide covers how to add new inputs, outputs, and formatters to the ZuidWest
 
 ## Architecture Overview
 
-The ZuidWest FM metadata system consists of three main extension points:
+The ZuidWest FM metadata system consists of four main extension points:
 
 - **Inputs** - Source metadata from various systems (APIs, files, static text)
 - **Outputs** - Send formatted metadata to destinations (streaming servers, files, webhooks)
 - **Formatters** - Transform metadata fields (uppercase, lowercase, RDS compliance, etc.)
+- **Filters** - Accept or reject metadata based on criteria (patterns, duration, etc.)
 
 All components communicate through the central `MetadataRouter` which handles:
 - Priority-based fallback between inputs
@@ -544,6 +551,109 @@ Use in configuration:
 }
 ```
 
+## Adding a New Filter
+
+Filters implement the `core.Filter` interface and decide whether metadata should pass through to outputs. Unlike formatters which transform text, filters accept or reject metadata.
+
+### Step 1: Create Filter Structure
+
+Create a new file in the `filters/` directory:
+
+```go
+// filters/myfilter.go
+package filters
+
+import (
+    "zwfm-metadata/config"
+    "zwfm-metadata/core"
+)
+
+// MyCustomFilter rejects metadata based on custom criteria.
+type MyCustomFilter struct {
+    threshold int
+}
+
+// NewMyCustomFilter creates a filter with the given threshold.
+func NewMyCustomFilter(threshold int) (*MyCustomFilter, error) {
+    return &MyCustomFilter{threshold: threshold}, nil
+}
+
+// Type returns the filter type name for dashboard display.
+func (f *MyCustomFilter) Type() string {
+    return "mycustom"
+}
+
+// Decide examines the metadata and returns whether it should pass through.
+func (f *MyCustomFilter) Decide(st *core.StructuredText) core.FilterResult {
+    // Example: reject if title is too short
+    if len(st.Title) < f.threshold {
+        return core.FilterResult{Pass: false, ClearAll: true}
+    }
+    return core.FilterResult{Pass: true}
+}
+```
+
+### Step 2: Register Filter
+
+Add an `init()` function to register your filter with the factory:
+
+```go
+func init() {
+    RegisterFilter("mycustom", func(cfg *config.FilterConfig) (core.Filter, error) {
+        return NewMyCustomFilter(cfg.MinSeconds) // or use a custom config field
+    })
+}
+```
+
+### Step 3: Add Configuration Support
+
+Add any custom configuration fields to `config/config.go`:
+
+```go
+type FilterConfig struct {
+    Type       string `json:"type"`
+    Field      string `json:"field,omitempty"`      // For pattern filter
+    Pattern    string `json:"pattern,omitempty"`    // For pattern filter
+    Action     string `json:"action,omitempty"`     // For pattern filter
+    MinSeconds int    `json:"minSeconds,omitempty"` // For duration filter
+    Threshold  int    `json:"threshold,omitempty"`  // For your custom filter
+}
+```
+
+### Step 4: Test Your Filter
+
+Use in configuration:
+
+```json
+{
+  "inputs": [
+    {
+      "type": "dynamic",
+      "name": "radio-live",
+      "filters": [
+        {
+          "type": "mycustom",
+          "threshold": 5
+        }
+      ],
+      "settings": { "secret": "..." }
+    }
+  ]
+}
+```
+
+### FilterResult Options
+
+The `core.FilterResult` struct controls what happens:
+
+| Field | Effect |
+|-------|--------|
+| `Pass: true` | Metadata continues to outputs |
+| `Pass: false` | Metadata is rejected, outputs keep previous content |
+| `ClearArtist: true` | Clears the Artist field but allows metadata through |
+| `ClearTitle: true` | Clears the Title field but allows metadata through |
+| `ClearAll: true` | Clears all fields (Artist, Title, Prefix, Suffix) |
+
 ## Built-in Components
 
 ### Inputs
@@ -568,6 +678,11 @@ Use in configuration:
 - **lowercase** - Converts fields to lowercase
 - **ucwords** - Capitalizes First Letter Of Each Word
 - **rds** - RDS compliance (64-char limit with smart field truncation)
+
+### Filters
+
+- **pattern** - Regex-based filtering to skip or clear metadata fields
+- **duration** - Skips tracks shorter than a minimum duration threshold
 
 ## Complete Examples
 
@@ -935,6 +1050,22 @@ type RouteRegistrar interface {
 ```go
 type Formatter interface {
     Format(st *StructuredText)          // Transform fields in place
+}
+```
+
+### core.Filter Interface
+
+```go
+type Filter interface {
+    Type() string                       // Return filter type name for dashboard display
+    Decide(st *StructuredText) FilterResult  // Examine metadata and decide action
+}
+
+type FilterResult struct {
+    Pass        bool  // Whether processing should continue
+    ClearArtist bool  // Whether to clear the Artist field
+    ClearTitle  bool  // Whether to clear the Title field
+    ClearAll    bool  // Whether to clear all fields (Artist, Title, Prefix, Suffix)
 }
 ```
 

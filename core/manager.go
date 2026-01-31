@@ -169,7 +169,11 @@ func (mr *MetadataRouter) SetInputFilters(inputName string, filters []Filter) {
 	// Derive filter names for dashboard display
 	filterNames := make([]string, len(filters))
 	for i, f := range filters {
-		filterNames[i] = f.Type()
+		name := f.Type()
+		if name == "" {
+			name = "custom"
+		}
+		filterNames[i] = name
 	}
 	mr.inputFilterNames[inputName] = filterNames
 }
