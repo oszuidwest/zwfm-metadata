@@ -30,6 +30,7 @@ type InputStatus struct {
 	Type      string         `json:"type"`
 	Prefix    string         `json:"prefix"`
 	Suffix    string         `json:"suffix"`
+	Filters   []string       `json:"filters"`
 	Available bool           `json:"available"`
 	Status    string         `json:"status"` // "available", "expired", or "unavailable"
 	UpdatedAt *time.Time     `json:"updatedAt,omitzero"`
@@ -63,6 +64,7 @@ type MetadataRouter struct {
 	outputFormatters     map[string][]Formatter    // output name -> formatters
 	outputFormatterNames map[string][]string       // output name -> formatter names
 	inputFilters         map[string][]Filter       // input name -> filters
+	inputFilterNames     map[string][]string       // input name -> filter type names (for dashboard)
 	inputPrefixSuffix    map[string]InputPrefixSuffix
 	inputTypes           map[string]string // input name -> input type
 	outputTypes          map[string]string // output name -> output type
@@ -84,6 +86,7 @@ func NewMetadataRouter() *MetadataRouter {
 		outputFormatters:     make(map[string][]Formatter),
 		outputFormatterNames: make(map[string][]string),
 		inputFilters:         make(map[string][]Filter),
+		inputFilterNames:     make(map[string][]string),
 		inputPrefixSuffix:    make(map[string]InputPrefixSuffix),
 		inputTypes:           make(map[string]string),
 		outputTypes:          make(map[string]string),
@@ -163,6 +166,14 @@ func (mr *MetadataRouter) SetInputFilters(inputName string, filters []Filter) {
 	mr.inputFilters[inputName] = filters
 }
 
+// SetInputFilterNames stores filter type names for dashboard display.
+func (mr *MetadataRouter) SetInputFilterNames(inputName string, filterNames []string) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	mr.panicIfStarted("SetInputFilterNames")
+	mr.inputFilterNames[inputName] = filterNames
+}
+
 // SetInputPrefixSuffix configures text to prepend and append to an input's metadata.
 func (mr *MetadataRouter) SetInputPrefixSuffix(inputName, prefix, suffix string) {
 	mr.mu.Lock()
@@ -210,12 +221,14 @@ func (mr *MetadataRouter) GetInputStatus() []InputStatus {
 		metadata := input.GetMetadata()
 		prefixSuffix := mr.inputPrefixSuffix[name]
 		inputType := mr.inputTypes[name]
+		filterNames := mr.inputFilterNames[name]
 
 		status := InputStatus{
 			Name:      name,
 			Type:      inputType,
 			Prefix:    prefixSuffix.Prefix,
 			Suffix:    prefixSuffix.Suffix,
+			Filters:   filterNames,
 			Available: metadata != nil && metadata.IsAvailable(),
 		}
 
@@ -296,6 +309,17 @@ func (mr *MetadataRouter) GetOutputFormatterNames(outputName string) []string {
 
 	if formatterNames, exists := mr.outputFormatterNames[outputName]; exists {
 		return formatterNames
+	}
+	return []string{}
+}
+
+// GetInputFilterNames retrieves the filter type names configured for an input.
+func (mr *MetadataRouter) GetInputFilterNames(inputName string) []string {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
+	if filterNames, exists := mr.inputFilterNames[inputName]; exists {
+		return filterNames
 	}
 	return []string{}
 }
