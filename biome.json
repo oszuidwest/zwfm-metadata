@@ -1,0 +1,48 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.3.13/schema.json",
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "recommended": true,
+            "a11y": {
+                "recommended": true
+            },
+            "complexity": {
+                "recommended": true
+            },
+            "correctness": {
+                "recommended": true
+            },
+            "performance": {
+                "recommended": true
+            },
+            "security": {
+                "recommended": true
+            },
+            "style": {
+                "recommended": true
+            },
+            "suspicious": {
+                "recommended": true
+            }
+        }
+    },
+    "formatter": {
+        "enabled": true,
+        "indentStyle": "space",
+        "indentWidth": 4
+    },
+    "css": {
+        "linter": {
+            "enabled": true
+        },
+        "formatter": {
+            "enabled": true
+        }
+    },
+    "javascript": {
+        "formatter": {
+            "quoteStyle": "single"
+        }
+    }
+}

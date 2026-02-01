@@ -1,0 +1,12 @@
+{
+    "name": "zwfm-metadata",
+    "private": true,
+    "scripts": {
+        "lint": "biome check web/assets/",
+        "lint:fix": "biome check --write web/assets/",
+        "format": "biome format --write web/assets/"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^2.3.13"
+    }
+}
