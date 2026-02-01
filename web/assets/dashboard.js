@@ -82,13 +82,11 @@ const TAG_CLASSES = {
     input: 'badge-input',
     formatter: 'badge-brand',
     filter: 'badge-brand',
-    type: 'badge-type',
 };
 
-const CARD_CLASSES = {
-    container: 'card',
-    inputHeader: 'card-header-brand',
-    outputHeader: 'card-header-slate',
+const CARD_HEADER_CLASSES = {
+    input: 'card-header-brand',
+    output: 'card-header-slate',
 };
 
 // Data Management Helpers
@@ -155,22 +153,17 @@ function updateConnectionStatus(status) {
     plugIcon.classList.remove('animate-pulse');
     statusText.classList.remove('animate-pulse');
 
-    switch (status) {
-        case 'connected':
-            statusText.textContent = 'Connected';
-            break;
-        case 'disconnected':
-            statusText.textContent = 'Disconnected';
-            break;
-        case 'connecting': {
-            statusText.textContent = 'Connecting';
-            plugIcon.classList.add('animate-pulse');
-            statusText.classList.add('animate-pulse');
-            break;
-        }
-        default:
-            statusText.textContent = 'Unknown';
-            break;
+    const statusLabels = {
+        connected: 'Connected',
+        disconnected: 'Disconnected',
+        connecting: 'Connecting',
+    };
+
+    statusText.textContent = statusLabels[status] || 'Unknown';
+
+    if (status === 'connecting') {
+        plugIcon.classList.add('animate-pulse');
+        statusText.classList.add('animate-pulse');
     }
 }
 
@@ -252,86 +245,72 @@ function buildMetadataBox(metadata) {
 }
 
 function buildPrefixSuffixBox(input) {
-    const parts = [];
+    const fields = [
+        { label: 'Prefix', value: input.prefix },
+        { label: 'Suffix', value: input.suffix },
+    ].filter((f) => f.value && f.value !== 'undefined');
 
-    if (input.prefix && input.prefix !== 'undefined') {
-        parts.push(
-            createLabeledField(
-                'Prefix',
-                input.prefix,
-                'text-muted-light',
-                'font-mono',
-            ),
-        );
-    }
-    if (input.suffix && input.suffix !== 'undefined') {
-        parts.push(
-            createLabeledField(
-                'Suffix',
-                input.suffix,
-                'text-muted-light',
-                'font-mono',
-            ),
-        );
-    }
-
-    if (parts.length === 0) {
+    if (fields.length === 0) {
         return null;
     }
 
     const container = el('div', 'mt-3 space-y-1');
-    for (const part of parts) {
+    for (const field of fields) {
         const wrapper = el('div', 'text-sm');
-        wrapper.appendChild(part);
+        wrapper.appendChild(
+            createLabeledField(
+                field.label,
+                field.value,
+                'text-muted-light',
+                'font-mono',
+            ),
+        );
         container.appendChild(wrapper);
     }
     return container;
 }
 
-function buildFilterBox(filters) {
-    if (!filters || filters.length === 0) {
+function buildBadgeSection(label, items, badgeClass) {
+    if (!items || items.length === 0) {
         return null;
     }
 
-    const container = el('div', 'mt-3');
-    const label = el('div', 'section-label', 'Filters');
+    const container = el('div');
+    container.appendChild(el('div', 'section-label', label));
+
     const badgeContainer = el('div', 'flex flex-wrap gap-2');
-
-    for (const filter of filters) {
-        badgeContainer.appendChild(createBadge(filter, TAG_CLASSES.filter));
+    for (const item of items) {
+        badgeContainer.appendChild(createBadge(item, badgeClass));
     }
+    container.appendChild(badgeContainer);
 
-    container.append(label, badgeContainer);
     return container;
 }
 
 function buildInputTimestampBox(input) {
     const container = el('div', 'text-muted-light text-sm mt-4 pt-4 border-t');
+    const isAvailable = input.status === 'available';
+    const updatedTime = formatDisplayTime(input.updatedAt, isAvailable);
 
     const updatedDiv = el('div');
-    updatedDiv.appendChild(document.createTextNode('Updated: '));
-    const updatedTime = formatDisplayTime(
-        input.updatedAt,
-        input.status === 'available',
-    );
-    const timeSpan = el(
-        'span',
-        input.status === 'available' ? 'font-medium' : '',
-        updatedTime,
-    );
-    updatedDiv.appendChild(timeSpan);
+    const labelSpan = el('span', null, 'Updated: ');
+    const timeSpan = el('span', isAvailable ? 'font-medium' : '', updatedTime);
+    updatedDiv.append(labelSpan, timeSpan);
     container.appendChild(updatedDiv);
 
     if (input.expiresAt) {
-        const expiresDiv = el(
-            'div',
-            null,
-            `Expires: ${formatDisplayTime(input.expiresAt)}`,
+        container.appendChild(
+            el('div', null, `Expires: ${formatDisplayTime(input.expiresAt)}`),
         );
-        container.appendChild(expiresDiv);
     }
 
     return container;
+}
+
+function appendIfPresent(parent, element) {
+    if (element) {
+        parent.appendChild(element);
+    }
 }
 
 function buildInputCard(input) {
@@ -341,7 +320,7 @@ function buildInputCard(input) {
     const card = createMetadataCard(
         input.name,
         input.type,
-        CARD_CLASSES.inputHeader,
+        CARD_HEADER_CLASSES.input,
         hasChanged,
     );
     card.dataset.inputName = input.name;
@@ -349,22 +328,19 @@ function buildInputCard(input) {
     const body = card.querySelector('.card-body');
 
     body.appendChild(createStatusBadge(input.status, STATUS_CONFIG));
+    appendIfPresent(body, buildPrefixSuffixBox(input));
 
-    const prefixSuffixBox = buildPrefixSuffixBox(input);
-    if (prefixSuffixBox) {
-        body.appendChild(prefixSuffixBox);
+    const filterSection = buildBadgeSection(
+        'Filters',
+        input.filters,
+        TAG_CLASSES.filter,
+    );
+    if (filterSection) {
+        filterSection.classList.add('mt-3');
+        body.appendChild(filterSection);
     }
 
-    const filterBox = buildFilterBox(input.filters);
-    if (filterBox) {
-        body.appendChild(filterBox);
-    }
-
-    const metadataBox = buildMetadataBox(input.metadata);
-    if (metadataBox) {
-        body.appendChild(metadataBox);
-    }
-
+    appendIfPresent(body, buildMetadataBox(input.metadata));
     body.appendChild(buildInputTimestampBox(input));
 
     return card;
@@ -384,6 +360,13 @@ function updateInputCards(inputs) {
     }
 }
 
+function buildStatColumn(label, value, valueClass) {
+    const col = el('div');
+    col.appendChild(el('div', 'text-muted-dark text-sm', label));
+    col.appendChild(el('div', `font-bold text-lg ${valueClass || ''}`, value));
+    return col;
+}
+
 function buildOutputCard(output) {
     const prevOutput = previousData.outputs[output.name];
     const hasChanged = hasDataChanged(output, prevOutput, ['currentInput']);
@@ -391,7 +374,7 @@ function buildOutputCard(output) {
     const card = createMetadataCard(
         output.name,
         output.type,
-        CARD_CLASSES.outputHeader,
+        CARD_HEADER_CLASSES.output,
         hasChanged,
     );
     card.dataset.outputName = output.name;
@@ -400,51 +383,35 @@ function buildOutputCard(output) {
 
     // Stats box with delay and current input
     const statsBox = el('div', 'content-box grid-2-col mb-4');
-
-    const delayCol = el('div');
-    delayCol.appendChild(el('div', 'text-muted-dark text-sm', 'Delay'));
-    delayCol.appendChild(el('div', 'font-bold text-lg', `${output.delay}s`));
-
-    const inputCol = el('div');
-    inputCol.appendChild(el('div', 'text-muted-dark text-sm', 'Current Input'));
-    const inputValue = el(
-        'div',
-        `font-bold text-lg ${output.currentInput ? 'text-success' : 'text-faint'}`,
-        output.currentInput || 'None',
+    const inputValueClass = output.currentInput ? 'text-success' : 'text-faint';
+    statsBox.append(
+        buildStatColumn('Delay', `${output.delay}s`),
+        buildStatColumn(
+            'Current Input',
+            output.currentInput || 'None',
+            inputValueClass,
+        ),
     );
-    inputCol.appendChild(inputValue);
-
-    statsBox.append(delayCol, inputCol);
     body.appendChild(statsBox);
 
     // Tags container
     const tagsContainer = el('div', 'space-y-4');
 
-    // Input tags
-    const inputsSection = el('div');
-    inputsSection.appendChild(
-        el('div', 'section-label', 'Inputs (priority order)'),
+    const inputsSection = buildBadgeSection(
+        'Inputs (priority order)',
+        output.inputs || [],
+        TAG_CLASSES.input,
     );
-    const inputBadges = el('div', 'flex flex-wrap gap-2');
-    for (const inputName of output.inputs || []) {
-        inputBadges.appendChild(createBadge(inputName, TAG_CLASSES.input));
+    if (inputsSection) {
+        tagsContainer.appendChild(inputsSection);
     }
-    inputsSection.appendChild(inputBadges);
-    tagsContainer.appendChild(inputsSection);
 
-    // Formatter tags
-    if (output.formatters && output.formatters.length > 0) {
-        const formattersSection = el('div');
-        formattersSection.appendChild(el('div', 'section-label', 'Formatters'));
-        const formatterBadges = el('div', 'flex flex-wrap gap-2');
-        for (const formatter of output.formatters) {
-            formatterBadges.appendChild(
-                createBadge(formatter, TAG_CLASSES.formatter),
-            );
-        }
-        formattersSection.appendChild(formatterBadges);
-        tagsContainer.appendChild(formattersSection);
-    }
+    const formattersSection = buildBadgeSection(
+        'Formatters',
+        output.formatters,
+        TAG_CLASSES.formatter,
+    );
+    appendIfPresent(tagsContainer, formattersSection);
 
     body.appendChild(tagsContainer);
 
