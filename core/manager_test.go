@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+// Mock types for testing.
+
 // mockInput implements Input for testing.
 type mockInput struct {
 	*InputBase
@@ -78,6 +80,52 @@ func (f *mockFilter) Decide(_ *StructuredText) FilterAction {
 	return f.action
 }
 
+// patternFilter rejects or clears based on pattern matching in title.
+type patternFilter struct {
+	pattern string
+	action  FilterAction
+}
+
+func newPatternFilter(pattern string, action FilterAction) *patternFilter {
+	return &patternFilter{pattern: pattern, action: action}
+}
+
+func (f *patternFilter) Decide(st *StructuredText) FilterAction {
+	if f.pattern != "" && strings.Contains(st.Title, f.pattern) {
+		return f.action
+	}
+	return FilterPass
+}
+
+// artistDependentFilter clears title when artist is empty.
+type artistDependentFilter struct{}
+
+func (f *artistDependentFilter) Decide(st *StructuredText) FilterAction {
+	if st.Artist == "" {
+		return FilterClearTitle
+	}
+	return FilterPass
+}
+
+// capturingFilter captures the StructuredText for inspection.
+type capturingFilter struct {
+	captured *StructuredText
+	mu       sync.Mutex
+}
+
+func (f *capturingFilter) Decide(st *StructuredText) FilterAction {
+	f.mu.Lock()
+	f.captured = st.Clone()
+	f.mu.Unlock()
+	return FilterPass
+}
+
+func (f *capturingFilter) getCaptured() *StructuredText {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.captured
+}
+
 // contextAwareFilter checks that context fields are set correctly.
 type contextAwareFilter struct {
 	expectedInputName string
@@ -115,7 +163,8 @@ func (f *contextAwareFilter) wasContextMatched() bool {
 	return f.contextMatched
 }
 
-// Helper to create test metadata.
+// Test helpers.
+
 func testMetadata(name, artist, title string) *Metadata {
 	return &Metadata{
 		Name:      name,
@@ -125,35 +174,50 @@ func testMetadata(name, artist, title string) *Metadata {
 	}
 }
 
-// TestFilterRejectsMetadata verifies that a filter can reject metadata entirely.
-func TestFilterRejectsMetadata(t *testing.T) {
+// setupTestRouter creates a router with a single input and output for testing.
+// Returns the router, input, output, and a cancel function.
+func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*MetadataRouter, *mockInput, *mockOutput, context.CancelFunc) { //nolint:unparam // router returned for tests that need it
+	t.Helper()
+
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	router := NewMetadataRouter()
 
 	input := newMockInput("test-input")
 	if err := router.AddInput(input); err != nil {
+		cancel()
 		t.Fatalf("AddInput failed: %v", err)
 	}
-	router.SetInputFilters("test-input", []Filter{newMockFilter(FilterReject)})
+
+	if len(filters) > 0 {
+		router.SetInputFilters("test-input", filters)
+	}
 
 	output := newMockOutput("test-output", 0)
+	output.SetDelay(outputDelay)
 	if err := router.AddOutput(output); err != nil {
+		cancel()
 		t.Fatalf("AddOutput failed: %v", err)
 	}
 	router.SetOutputInputs("test-output", []string{"test-input"})
 
 	if err := router.Start(ctx); err != nil {
+		cancel()
 		t.Fatalf("Start failed: %v", err)
 	}
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Metadata should be rejected by filter, no update sent
-	metadata := testMetadata("input", "Artist", "Title")
-	input.SetMetadata(metadata)
+	return router, input, output, cancel
+}
 
+// Tests.
+
+func TestFilterRejectsMetadata(t *testing.T) {
+	_, input, output, cancel := setupTestRouter(t, 0, []Filter{newMockFilter(FilterReject)})
+	defer cancel()
+
+	input.SetMetadata(testMetadata("input", "Artist", "Title"))
 	time.Sleep(100 * time.Millisecond)
 
 	sent := output.getSent()
@@ -162,49 +226,19 @@ func TestFilterRejectsMetadata(t *testing.T) {
 	}
 }
 
-// TestDelayedUpdatePreservedWhenNewMetadataRejected tests issue #67 scenario 1:
-// Output has delay, metadata A is scheduled, metadata B arrives and is rejected,
-// A's pending update should still proceed.
 func TestDelayedUpdatePreservedWhenNewMetadataRejected(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	rejectFilter := newPatternFilter("REJECT", FilterReject)
+	_, input, output, cancel := setupTestRouter(t, 1, []Filter{rejectFilter})
 	defer cancel()
 
-	router := NewMetadataRouter()
-
-	// Filter that rejects metadata with "REJECT" in title
-	rejectFilter := &conditionalFilter{rejectPattern: "REJECT"}
-
-	input := newMockInput("test-input")
-	if err := router.AddInput(input); err != nil {
-		t.Fatalf("AddInput failed: %v", err)
-	}
-	router.SetInputFilters("test-input", []Filter{rejectFilter})
-
-	// Output with 300ms delay - enough time to send B before A executes
-	output := newMockOutput("test-output", 0)
-	output.SetDelay(1) // 1 second delay
-	if err := router.AddOutput(output); err != nil {
-		t.Fatalf("AddOutput failed: %v", err)
-	}
-	router.SetOutputInputs("test-output", []string{"test-input"})
-
-	if err := router.Start(ctx); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	time.Sleep(50 * time.Millisecond)
-
 	// Send metadata A (passes filter, scheduled with 1s delay)
-	metadataA := testMetadata("input-a", "Artist A", "Title A")
-	input.SetMetadata(metadataA)
+	input.SetMetadata(testMetadata("input-a", "Artist A", "Title A"))
 
 	// Immediately send metadata B which should be rejected
-	// This happens BEFORE A's delayed update executes
 	time.Sleep(50 * time.Millisecond)
-	metadataB := testMetadata("input-b", "Artist B", "REJECT this")
-	input.SetMetadata(metadataB)
+	input.SetMetadata(testMetadata("input-b", "Artist B", "REJECT this"))
 
-	// Wait for A's delayed update to arrive (should still happen)
+	// Wait for A's delayed update to arrive
 	st, ok := output.waitForSend(2 * time.Second)
 	if !ok {
 		t.Fatal("Expected metadata A to be sent after delay - pending update was incorrectly canceled")
@@ -213,73 +247,36 @@ func TestDelayedUpdatePreservedWhenNewMetadataRejected(t *testing.T) {
 		t.Errorf("Expected Title A, got %s", st.Title)
 	}
 
-	// Verify only A was sent (B was rejected)
+	// Verify B was actually rejected by waiting for any additional sends
+	// If B was mistakenly scheduled, it would arrive within this window
+	_, gotExtra := output.waitForSend(500 * time.Millisecond)
+	if gotExtra {
+		t.Error("Expected metadata B to be rejected, but received additional update")
+	}
+
 	sent := output.getSent()
 	if len(sent) != 1 {
 		t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
 	}
 }
 
-// conditionalFilter rejects metadata where title contains the rejectPattern.
-type conditionalFilter struct {
-	rejectPattern string
-}
-
-func (f *conditionalFilter) Decide(st *StructuredText) FilterAction {
-	if f.rejectPattern != "" && st.Title != "" {
-		if strings.Contains(st.Title, f.rejectPattern) {
-			return FilterReject
-		}
-	}
-	return FilterPass
-}
-
-// TestDelayedUpdatePreservedWhenNewMetadataCumulativelyCleared tests issue #67 scenario 2:
-// Output has delay, metadata A is scheduled, metadata B arrives and filters cumulatively
-// clear all fields, A's pending update should still proceed.
 func TestDelayedUpdatePreservedWhenNewMetadataCumulativelyCleared(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	// Filter chain: clear artist when title contains "CLEAR", then clear title when artist is empty
+	filters := []Filter{
+		newPatternFilter("CLEAR", FilterClearArtist),
+		&artistDependentFilter{},
+	}
+	_, input, output, cancel := setupTestRouter(t, 1, filters)
 	defer cancel()
 
-	router := NewMetadataRouter()
-
-	// Filter that clears artist when title contains "CLEAR"
-	conditionalClearFilter := &conditionalClearArtistFilter{pattern: "CLEAR"}
-	// Filter that always clears title when artist is empty
-	clearTitleWhenNoArtist := &clearTitleWhenNoArtistFilter{}
-
-	input := newMockInput("test-input")
-	if err := router.AddInput(input); err != nil {
-		t.Fatalf("AddInput failed: %v", err)
-	}
-	router.SetInputFilters("test-input", []Filter{conditionalClearFilter, clearTitleWhenNoArtist})
-
-	// Output with 1s delay
-	output := newMockOutput("test-output", 0)
-	output.SetDelay(1)
-	if err := router.AddOutput(output); err != nil {
-		t.Fatalf("AddOutput failed: %v", err)
-	}
-	router.SetOutputInputs("test-output", []string{"test-input"})
-
-	if err := router.Start(ctx); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	time.Sleep(50 * time.Millisecond)
-
 	// Send metadata A (passes filters, scheduled with 1s delay)
-	metadataA := testMetadata("input-a", "Artist A", "Title A")
-	input.SetMetadata(metadataA)
+	input.SetMetadata(testMetadata("input-a", "Artist A", "Title A"))
 
-	// Send metadata B which will be cumulatively cleared:
-	// - conditionalClearFilter clears artist because title contains "CLEAR"
-	// - clearTitleWhenNoArtist clears title because artist is now empty
+	// Send metadata B which will be cumulatively cleared
 	time.Sleep(50 * time.Millisecond)
-	metadataB := testMetadata("input-b", "Artist B", "CLEAR me")
-	input.SetMetadata(metadataB)
+	input.SetMetadata(testMetadata("input-b", "Artist B", "CLEAR me"))
 
-	// Wait for A's delayed update (should still happen)
+	// Wait for A's delayed update
 	st, ok := output.waitForSend(2 * time.Second)
 	if !ok {
 		t.Fatal("Expected metadata A to be sent - pending update was incorrectly canceled")
@@ -288,68 +285,28 @@ func TestDelayedUpdatePreservedWhenNewMetadataCumulativelyCleared(t *testing.T) 
 		t.Errorf("Expected Title A, got %s", st.Title)
 	}
 
-	// Verify only A was sent
+	// Verify B was actually rejected by waiting for any additional sends
+	// If B was mistakenly scheduled, it would arrive within this window
+	_, gotExtra := output.waitForSend(500 * time.Millisecond)
+	if gotExtra {
+		t.Error("Expected metadata B to be rejected (cumulative clearing), but received additional update")
+	}
+
 	sent := output.getSent()
 	if len(sent) != 1 {
 		t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
 	}
 }
 
-// conditionalClearArtistFilter clears artist when title contains pattern.
-type conditionalClearArtistFilter struct {
-	pattern string
-}
-
-func (f *conditionalClearArtistFilter) Decide(st *StructuredText) FilterAction {
-	if f.pattern != "" && strings.Contains(st.Title, f.pattern) {
-		return FilterClearArtist
-	}
-	return FilterPass
-}
-
-// clearTitleWhenNoArtistFilter clears title when artist is empty.
-type clearTitleWhenNoArtistFilter struct{}
-
-func (f *clearTitleWhenNoArtistFilter) Decide(st *StructuredText) FilterAction {
-	if st.Artist == "" {
-		return FilterClearTitle
-	}
-	return FilterPass
-}
-
-// TestCumulativeFieldClearingRejectsMetadata verifies that when multiple filters
-// cumulatively clear all fields, metadata is rejected.
 func TestCumulativeFieldClearingRejectsMetadata(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	filters := []Filter{
+		newMockFilter(FilterClearArtist),
+		newMockFilter(FilterClearTitle),
+	}
+	_, input, output, cancel := setupTestRouter(t, 0, filters)
 	defer cancel()
 
-	router := NewMetadataRouter()
-
-	// Two filters that always clear their respective fields
-	clearArtistFilter := newMockFilter(FilterClearArtist)
-	clearTitleFilter := newMockFilter(FilterClearTitle)
-
-	input := newMockInput("test-input")
-	if err := router.AddInput(input); err != nil {
-		t.Fatalf("AddInput failed: %v", err)
-	}
-	router.SetInputFilters("test-input", []Filter{clearArtistFilter, clearTitleFilter})
-
-	output := newMockOutput("test-output", 0)
-	if err := router.AddOutput(output); err != nil {
-		t.Fatalf("AddOutput failed: %v", err)
-	}
-	router.SetOutputInputs("test-output", []string{"test-input"})
-
-	if err := router.Start(ctx); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	time.Sleep(50 * time.Millisecond)
-
-	metadata := testMetadata("input", "Artist", "Title")
-	input.SetMetadata(metadata)
-
+	input.SetMetadata(testMetadata("input", "Artist", "Title"))
 	time.Sleep(100 * time.Millisecond)
 
 	sent := output.getSent()
@@ -358,109 +315,87 @@ func TestCumulativeFieldClearingRejectsMetadata(t *testing.T) {
 	}
 }
 
-// TestWouldFiltersRejectWithCumulativeClearing tests wouldFiltersReject directly.
-func TestWouldFiltersRejectWithCumulativeClearing(t *testing.T) {
-	router := NewMetadataRouter()
+func TestWouldFiltersReject(t *testing.T) {
+	tests := []struct {
+		name           string
+		filters        []Filter
+		metadata       *Metadata
+		expectedReject bool
+	}{
+		{
+			name:           "cumulative clearing rejects",
+			filters:        []Filter{newMockFilter(FilterClearArtist), newMockFilter(FilterClearTitle)},
+			metadata:       testMetadata("input", "Artist", "Title"),
+			expectedReject: true,
+		},
+		{
+			name:           "explicit rejection",
+			filters:        []Filter{newMockFilter(FilterReject)},
+			metadata:       testMetadata("input", "Artist", "Title"),
+			expectedReject: true,
+		},
+		{
+			name:           "pass through",
+			filters:        []Filter{newMockFilter(FilterPass)},
+			metadata:       testMetadata("input", "Artist", "Title"),
+			expectedReject: false,
+		},
+		{
+			name:           "no filters passes",
+			filters:        nil,
+			metadata:       testMetadata("input", "Artist", "Title"),
+			expectedReject: false,
+		},
+		{
+			name:           "nil metadata rejects",
+			filters:        nil,
+			metadata:       nil,
+			expectedReject: true,
+		},
+		{
+			name:           "empty content rejects",
+			filters:        nil,
+			metadata:       testMetadata("input", "", ""),
+			expectedReject: true,
+		},
+		{
+			name:           "partial clear artist allows",
+			filters:        []Filter{newMockFilter(FilterClearArtist)},
+			metadata:       testMetadata("input", "Artist", "Title"),
+			expectedReject: false,
+		},
+		{
+			name:           "partial clear title allows",
+			filters:        []Filter{newMockFilter(FilterClearTitle)},
+			metadata:       testMetadata("input", "Artist", "Title"),
+			expectedReject: false,
+		},
+	}
 
-	// Two filters that together clear all content
-	clearArtistFilter := newMockFilter(FilterClearArtist)
-	clearTitleFilter := newMockFilter(FilterClearTitle)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := NewMetadataRouter()
+			input := newMockInput("test-input")
+			_ = router.AddInput(input)
 
-	input := newMockInput("test-input")
-	_ = router.AddInput(input)
-	router.SetInputFilters("test-input", []Filter{clearArtistFilter, clearTitleFilter})
+			if len(tt.filters) > 0 {
+				router.SetInputFilters("test-input", tt.filters)
+			}
 
-	metadata := testMetadata("input", "Artist", "Title")
-
-	// wouldFiltersReject should return true because cumulative clearing leaves no content
-	if !router.wouldFiltersReject("test-input", metadata) {
-		t.Error("Expected wouldFiltersReject to return true for cumulative clearing")
+			result := router.wouldFiltersReject("test-input", tt.metadata)
+			if result != tt.expectedReject {
+				t.Errorf("wouldFiltersReject() = %v, expected %v", result, tt.expectedReject)
+			}
+		})
 	}
 }
 
-// TestWouldFiltersRejectExplicitRejection tests explicit FilterReject.
-func TestWouldFiltersRejectExplicitRejection(t *testing.T) {
-	router := NewMetadataRouter()
-
-	rejectFilter := newMockFilter(FilterReject)
-
-	input := newMockInput("test-input")
-	_ = router.AddInput(input)
-	router.SetInputFilters("test-input", []Filter{rejectFilter})
-
-	metadata := testMetadata("input", "Artist", "Title")
-
-	if !router.wouldFiltersReject("test-input", metadata) {
-		t.Error("Expected wouldFiltersReject to return true for explicit rejection")
-	}
-}
-
-// TestWouldFiltersRejectPassThrough tests that passing filters don't reject.
-func TestWouldFiltersRejectPassThrough(t *testing.T) {
-	router := NewMetadataRouter()
-
-	passFilter := newMockFilter(FilterPass)
-
-	input := newMockInput("test-input")
-	_ = router.AddInput(input)
-	router.SetInputFilters("test-input", []Filter{passFilter})
-
-	metadata := testMetadata("input", "Artist", "Title")
-
-	if router.wouldFiltersReject("test-input", metadata) {
-		t.Error("Expected wouldFiltersReject to return false for passing filter")
-	}
-}
-
-// TestWouldFiltersRejectNoFilters tests that inputs without filters pass.
-func TestWouldFiltersRejectNoFilters(t *testing.T) {
-	router := NewMetadataRouter()
-
-	input := newMockInput("test-input")
-	_ = router.AddInput(input)
-
-	metadata := testMetadata("input", "Artist", "Title")
-
-	if router.wouldFiltersReject("test-input", metadata) {
-		t.Error("Expected wouldFiltersReject to return false when no filters configured")
-	}
-}
-
-// TestWouldFiltersRejectNilMetadata tests nil metadata handling.
-func TestWouldFiltersRejectNilMetadata(t *testing.T) {
-	router := NewMetadataRouter()
-
-	input := newMockInput("test-input")
-	_ = router.AddInput(input)
-
-	if !router.wouldFiltersReject("test-input", nil) {
-		t.Error("Expected wouldFiltersReject to return true for nil metadata")
-	}
-}
-
-// TestWouldFiltersRejectEmptyContent tests empty content handling.
-func TestWouldFiltersRejectEmptyContent(t *testing.T) {
-	router := NewMetadataRouter()
-
-	input := newMockInput("test-input")
-	_ = router.AddInput(input)
-
-	metadata := testMetadata("input", "", "")
-
-	if !router.wouldFiltersReject("test-input", metadata) {
-		t.Error("Expected wouldFiltersReject to return true for empty content")
-	}
-}
-
-// TestFilterContextMatchesExecution verifies that the context (InputName, InputType,
-// Prefix, Suffix) available to filters during pre-check matches execution time.
 func TestFilterContextMatchesExecution(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	router := NewMetadataRouter()
 
-	// Create a context-aware filter that verifies fields are set correctly
 	contextFilter := newContextAwareFilter("test-input", "url", "PREFIX:", ":SUFFIX")
 
 	input := newMockInput("test-input")
@@ -483,10 +418,7 @@ func TestFilterContextMatchesExecution(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	metadata := testMetadata("input", "Artist", "Title")
-	input.SetMetadata(metadata)
-
-	// Wait for processing
+	input.SetMetadata(testMetadata("input", "Artist", "Title"))
 	time.Sleep(100 * time.Millisecond)
 
 	if !contextFilter.wasContextMatched() {
@@ -494,13 +426,10 @@ func TestFilterContextMatchesExecution(t *testing.T) {
 	}
 }
 
-// TestWouldFiltersRejectContextFields verifies wouldFiltersReject sets context fields.
 func TestWouldFiltersRejectContextFields(t *testing.T) {
 	router := NewMetadataRouter()
 
-	// Create a filter that captures the context
-	var capturedST *StructuredText
-	captureFilter := &capturingFilter{capture: &capturedST}
+	captureFilter := &capturingFilter{}
 
 	input := newMockInput("test-input")
 	_ = router.AddInput(input)
@@ -508,71 +437,27 @@ func TestWouldFiltersRejectContextFields(t *testing.T) {
 	router.SetInputPrefixSuffix("test-input", "Hello ", " World")
 	router.SetInputFilters("test-input", []Filter{captureFilter})
 
-	metadata := testMetadata("input", "Artist", "Title")
-	router.wouldFiltersReject("test-input", metadata)
+	router.wouldFiltersReject("test-input", testMetadata("input", "Artist", "Title"))
 
-	if capturedST == nil {
+	captured := captureFilter.getCaptured()
+	if captured == nil {
 		t.Fatal("Filter was not called")
 	}
-	if capturedST.InputName != "test-input" {
-		t.Errorf("Expected InputName 'test-input', got %q", capturedST.InputName)
+
+	checks := []struct {
+		field    string
+		got      string
+		expected string
+	}{
+		{"InputName", captured.InputName, "test-input"},
+		{"InputType", captured.InputType, "dynamic"},
+		{"Prefix", captured.Prefix, "Hello "},
+		{"Suffix", captured.Suffix, " World"},
 	}
-	if capturedST.InputType != "dynamic" {
-		t.Errorf("Expected InputType 'dynamic', got %q", capturedST.InputType)
-	}
-	if capturedST.Prefix != "Hello " {
-		t.Errorf("Expected Prefix 'Hello ', got %q", capturedST.Prefix)
-	}
-	if capturedST.Suffix != " World" {
-		t.Errorf("Expected Suffix ' World', got %q", capturedST.Suffix)
-	}
-}
 
-// capturingFilter captures the StructuredText for inspection.
-type capturingFilter struct {
-	capture **StructuredText
-}
-
-func (f *capturingFilter) Decide(st *StructuredText) FilterAction {
-	*f.capture = st.Clone()
-	return FilterPass
-}
-
-// TestPartialFieldClearingAllowsUpdate verifies that clearing only one field
-// (leaving content) allows the update through.
-func TestPartialFieldClearingAllowsUpdate(t *testing.T) {
-	router := NewMetadataRouter()
-
-	// Only clear artist, title remains
-	clearArtistFilter := newMockFilter(FilterClearArtist)
-
-	input := newMockInput("test-input")
-	_ = router.AddInput(input)
-	router.SetInputFilters("test-input", []Filter{clearArtistFilter})
-
-	metadata := testMetadata("input", "Artist", "Title")
-
-	// Should NOT reject because title is still present
-	if router.wouldFiltersReject("test-input", metadata) {
-		t.Error("Expected wouldFiltersReject to return false when title remains")
-	}
-}
-
-// TestPartialFieldClearingTitleOnly verifies clearing title but keeping artist.
-func TestPartialFieldClearingTitleOnly(t *testing.T) {
-	router := NewMetadataRouter()
-
-	// Only clear title, artist remains
-	clearTitleFilter := newMockFilter(FilterClearTitle)
-
-	input := newMockInput("test-input")
-	_ = router.AddInput(input)
-	router.SetInputFilters("test-input", []Filter{clearTitleFilter})
-
-	metadata := testMetadata("input", "Artist", "Title")
-
-	// Should NOT reject because artist is still present
-	if router.wouldFiltersReject("test-input", metadata) {
-		t.Error("Expected wouldFiltersReject to return false when artist remains")
+	for _, check := range checks {
+		if check.got != check.expected {
+			t.Errorf("Expected %s %q, got %q", check.field, check.expected, check.got)
+		}
 	}
 }
