@@ -20,118 +20,843 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
     <link rel="apple-touch-icon" href="/apple-touch-icon-dark.png" media="(prefers-color-scheme: dark)">
 
     <title>` + stationName + ` Metadata</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <style type="text/tailwindcss">
-        @theme {
-            --color-brand: ` + brandColor + `;
-            --color-success: #10b981;
-            --color-danger: #ef4444;
-            --color-warning: #f59e0b;
-            --color-muted: #6b7280;
-        }
+    <style>
+/* ==========================================================================
+   CSS Custom Properties - Design Tokens
+   ========================================================================== */
 
-        @keyframes flash {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; transform: scale(0.98); }
-        }
+:root {
+    /* Brand colors */
+    --color-brand: ` + brandColor + `;
+    --color-brand-15: color-mix(in srgb, var(--color-brand) 15%, transparent);
+    --color-brand-20: color-mix(in srgb, var(--color-brand) 20%, transparent);
+    --color-brand-30: color-mix(in srgb, var(--color-brand) 30%, transparent);
 
-        .animate-flash {
-            animation: flash 0.5s ease-in-out;
-        }
+    /* Semantic colors */
+    --color-success: #10b981;
+    --color-danger: #ef4444;
+    --color-warning: #f59e0b;
+
+    /* Gray palette - Light mode */
+    --color-bg-page: #f3f4f6;
+    --color-bg-card: #ffffff;
+    --color-bg-subtle: #f9fafb;
+    --color-bg-muted: rgba(0, 0, 0, 0.03);
+
+    --color-border: rgba(229, 231, 235, 0.8);
+    --color-border-muted: rgba(229, 231, 235, 0.7);
+    --color-ring: #d1d5db;
+
+    --color-text-primary: #111827;
+    --color-text-secondary: #374151;
+    --color-text-tertiary: #4b5563;
+    --color-text-muted: #6b7280;
+    --color-text-faint: #9ca3af;
+
+    /* Card shadows - Light mode */
+    --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    --shadow-card-hover: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+    /* Header backgrounds */
+    --color-header-slate: #334155;
+
+    /* Spacing scale */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-10: 2.5rem;
+    --space-12: 3rem;
+    --space-16: 4rem;
+
+    /* Typography */
+    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 1.875rem;
+    --text-5xl: 3rem;
+
+    /* Border radius */
+    --radius-sm: 0.25rem;
+    --radius-md: 0.375rem;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.75rem;
+    --radius-2xl: 1rem;
+    --radius-full: 9999px;
+
+    /* Transitions */
+    --transition-fast: 150ms ease;
+    --transition-base: 200ms ease;
+    --transition-slow: 300ms ease;
+}
+
+/* Dark mode overrides */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-brand-15: color-mix(in srgb, var(--color-brand) 25%, transparent);
+        --color-brand-20: color-mix(in srgb, var(--color-brand) 35%, transparent);
+        --color-brand-30: color-mix(in srgb, var(--color-brand) 50%, transparent);
+
+        --color-bg-page: #0f172a;
+        --color-bg-card: #1e293b;
+        --color-bg-subtle: rgba(15, 23, 42, 0.5);
+        --color-bg-muted: rgba(255, 255, 255, 0.03);
+
+        --color-border: #374151;
+        --color-border-muted: #374151;
+        --color-ring: #4b5563;
+
+        --color-text-primary: #f3f4f6;
+        --color-text-secondary: #e5e7eb;
+        --color-text-tertiary: #d1d5db;
+        --color-text-muted: #9ca3af;
+        --color-text-faint: #6b7280;
+
+        --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+        --shadow-card-hover: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+
+        --color-header-slate: #475569;
+    }
+}
+
+/* ==========================================================================
+   Base & Reset
+   ========================================================================== */
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: 1.5;
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-page);
+    min-height: 100vh;
+    transition: background-color var(--transition-base), color var(--transition-base);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ==========================================================================
+   Layout
+   ========================================================================== */
+
+.container {
+    max-width: 80rem;
+    margin: 0 auto;
+    padding: var(--space-5);
+}
+
+.grid-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
+}
+
+.grid-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-5);
+}
+
+.grid-2-col {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-4);
+}
+
+.grid-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-8);
+    align-items: center;
+}
+
+@media (min-width: 640px) {
+    .grid-stats { gap: var(--space-5); }
+}
+
+@media (min-width: 768px) {
+    .grid-footer { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+@media (min-width: 1024px) {
+    .grid-stats { grid-template-columns: repeat(4, 1fr); }
+    .grid-cards { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 1280px) {
+    .grid-cards { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Flexbox utilities */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-wrap { flex-wrap: wrap; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: var(--space-1); }
+.gap-2 { gap: var(--space-2); }
+.gap-3 { gap: var(--space-3); }
+.gap-4 { gap: var(--space-4); }
+.gap-5 { gap: var(--space-5); }
+
+/* ==========================================================================
+   Typography
+   ========================================================================== */
+
+.text-xs { font-size: var(--text-xs); }
+.text-sm { font-size: var(--text-sm); }
+.text-lg { font-size: var(--text-lg); }
+.text-xl { font-size: var(--text-xl); }
+.text-2xl { font-size: var(--text-2xl); }
+.text-3xl { font-size: var(--text-3xl); }
+
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.font-bold { font-weight: 700; }
+.font-mono { font-family: var(--font-mono); }
+
+.text-center { text-align: center; }
+
+.tracking-tight { letter-spacing: -0.025em; }
+.break-all { word-break: break-all; }
+
+/* Text colors */
+.text-brand { color: var(--color-brand); }
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-danger { color: var(--color-danger); }
+.text-muted { color: var(--color-text-muted); }
+.text-muted-light { color: var(--color-text-muted); }
+.text-muted-dark { color: var(--color-text-tertiary); }
+.text-faint { color: var(--color-text-faint); }
+.text-white { color: #ffffff; }
+
+/* ==========================================================================
+   Spacing
+   ========================================================================== */
+
+.mb-1 { margin-bottom: var(--space-1); }
+.mb-2 { margin-bottom: var(--space-2); }
+.mb-3 { margin-bottom: var(--space-3); }
+.mb-4 { margin-bottom: var(--space-4); }
+.mb-5 { margin-bottom: var(--space-5); }
+.mb-10 { margin-bottom: var(--space-10); }
+.mt-3 { margin-top: var(--space-3); }
+.mt-4 { margin-top: var(--space-4); }
+.mt-16 { margin-top: var(--space-16); }
+.mr-2 { margin-right: var(--space-2); }
+
+.p-4 { padding: var(--space-4); }
+.p-6 { padding: var(--space-6); }
+.px-4 { padding-left: var(--space-4); padding-right: var(--space-4); }
+.py-8 { padding-top: var(--space-8); padding-bottom: var(--space-8); }
+.py-12 { padding-top: var(--space-12); padding-bottom: var(--space-12); }
+.pt-4 { padding-top: var(--space-4); }
+
+.space-y-1 > * + * { margin-top: var(--space-1); }
+.space-y-2 > * + * { margin-top: var(--space-2); }
+.space-y-4 > * + * { margin-top: var(--space-4); }
+
+/* ==========================================================================
+   Borders & Dividers
+   ========================================================================== */
+
+.border-t {
+    border-top: 1px solid var(--color-border);
+}
+
+.rounded-sm { border-radius: var(--radius-sm); }
+.rounded-md { border-radius: var(--radius-md); }
+.rounded-lg { border-radius: var(--radius-lg); }
+.rounded-xl { border-radius: var(--radius-xl); }
+.rounded-2xl { border-radius: var(--radius-2xl); }
+.rounded-full { border-radius: var(--radius-full); }
+
+/* ==========================================================================
+   Header Component
+   ========================================================================== */
+
+.site-header {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border-muted);
+    border-radius: var(--radius-2xl);
+    padding: var(--space-6);
+    box-shadow: var(--shadow-card);
+    position: relative;
+    overflow: hidden;
+}
+
+@media (min-width: 640px) {
+    .site-header { padding: 1.75rem; }
+}
+
+.site-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom right, var(--color-bg-card) 0%, var(--color-bg-card) 50%, rgba(255,255,255,0.8));
+    pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+    .site-header::before {
+        background: linear-gradient(to bottom right, var(--color-bg-card) 0%, var(--color-bg-card) 50%, rgba(30,41,59,0.7));
+    }
+}
+
+.site-header::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.03;
+    background: radial-gradient(circle at top, rgba(0,0,0,0.6) 0%, transparent 60%);
+    pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+    .site-header::after {
+        background: radial-gradient(circle at top, rgba(255,255,255,0.35) 0%, transparent 60%);
+    }
+}
+
+.header-content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+@media (min-width: 640px) {
+    .header-content {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+}
+
+.header-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+    text-align: center;
+}
+
+@media (min-width: 640px) {
+    .header-brand {
+        flex-direction: row;
+        gap: var(--space-5);
+        text-align: left;
+    }
+}
+
+.header-logo {
+    width: 3rem;
+    height: 3rem;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
+}
+
+@media (min-width: 640px) {
+    .header-logo {
+        width: 2.75rem;
+        height: 2.75rem;
+    }
+}
+
+.header-title {
+    font-size: var(--text-3xl);
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    color: var(--color-brand);
+    margin: 0;
+}
+
+@media (min-width: 640px) {
+    .header-title { font-size: 2.35rem; }
+}
+
+.header-subtitle {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    margin: 0;
+}
+
+@media (min-width: 640px) {
+    .header-subtitle { font-size: var(--text-base); }
+}
+
+/* ==========================================================================
+   Navigation
+   ========================================================================== */
+
+.nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--color-text-muted);
+}
+
+@media (min-width: 640px) {
+    .nav { justify-content: flex-end; }
+}
+
+.nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0.4375rem var(--space-3);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-card);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.nav-link:hover {
+    border-color: var(--color-brand);
+    color: var(--color-brand);
+    box-shadow: var(--shadow-sm);
+}
+
+/* ==========================================================================
+   Section Titles
+   ========================================================================== */
+
+.section-title {
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    margin: 0 0 var(--space-5) 0;
+    color: var(--color-text-secondary);
+}
+
+.section-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    margin-bottom: var(--space-2);
+    color: var(--color-text-secondary);
+}
+
+/* ==========================================================================
+   Cards
+   ========================================================================== */
+
+.card {
+    background: var(--color-bg-card);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+    transition: box-shadow var(--transition-base), transform var(--transition-base);
+}
+
+.card:hover {
+    box-shadow: var(--shadow-card-hover);
+}
+
+.card-header {
+    padding: var(--space-6);
+    color: #ffffff;
+}
+
+.card-header-brand {
+    background-color: var(--color-brand);
+}
+
+.card-header-slate {
+    background-color: var(--color-header-slate);
+}
+
+.card-header .card-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.card-header h3 {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    margin: 0;
+}
+
+.card-body {
+    padding: var(--space-6);
+}
+
+/* ==========================================================================
+   Stat Cards
+   ========================================================================== */
+
+.stat-card {
+    background: var(--color-bg-card);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-card);
+    padding: var(--space-4);
+    text-align: center;
+    transition: box-shadow var(--transition-base), transform var(--transition-base);
+}
+
+@media (min-width: 640px) {
+    .stat-card { padding: var(--space-6); }
+}
+
+.stat-card:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-4px);
+}
+
+.stat-value {
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    margin-bottom: var(--space-2);
+}
+
+@media (min-width: 640px) {
+    .stat-value { font-size: var(--text-5xl); }
+}
+
+.stat-label {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+}
+
+@media (min-width: 640px) {
+    .stat-label { font-size: var(--text-lg); }
+}
+
+/* ==========================================================================
+   Badges
+   ========================================================================== */
+
+.badge {
+    display: inline-block;
+    padding: 0.375rem 0.875rem;
+    border-radius: var(--radius-full);
+    font-size: var(--text-sm);
+    box-shadow: inset 0 0 0 1px currentColor;
+    transition: background-color var(--transition-fast);
+}
+
+.badge-input {
+    background: var(--color-bg-subtle);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    box-shadow: inset 0 0 0 1px var(--color-ring);
+}
+
+.badge-input:hover {
+    background: var(--color-border);
+}
+
+.badge-brand {
+    background: var(--color-brand-15);
+    color: var(--color-brand);
+    font-weight: 600;
+    box-shadow: inset 0 0 0 1px var(--color-brand-30);
+}
+
+.badge-brand:hover {
+    background: var(--color-brand-20);
+}
+
+.badge-type {
+    padding: 0.375rem 1rem;
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    font-weight: 500;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4), 0 1px 2px rgba(0,0,0,0.1);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+@media (prefers-color-scheme: dark) {
+    .badge-type {
+        background: rgba(255, 255, 255, 0.1);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3), 0 1px 2px rgba(0,0,0,0.2);
+    }
+}
+
+/* ==========================================================================
+   Status Indicators
+   ========================================================================== */
+
+.status-dot {
+    display: inline-block;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: var(--radius-full);
+    margin-right: var(--space-2);
+}
+
+.bg-success { background-color: var(--color-success); }
+.bg-warning { background-color: var(--color-warning); }
+.bg-danger { background-color: var(--color-danger); }
+
+/* ==========================================================================
+   Content Boxes
+   ========================================================================== */
+
+.content-box {
+    background: var(--color-bg-subtle);
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+}
+
+.content-box-bordered {
+    background: var(--color-bg-subtle);
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+}
+
+/* ==========================================================================
+   Footer
+   ========================================================================== */
+
+.site-footer {
+    margin-top: var(--space-16);
+    border-top: 1px solid var(--color-border);
+}
+
+.footer-content {
+    max-width: 80rem;
+    margin: 0 auto;
+    padding: var(--space-8) var(--space-4);
+}
+
+.footer-brand h3 {
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0 0 var(--space-1) 0;
+    text-align: center;
+}
+
+@media (min-width: 768px) {
+    .footer-brand h3 { text-align: left; }
+}
+
+.connection-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    justify-content: center;
+}
+
+@media (min-width: 768px) {
+    .connection-indicator { justify-content: flex-start; }
+}
+
+.plug-icon {
+    width: 0.75rem;
+    height: 0.75rem;
+    transition: all var(--transition-slow);
+    color: var(--color-text-muted);
+}
+
+.connection-status {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+}
+
+.footer-links {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+@media (min-width: 768px) {
+    .footer-links { text-align: right; }
+}
+
+.footer-links-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    font-size: var(--text-sm);
+}
+
+@media (min-width: 768px) {
+    .footer-links-row { justify-content: flex-end; }
+}
+
+.footer-links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--color-text-tertiary);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+.footer-links a:hover {
+    color: var(--color-brand);
+}
+
+.footer-links svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.footer-divider {
+    color: var(--color-border);
+}
+
+.footer-copyright {
+    font-size: var(--text-xs);
+    color: var(--color-text-faint);
+}
+
+/* ==========================================================================
+   Animations
+   ========================================================================== */
+
+@keyframes flash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; transform: scale(0.98); }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.animate-flash {
+    animation: flash 0.5s ease-in-out;
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ==========================================================================
+   Utility Classes (used by JavaScript)
+   ========================================================================== */
+
+.hidden { display: none; }
+.hidden-mobile { display: none; }
+@media (min-width: 768px) {
+    .hidden-mobile { display: block; }
+}
+.inline-block { display: inline-block; }
+.overflow-hidden { overflow: hidden; }
+.w-3 { width: 0.75rem; }
+.h-3 { height: 0.75rem; }
+.w-4 { width: 1rem; }
+.h-4 { height: 1rem; }
 
     </style>
 </head>
-<body class="bg-gray-100 dark:bg-slate-900 min-h-screen text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200">
-    <div class="max-w-7xl mx-auto p-5">
-        <header class="mb-10" role="banner">
-            <div class="rounded-2xl border border-gray-200/70 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 sm:p-7 shadow-md dark:shadow-gray-900/40 relative overflow-hidden">
-                <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-white via-white to-white/80 dark:from-gray-800 dark:via-gray-800/96 dark:to-gray-800/70"></div>
-                <div class="pointer-events-none absolute inset-0 opacity-[0.03] bg-[radial-gradient(circle_at_top,_rgba(0,0,0,0.6)_0%,_transparent_60%)] dark:bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.35)_0%,_transparent_60%)]"></div>
-                <div class="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="flex flex-col items-center gap-3 text-center sm:flex-row sm:items-center sm:gap-5 sm:text-left">
-                        <picture class="sm:flex-shrink-0">
-                            <source srcset="/icon-dark.svg" media="(prefers-color-scheme: dark)">
-                            <img src="/icon.svg" alt="` + stationName + ` brand icon" class="h-12 w-12 sm:h-11 sm:w-11 rounded-lg shadow-sm" loading="lazy">
-                        </picture>
-                        <div>
-                            <h1 class="text-3xl sm:text-[2.35rem] font-semibold tracking-tight text-brand">` + stationName + ` Metadata</h1>
-                            <p class="text-muted dark:text-gray-400 text-sm sm:text-base">Real-time metadata routing and synchronization</p>
-                        </div>
+<body>
+    <div class="container">
+        <header class="site-header mb-10" role="banner">
+            <div class="header-content">
+                <div class="header-brand">
+                    <picture>
+                        <source srcset="/icon-dark.svg" media="(prefers-color-scheme: dark)">
+                        <img src="/icon.svg" alt="` + stationName + ` brand icon" class="header-logo" loading="lazy">
+                    </picture>
+                    <div>
+                        <h1 class="header-title">` + stationName + ` Metadata</h1>
+                        <p class="header-subtitle">Real-time metadata routing and synchronization</p>
                     </div>
-                    <nav class="flex flex-wrap items-center justify-center gap-3 text-sm font-medium text-gray-500 dark:text-gray-300 sm:justify-end">
-                        <a href="#overview" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Overview</a>
-                        <a href="#inputs-section" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Inputs</a>
-                        <a href="#outputs-section" class="inline-flex items-center gap-2 rounded-lg border border-gray-200/80 dark:border-gray-600 bg-white dark:bg-gray-800/80 px-3.5 py-1.75 transition hover:border-brand hover:text-brand hover:shadow-sm">Outputs</a>
-                    </nav>
                 </div>
+                <nav class="nav">
+                    <a href="#overview" class="nav-link">Overview</a>
+                    <a href="#inputs-section" class="nav-link">Inputs</a>
+                    <a href="#outputs-section" class="nav-link">Outputs</a>
+                </nav>
             </div>
         </header>
 
         <main role="main">
-        <section id="overview" class="mb-10">
-            <h2 class="text-2xl font-semibold mb-5 text-gray-800 dark:text-gray-200">Overview</h2>
-            <div id="stats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md dark:shadow-gray-900/50 p-4 sm:p-6 text-center hover:shadow-xl dark:hover:shadow-gray-900/70 transform hover:-translate-y-1 transition-all">
-                <div class="text-3xl sm:text-5xl font-bold text-brand mb-2" id="total-inputs">-</div>
-                <div class="text-gray-700 dark:text-gray-300 text-sm sm:text-lg font-medium">Total Inputs</div>
-            </div>
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md dark:shadow-gray-900/50 p-4 sm:p-6 text-center hover:shadow-xl dark:hover:shadow-gray-900/70 transform hover:-translate-y-1 transition-all">
-                <div class="text-3xl sm:text-5xl font-bold text-success mb-2" id="available-inputs">-</div>
-                <div class="text-gray-700 dark:text-gray-300 text-sm sm:text-lg font-medium">Available Inputs</div>
-            </div>
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md dark:shadow-gray-900/50 p-4 sm:p-6 text-center hover:shadow-xl dark:hover:shadow-gray-900/70 transform hover:-translate-y-1 transition-all">
-                <div class="text-3xl sm:text-5xl font-bold text-brand mb-2" id="total-outputs">-</div>
-                <div class="text-gray-700 dark:text-gray-300 text-sm sm:text-lg font-medium">Total Outputs</div>
-            </div>
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md dark:shadow-gray-900/50 p-4 sm:p-6 text-center hover:shadow-xl dark:hover:shadow-gray-900/70 transform hover:-translate-y-1 transition-all">
-                <div class="text-3xl sm:text-5xl font-bold text-brand mb-2" id="active-flows">-</div>
-                <div class="text-gray-700 dark:text-gray-300 text-sm sm:text-lg font-medium">Active Flows</div>
-            </div>
-        </div>
-        </section>
-        
-        <div class="mb-10" id="inputs-section">
-            <h2 class="text-2xl font-semibold mb-5 text-gray-800 dark:text-gray-200">Inputs</h2>
-            <div id="inputs-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-                <div class="text-center py-12 text-muted dark:text-gray-400">Loading inputs...</div>
-            </div>
-        </div>
+            <section id="overview" class="mb-10">
+                <h2 class="section-title">Overview</h2>
+                <div id="stats" class="grid-stats">
+                    <div class="stat-card">
+                        <div class="stat-value text-brand" id="total-inputs">-</div>
+                        <div class="stat-label">Total Inputs</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value text-success" id="available-inputs">-</div>
+                        <div class="stat-label">Available Inputs</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value text-brand" id="total-outputs">-</div>
+                        <div class="stat-label">Total Outputs</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value text-brand" id="active-flows">-</div>
+                        <div class="stat-label">Active Flows</div>
+                    </div>
+                </div>
+            </section>
 
-        <div class="mb-10" id="outputs-section">
-            <h2 class="text-2xl font-semibold mb-5 text-gray-800 dark:text-gray-200">Outputs</h2>
-            <div id="outputs-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-                <div class="text-center py-12 text-muted dark:text-gray-400">Loading outputs...</div>
-            </div>
-        </div>
-        
+            <section id="inputs-section" class="mb-10">
+                <h2 class="section-title">Inputs</h2>
+                <div id="inputs-grid" class="grid-cards">
+                    <div class="text-center py-12 text-muted">Loading inputs...</div>
+                </div>
+            </section>
+
+            <section id="outputs-section" class="mb-10">
+                <h2 class="section-title">Outputs</h2>
+                <div id="outputs-grid" class="grid-cards">
+                    <div class="text-center py-12 text-muted">Loading outputs...</div>
+                </div>
+            </section>
         </main>
-        <footer class="mt-16 border-t border-gray-200 dark:border-gray-700" role="contentinfo">
-            <div class="max-w-7xl mx-auto px-4 py-8">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
-                    <div>
-                        <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-1 text-center md:text-left">` + stationName + ` Metadata</h3>
-                        <div id="connection-indicator" class="flex items-center gap-1.5 justify-center md:justify-start">
-                            <svg id="plug-icon" class="w-3 h-3 transition-all duration-300" fill="currentColor" viewBox="0 0 100 100">
+
+        <footer class="site-footer" role="contentinfo">
+            <div class="footer-content">
+                <div class="grid-footer">
+                    <div class="footer-brand">
+                        <h3>` + stationName + ` Metadata</h3>
+                        <div class="connection-indicator" id="connection-indicator">
+                            <svg id="plug-icon" class="plug-icon" fill="currentColor" viewBox="0 0 100 100">
                                 <path d="M30,5 L30,25 L40,25 L40,5 L30,5 z M60,5 L60,25 L70,25 L70,5 L60,5 z M25,20 C22.239,20 20,22.239,20,25 L20,70 C20,72.761 22.239,75 25,75 L40,75 L40,95 L60,95 L60,75 L75,75 C77.761,75 80,72.761 80,70 L80,25 C80,22.239 77.761,20 75,20 L70,20 L70,25 L60,25 L60,20 L40,20 L40,25 L30,25 L30,20 L25,20 z"/>
                             </svg>
-                            <span id="connection-status" class="text-xs text-gray-500 dark:text-gray-400">Connecting</span>
+                            <span id="connection-status" class="connection-status">Connecting</span>
                         </div>
                     </div>
 
-                    <div class="hidden md:block"></div>
+                    <div class="hidden-mobile"></div>
 
-                    <div class="text-center md:text-right space-y-2">
-                        <div class="flex items-center justify-center md:justify-end gap-3 text-sm">
-                            <a href="https://github.com/oszuidwest/zwfm-metadata" target="_blank" class="inline-flex items-center gap-1.5 text-gray-600 dark:text-gray-400 hover:text-brand transition-colors">
-                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <div class="footer-links">
+                        <div class="footer-links-row">
+                            <a href="https://github.com/oszuidwest/zwfm-metadata" target="_blank">
+                                <svg fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"></path>
                                 </svg>
                                 GitHub
                             </a>
-                            <span class="text-gray-300 dark:text-gray-600">|</span>
-                            <span class="text-gray-500 dark:text-gray-400">Version <span id="app-version" class="font-medium">` + version + `</span></span>
+                            <span class="footer-divider">|</span>
+                            <span class="text-muted">Version <span id="app-version" class="font-medium">` + version + `</span></span>
                         </div>
-                        <div class="text-xs text-gray-400 dark:text-gray-500">
+                        <div class="footer-copyright">
                             © ` + buildYear + ` Streekomroep ZuidWest • MIT License
                         </div>
                     </div>
@@ -139,7 +864,7 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
             </div>
         </footer>
     </div>
-    
+
     <script>` + dashboardJS() + `</script>
 </body>
 </html>`
@@ -158,8 +883,8 @@ func dashboardJS() string {
         // WebSocket connection
         let ws = null;
         let reconnectTimeout = null;
-        let reconnectDelay = 1000; // Start with 1 second
-        const maxReconnectDelay = 30000; // Max 30 seconds
+        let reconnectDelay = 1000;
+        const maxReconnectDelay = 30000;
 
         // HTML Generation Helpers
         function escapeHtml(text) {
@@ -168,30 +893,32 @@ func dashboardJS() string {
             return div.innerHTML;
         }
 
-        function createLabeledField(label, value, labelClass = 'text-gray-600 dark:text-gray-400', valueClass = 'text-gray-900 dark:text-gray-100 font-semibold') {
+        function createLabeledField(label, value, labelClass, valueClass) {
+            labelClass = labelClass || 'text-muted-dark';
+            valueClass = valueClass || 'font-semibold';
             return '<div class="mb-2"><span class="' + labelClass + '">' + label + ':</span> <span class="' + valueClass + '">' + escapeHtml(value) + '</span></div>';
         }
 
         function createBadge(text, classes) {
-            return '<span class="' + classes + '">' + escapeHtml(text) + '</span>';
+            return '<span class="badge ' + classes + '">' + escapeHtml(text) + '</span>';
         }
 
         function createMetadataCard(name, type, headerClass, content, hasChanged) {
-            return '<div class="' + CARD_CLASSES.container + '" data-changed="' + hasChanged + '">' +
-                '<div class="' + headerClass + '">' +
-                    '<div class="flex justify-between items-center">' +
-                        '<h3 class="text-xl font-bold">' + escapeHtml(name) + '</h3>' +
-                        createBadge(type, TAG_CLASSES.type) +
+            return '<div class="card" data-changed="' + hasChanged + '">' +
+                '<div class="card-header ' + headerClass + '">' +
+                    '<div class="card-title-row">' +
+                        '<h3>' + escapeHtml(name) + '</h3>' +
+                        createBadge(type, 'badge-type') +
                     '</div>' +
                 '</div>' +
-                '<div class="p-6">' + content + '</div>' +
+                '<div class="card-body">' + content + '</div>' +
             '</div>';
         }
 
         function createStatusBadge(status, statusConfig) {
             const config = statusConfig[status] || statusConfig.default;
             return '<div class="flex items-center mb-3">' +
-                '<span class="inline-block w-3 h-3 rounded-full mr-2 ' + config.dot + '"></span>' +
+                '<span class="status-dot ' + config.dot + '"></span>' +
                 '<span class="font-semibold ' + config.text + '">' + config.label + '</span>' +
             '</div>';
         }
@@ -205,23 +932,21 @@ func dashboardJS() string {
         };
 
         const TAG_CLASSES = {
-            input: 'bg-gray-100 dark:bg-gray-700 px-3.5 py-1.5 rounded-full text-sm text-gray-800 dark:text-gray-200 font-medium ring-1 ring-gray-300 dark:ring-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors',
-            formatter: 'bg-brand/15 dark:bg-brand/25 px-3.5 py-1.5 rounded-full text-sm text-brand dark:text-brand font-semibold ring-1 ring-brand/30 dark:ring-brand/50 hover:bg-brand/20 dark:hover:bg-brand/35 transition-colors',
-            filter: 'bg-brand/15 dark:bg-brand/25 px-3.5 py-1.5 rounded-full text-sm text-brand dark:text-brand font-semibold ring-1 ring-brand/30 dark:ring-brand/50 hover:bg-brand/20 dark:hover:bg-brand/35 transition-colors',
-            type: 'backdrop-blur-sm bg-white/20 dark:bg-white/10 px-4 py-1.5 rounded-full text-sm font-medium text-white ring-1 ring-white/40 dark:ring-white/30 shadow-sm'
+            input: 'badge-input',
+            formatter: 'badge-brand',
+            filter: 'badge-brand',
+            type: 'badge-type'
         };
 
         const CARD_CLASSES = {
-            container: 'bg-white dark:bg-gray-800 rounded-xl shadow-md dark:shadow-gray-900/50 hover:shadow-xl dark:hover:shadow-gray-900/70 transition-all duration-200 overflow-hidden',
-            inputHeader: 'bg-brand p-6 text-white',
-            outputHeader: 'bg-slate-700 dark:bg-slate-600 p-6 text-white'
+            container: 'card',
+            inputHeader: 'card-header-brand',
+            outputHeader: 'card-header-slate'
         };
 
         // Data Management Helpers
         function updateContainerWithCards(container, html) {
             container.innerHTML = html;
-            
-            // Flash changed cards
             container.querySelectorAll('[data-changed="true"]').forEach(card => {
                 animateCardChange(card);
             });
@@ -241,15 +966,13 @@ func dashboardJS() string {
         function establishWebSocketConnection() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = protocol + '//' + window.location.host + '/ws/dashboard';
-            
+
             console.log('Connecting to WebSocket:', wsUrl);
             ws = new WebSocket(wsUrl);
 
             ws.onopen = function() {
                 console.log('WebSocket connected');
-                reconnectDelay = 1000; // Reset delay on successful connection
-                
-                // Update connection indicator
+                reconnectDelay = 1000;
                 updateConnectionStatus('connected');
             };
 
@@ -268,65 +991,54 @@ func dashboardJS() string {
 
             ws.onclose = function(event) {
                 console.log('WebSocket disconnected:', event.code, event.reason);
-                
-                // Update connection indicator
                 updateConnectionStatus('disconnected');
-                
-                // Schedule reconnection with exponential backoff
+
                 if (reconnectTimeout) clearTimeout(reconnectTimeout);
                 reconnectTimeout = setTimeout(() => {
                     updateConnectionStatus('connecting');
                     establishWebSocketConnection();
-                    // Increase delay for next attempt (exponential backoff)
                     reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
                 }, reconnectDelay);
             };
         }
 
-        // Update connection status indicator
         function updateConnectionStatus(status) {
             const plugIcon = document.getElementById('plug-icon');
             const statusText = document.getElementById('connection-status');
-            const indicator = document.getElementById('connection-indicator');
-            
+
+            plugIcon.classList.remove('animate-pulse');
+            statusText.classList.remove('animate-pulse');
+
             switch(status) {
                 case 'connected':
-                    plugIcon.className = 'w-3 h-3 transition-all duration-300 text-gray-400 dark:text-gray-500';
                     statusText.textContent = 'Connected';
-                    statusText.className = 'text-xs text-gray-500 dark:text-gray-400';
                     break;
-
                 case 'disconnected':
-                    plugIcon.className = 'w-3 h-3 transition-all duration-300 text-gray-300 dark:text-gray-600';
                     statusText.textContent = 'Disconnected';
-                    statusText.className = 'text-xs text-gray-400 dark:text-gray-500';
                     break;
-
                 case 'connecting':
-                    plugIcon.className = 'w-3 h-3 transition-all duration-300 text-gray-400 dark:text-gray-500 animate-pulse';
                     statusText.textContent = 'Connecting';
-                    statusText.className = 'text-xs text-gray-500 dark:text-gray-400 animate-pulse';
+                    plugIcon.classList.add('animate-pulse');
+                    statusText.classList.add('animate-pulse');
                     break;
             }
         }
 
-        // Format timestamp for display
-        function formatDisplayTime(timestamp, useRelative = false) {
+        function formatDisplayTime(timestamp, useRelative) {
             if (!timestamp) return 'N/A';
-            
+
             const date = new Date(timestamp);
             const now = new Date();
             const diffSeconds = Math.floor((now - date) / 1000);
-            
+
             if (useRelative && diffSeconds < 60) {
                 if (diffSeconds < 5) return 'just now';
                 return diffSeconds + 's ago';
             }
-            
+
             return date.toLocaleTimeString();
         }
 
-        // Visual feedback for data changes
         function animateCardChange(element) {
             element.classList.add('animate-flash');
             setTimeout(() => {
@@ -334,7 +1046,6 @@ func dashboardJS() string {
             }, 500);
         }
 
-        // Update dashboard statistics
         function updateStatistics(data) {
             const stats = {
                 'total-inputs': data.inputs.length,
@@ -342,27 +1053,25 @@ func dashboardJS() string {
                 'total-outputs': data.outputs.length,
                 'active-flows': data.activeFlows
             };
-            
+
             Object.entries(stats).forEach(([id, newValue]) => {
                 const element = document.getElementById(id);
                 const oldValue = previousData.stats[id];
-                
+
                 element.textContent = newValue;
-                
+
                 if (oldValue !== undefined && oldValue !== newValue) {
                     animateCardChange(element.parentElement);
                 }
-                
+
                 previousData.stats[id] = newValue;
             });
         }
 
-        // Update input cards display
         function updateInputCards(inputs) {
             const container = document.getElementById('inputs-grid');
-            
+
             const html = inputs.map(input => {
-                // Build metadata display
                 let metadataHtml = '';
                 if (input.metadata) {
                     const fields = [];
@@ -372,28 +1081,27 @@ func dashboardJS() string {
                         { key: 'songID', label: 'Song ID' },
                         { key: 'duration', label: 'Duration' }
                     ];
-                    
+
                     metadataFields.forEach(field => {
                         if (input.metadata[field.key]) {
                             fields.push(createLabeledField(field.label, input.metadata[field.key]));
                         }
                     });
-                    
+
                     if (fields.length > 0) {
-                        metadataHtml = '<div class="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg mt-4 font-mono text-sm break-all border border-gray-200 dark:border-gray-700">' +
+                        metadataHtml = '<div class="content-box-bordered mt-4 font-mono text-sm break-all">' +
                                       fields.join('') +
                                       '</div>';
                     }
                 }
-                
-                // Build prefix/suffix display
+
                 let prefixSuffixHtml = '';
                 const parts = [];
                 if (input.prefix && input.prefix !== 'undefined') {
-                    parts.push(createLabeledField('Prefix', input.prefix, 'text-gray-500 dark:text-gray-400', 'font-mono text-gray-700 dark:text-gray-300'));
+                    parts.push(createLabeledField('Prefix', input.prefix, 'text-muted-light', 'font-mono'));
                 }
                 if (input.suffix && input.suffix !== 'undefined') {
-                    parts.push(createLabeledField('Suffix', input.suffix, 'text-gray-500 dark:text-gray-400', 'font-mono text-gray-700 dark:text-gray-300'));
+                    parts.push(createLabeledField('Suffix', input.suffix, 'text-muted-light', 'font-mono'));
                 }
                 if (parts.length > 0) {
                     prefixSuffixHtml = '<div class="mt-3 space-y-1">' +
@@ -401,40 +1109,36 @@ func dashboardJS() string {
                         '</div>';
                 }
 
-                // Build filter tags
                 let filterHtml = '';
                 if (input.filters && input.filters.length > 0) {
                     const filterTags = input.filters
                         .map(filter => createBadge(filter, TAG_CLASSES.filter))
                         .join(' ');
                     filterHtml = '<div class="mt-3">' +
-                        '<div class="text-gray-700 dark:text-gray-300 text-sm mb-2 font-semibold">Filters</div>' +
+                        '<div class="section-label">Filters</div>' +
                         '<div class="flex flex-wrap gap-2">' + filterTags + '</div>' +
                         '</div>';
                 }
 
-                // Check for changes
                 const prevInput = previousData.inputs[input.name];
                 const hasChanged = hasDataChanged(input, prevInput, ['status', 'metadata']);
-                
-                // Build content
+
                 const content = createStatusBadge(input.status, STATUS_CONFIG) +
                     prefixSuffixHtml +
                     filterHtml +
                     metadataHtml +
-                    '<div class="text-gray-500 dark:text-gray-400 text-sm mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">' +
-                        '<div>Updated: <span class="' + (input.status === 'available' ? 'text-gray-700 dark:text-gray-300 font-medium' : '') + '">' +
+                    '<div class="text-muted-light text-sm mt-4 pt-4 border-t">' +
+                        '<div>Updated: <span class="' + (input.status === 'available' ? 'font-medium' : '') + '">' +
                         formatDisplayTime(input.updatedAt, input.status === 'available') + '</span></div>' +
                         (input.expiresAt ? '<div>Expires: ' + formatDisplayTime(input.expiresAt) + '</div>' : '') +
                     '</div>';
-                
+
                 const card = createMetadataCard(input.name, input.type, CARD_CLASSES.inputHeader, content, hasChanged);
                 return card.replace('data-changed=', 'data-input-name="' + input.name + '" data-changed=');
             }).join('');
-            
+
             updateContainerWithCards(container, html);
-            
-            // Store current data
+
             inputs.forEach(input => {
                 previousData.inputs[input.name] = {
                     status: input.status,
@@ -443,52 +1147,47 @@ func dashboardJS() string {
             });
         }
 
-        // Update output cards display
         function updateOutputCards(outputs) {
             const container = document.getElementById('outputs-grid');
-            
+
             const html = outputs.map(output => {
-                // Build tags
                 const inputTags = (output.inputs || [])
                     .map(input => createBadge(input, TAG_CLASSES.input))
                     .join(' ');
-                
+
                 const formatterTags = (output.formatters || [])
                     .map(formatter => createBadge(formatter, TAG_CLASSES.formatter))
                     .join(' ');
-                
-                // Check for changes
+
                 const prevOutput = previousData.outputs[output.name];
                 const hasChanged = hasDataChanged(output, prevOutput, ['currentInput']);
-                
-                // Build content
+
                 const content =
-                    '<div class="grid grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">' +
+                    '<div class="content-box grid-2-col mb-4">' +
                         '<div>' +
-                            '<div class="text-gray-600 dark:text-gray-400 text-sm">Delay</div>' +
-                            '<div class="font-bold text-lg dark:text-gray-100">' + output.delay + 's</div>' +
+                            '<div class="text-muted-dark text-sm">Delay</div>' +
+                            '<div class="font-bold text-lg">' + output.delay + 's</div>' +
                         '</div>' +
                         '<div>' +
-                            '<div class="text-gray-600 dark:text-gray-400 text-sm">Current Input</div>' +
-                            '<div class="font-bold text-lg ' + (output.currentInput ? 'text-success' : 'text-gray-400 dark:text-gray-500') + '">' +
+                            '<div class="text-muted-dark text-sm">Current Input</div>' +
+                            '<div class="font-bold text-lg ' + (output.currentInput ? 'text-success' : 'text-faint') + '">' +
                             escapeHtml(output.currentInput || 'None') + '</div>' +
                         '</div>' +
                     '</div>' +
                     '<div class="space-y-4">' +
                         '<div>' +
-                            '<div class="text-gray-700 dark:text-gray-300 text-sm mb-2 font-semibold">Inputs (priority order)</div>' +
+                            '<div class="section-label">Inputs (priority order)</div>' +
                             '<div class="flex flex-wrap gap-2">' + inputTags + '</div>' +
                         '</div>' +
-                        (formatterTags ? '<div><div class="text-gray-700 dark:text-gray-300 text-sm mb-2 font-semibold">Formatters</div><div class="flex flex-wrap gap-2">' + formatterTags + '</div></div>' : '') +
+                        (formatterTags ? '<div><div class="section-label">Formatters</div><div class="flex flex-wrap gap-2">' + formatterTags + '</div></div>' : '') +
                     '</div>';
-                
+
                 const card = createMetadataCard(output.name, output.type, CARD_CLASSES.outputHeader, content, hasChanged);
                 return card.replace('data-changed=', 'data-output-name="' + output.name + '" data-changed=');
             }).join('');
-            
+
             updateContainerWithCards(container, html);
-            
-            // Store current data
+
             outputs.forEach(output => {
                 previousData.outputs[output.name] = {
                     currentInput: output.currentInput
@@ -496,20 +1195,18 @@ func dashboardJS() string {
             });
         }
 
-        // Process and display dashboard data
         function processDashboardUpdate(data) {
             if (!data) return;
-            
+
             updateStatistics(data);
             updateInputCards(data.inputs);
             updateOutputCards(data.outputs);
         }
 
-        // Initialize on page load
+        // Initialize
         updateConnectionStatus('connecting');
         establishWebSocketConnection();
-        
-        // Cleanup on page unload
+
         window.addEventListener('beforeunload', () => {
             if (reconnectTimeout) clearTimeout(reconnectTimeout);
             if (ws) ws.close();
