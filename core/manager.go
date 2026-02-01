@@ -534,7 +534,7 @@ func (mr *MetadataRouter) checkForExpirations() {
 // currentInputNeedsFallback reports whether an output's current input has expired or is unavailable.
 func (mr *MetadataRouter) currentInputNeedsFallback(outputName string) bool {
 	currentInputName, hasCurrentInput := mr.currentInputs[outputName]
-	if !hasCurrentInput {
+	if !hasCurrentInput || currentInputName == "" {
 		return false
 	}
 
