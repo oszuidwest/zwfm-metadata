@@ -11,11 +11,16 @@ let reconnectTimeout = null;
 let reconnectDelay = 1000;
 const maxReconnectDelay = 30000;
 
-// HTML Generation Helpers
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+// DOM Element Factory Helpers
+function el(tag, className, textContent) {
+    const element = document.createElement(tag);
+    if (className) {
+        element.className = className;
+    }
+    if (textContent !== undefined) {
+        element.textContent = textContent;
+    }
+    return element;
 }
 
 function createLabeledField(
@@ -24,20 +29,41 @@ function createLabeledField(
     labelClass = 'text-muted-dark',
     valueClass = 'font-semibold',
 ) {
-    return `<div class="mb-2"><span class="${labelClass}">${label}:</span> <span class="${valueClass}">${escapeHtml(value)}</span></div>`;
+    const container = el('div', 'mb-2');
+    const labelSpan = el('span', labelClass, `${label}: `);
+    const valueSpan = el('span', valueClass, value);
+    container.append(labelSpan, valueSpan);
+    return container;
 }
 
 function createBadge(text, classes) {
-    return `<span class="badge ${classes}">${escapeHtml(text)}</span>`;
-}
-
-function createMetadataCard(name, type, headerClass, content, hasChanged) {
-    return `<div class="card" data-changed="${hasChanged}"><div class="card-header ${headerClass}"><div class="card-title-row"><h3>${escapeHtml(name)}</h3>${createBadge(type, 'badge-type')}</div></div><div class="card-body">${content}</div></div>`;
+    return el('span', `badge ${classes}`, text);
 }
 
 function createStatusBadge(status, statusConfig) {
     const config = statusConfig[status] || statusConfig.default;
-    return `<div class="flex items-center mb-3"><span class="status-dot ${config.dot}"></span><span class="font-semibold ${config.text}">${config.label}</span></div>`;
+    const container = el('div', 'flex items-center mb-3');
+    const dot = el('span', `status-dot ${config.dot}`);
+    const label = el('span', `font-semibold ${config.text}`, config.label);
+    container.append(dot, label);
+    return container;
+}
+
+function createMetadataCard(name, type, headerClass, hasChanged) {
+    const card = el('div', 'card');
+    card.dataset.changed = hasChanged;
+
+    const header = el('div', `card-header ${headerClass}`);
+    const titleRow = el('div', 'card-title-row');
+    const h3 = el('h3', null, name);
+    const typeBadge = createBadge(type, 'badge-type');
+    titleRow.append(h3, typeBadge);
+    header.appendChild(titleRow);
+
+    const body = el('div', 'card-body');
+
+    card.append(header, body);
+    return card;
 }
 
 // Configuration Constants
@@ -66,8 +92,8 @@ const CARD_CLASSES = {
 };
 
 // Data Management Helpers
-function updateContainerWithCards(container, html) {
-    container.innerHTML = html;
+function updateContainerWithCards(container, cards) {
+    container.replaceChildren(...cards);
     for (const card of container.querySelectorAll('[data-changed="true"]')) {
         animateCardChange(card);
     }
@@ -196,10 +222,10 @@ function updateStatistics(data) {
     }
 }
 
-// Input card HTML builders (extracted to reduce complexity)
-function buildMetadataHtml(metadata) {
+// Input card DOM builders
+function buildMetadataBox(metadata) {
     if (!metadata) {
-        return '';
+        return null;
     }
 
     const metadataFields = [
@@ -214,13 +240,18 @@ function buildMetadataHtml(metadata) {
         .map((field) => createLabeledField(field.label, metadata[field.key]));
 
     if (fields.length === 0) {
-        return '';
+        return null;
     }
 
-    return `<div class="content-box-bordered mt-4 font-mono text-sm break-all">${fields.join('')}</div>`;
+    const container = el(
+        'div',
+        'content-box-bordered mt-4 font-mono text-sm break-all',
+    );
+    container.append(...fields);
+    return container;
 }
 
-function buildPrefixSuffixHtml(input) {
+function buildPrefixSuffixBox(input) {
     const parts = [];
 
     if (input.prefix && input.prefix !== 'undefined') {
@@ -245,72 +276,105 @@ function buildPrefixSuffixHtml(input) {
     }
 
     if (parts.length === 0) {
-        return '';
+        return null;
     }
 
-    return `<div class="mt-3 space-y-1">${parts.map((p) => `<div class="text-sm">${p}</div>`).join('')}</div>`;
+    const container = el('div', 'mt-3 space-y-1');
+    for (const part of parts) {
+        const wrapper = el('div', 'text-sm');
+        wrapper.appendChild(part);
+        container.appendChild(wrapper);
+    }
+    return container;
 }
 
-function buildFilterHtml(filters) {
+function buildFilterBox(filters) {
     if (!filters || filters.length === 0) {
-        return '';
+        return null;
     }
 
-    const filterTags = filters
-        .map((filter) => createBadge(filter, TAG_CLASSES.filter))
-        .join(' ');
+    const container = el('div', 'mt-3');
+    const label = el('div', 'section-label', 'Filters');
+    const badgeContainer = el('div', 'flex flex-wrap gap-2');
 
-    return `<div class="mt-3"><div class="section-label">Filters</div><div class="flex flex-wrap gap-2">${filterTags}</div></div>`;
+    for (const filter of filters) {
+        badgeContainer.appendChild(createBadge(filter, TAG_CLASSES.filter));
+    }
+
+    container.append(label, badgeContainer);
+    return container;
 }
 
-function buildInputTimestampHtml(input) {
-    const statusClass = input.status === 'available' ? 'font-medium' : '';
+function buildInputTimestampBox(input) {
+    const container = el('div', 'text-muted-light text-sm mt-4 pt-4 border-t');
+
+    const updatedDiv = el('div');
+    updatedDiv.appendChild(document.createTextNode('Updated: '));
     const updatedTime = formatDisplayTime(
         input.updatedAt,
         input.status === 'available',
     );
-    const expiresHtml = input.expiresAt
-        ? `<div>Expires: ${formatDisplayTime(input.expiresAt)}</div>`
-        : '';
+    const timeSpan = el(
+        'span',
+        input.status === 'available' ? 'font-medium' : '',
+        updatedTime,
+    );
+    updatedDiv.appendChild(timeSpan);
+    container.appendChild(updatedDiv);
 
-    return `<div class="text-muted-light text-sm mt-4 pt-4 border-t"><div>Updated: <span class="${statusClass}">${updatedTime}</span></div>${expiresHtml}</div>`;
+    if (input.expiresAt) {
+        const expiresDiv = el(
+            'div',
+            null,
+            `Expires: ${formatDisplayTime(input.expiresAt)}`,
+        );
+        container.appendChild(expiresDiv);
+    }
+
+    return container;
 }
 
-function buildInputCardHtml(input) {
-    const metadataHtml = buildMetadataHtml(input.metadata);
-    const prefixSuffixHtml = buildPrefixSuffixHtml(input);
-    const filterHtml = buildFilterHtml(input.filters);
-    const timestampHtml = buildInputTimestampHtml(input);
-
+function buildInputCard(input) {
     const prevInput = previousData.inputs[input.name];
     const hasChanged = hasDataChanged(input, prevInput, ['status', 'metadata']);
-
-    const content =
-        createStatusBadge(input.status, STATUS_CONFIG) +
-        prefixSuffixHtml +
-        filterHtml +
-        metadataHtml +
-        timestampHtml;
 
     const card = createMetadataCard(
         input.name,
         input.type,
         CARD_CLASSES.inputHeader,
-        content,
         hasChanged,
     );
+    card.dataset.inputName = input.name;
 
-    return card.replace(
-        'data-changed=',
-        `data-input-name="${input.name}" data-changed=`,
-    );
+    const body = card.querySelector('.card-body');
+
+    body.appendChild(createStatusBadge(input.status, STATUS_CONFIG));
+
+    const prefixSuffixBox = buildPrefixSuffixBox(input);
+    if (prefixSuffixBox) {
+        body.appendChild(prefixSuffixBox);
+    }
+
+    const filterBox = buildFilterBox(input.filters);
+    if (filterBox) {
+        body.appendChild(filterBox);
+    }
+
+    const metadataBox = buildMetadataBox(input.metadata);
+    if (metadataBox) {
+        body.appendChild(metadataBox);
+    }
+
+    body.appendChild(buildInputTimestampBox(input));
+
+    return card;
 }
 
 function updateInputCards(inputs) {
     const container = document.getElementById('inputs-grid');
-    const html = inputs.map((input) => buildInputCardHtml(input)).join('');
+    const cards = inputs.map((input) => buildInputCard(input));
 
-    updateContainerWithCards(container, html);
+    updateContainerWithCards(container, cards);
 
     for (const input of inputs) {
         previousData.inputs[input.name] = {
@@ -320,47 +384,78 @@ function updateInputCards(inputs) {
     }
 }
 
+function buildOutputCard(output) {
+    const prevOutput = previousData.outputs[output.name];
+    const hasChanged = hasDataChanged(output, prevOutput, ['currentInput']);
+
+    const card = createMetadataCard(
+        output.name,
+        output.type,
+        CARD_CLASSES.outputHeader,
+        hasChanged,
+    );
+    card.dataset.outputName = output.name;
+
+    const body = card.querySelector('.card-body');
+
+    // Stats box with delay and current input
+    const statsBox = el('div', 'content-box grid-2-col mb-4');
+
+    const delayCol = el('div');
+    delayCol.appendChild(el('div', 'text-muted-dark text-sm', 'Delay'));
+    delayCol.appendChild(el('div', 'font-bold text-lg', `${output.delay}s`));
+
+    const inputCol = el('div');
+    inputCol.appendChild(el('div', 'text-muted-dark text-sm', 'Current Input'));
+    const inputValue = el(
+        'div',
+        `font-bold text-lg ${output.currentInput ? 'text-success' : 'text-faint'}`,
+        output.currentInput || 'None',
+    );
+    inputCol.appendChild(inputValue);
+
+    statsBox.append(delayCol, inputCol);
+    body.appendChild(statsBox);
+
+    // Tags container
+    const tagsContainer = el('div', 'space-y-4');
+
+    // Input tags
+    const inputsSection = el('div');
+    inputsSection.appendChild(
+        el('div', 'section-label', 'Inputs (priority order)'),
+    );
+    const inputBadges = el('div', 'flex flex-wrap gap-2');
+    for (const inputName of output.inputs || []) {
+        inputBadges.appendChild(createBadge(inputName, TAG_CLASSES.input));
+    }
+    inputsSection.appendChild(inputBadges);
+    tagsContainer.appendChild(inputsSection);
+
+    // Formatter tags
+    if (output.formatters && output.formatters.length > 0) {
+        const formattersSection = el('div');
+        formattersSection.appendChild(el('div', 'section-label', 'Formatters'));
+        const formatterBadges = el('div', 'flex flex-wrap gap-2');
+        for (const formatter of output.formatters) {
+            formatterBadges.appendChild(
+                createBadge(formatter, TAG_CLASSES.formatter),
+            );
+        }
+        formattersSection.appendChild(formatterBadges);
+        tagsContainer.appendChild(formattersSection);
+    }
+
+    body.appendChild(tagsContainer);
+
+    return card;
+}
+
 function updateOutputCards(outputs) {
     const container = document.getElementById('outputs-grid');
+    const cards = outputs.map((output) => buildOutputCard(output));
 
-    const html = outputs
-        .map((output) => {
-            const inputTags = (output.inputs || [])
-                .map((input) => createBadge(input, TAG_CLASSES.input))
-                .join(' ');
-
-            const formatterTags = (output.formatters || [])
-                .map((formatter) =>
-                    createBadge(formatter, TAG_CLASSES.formatter),
-                )
-                .join(' ');
-
-            const prevOutput = previousData.outputs[output.name];
-            const hasChanged = hasDataChanged(output, prevOutput, [
-                'currentInput',
-            ]);
-
-            const content = `<div class="content-box grid-2-col mb-4"><div><div class="text-muted-dark text-sm">Delay</div><div class="font-bold text-lg">${output.delay}s</div></div><div><div class="text-muted-dark text-sm">Current Input</div><div class="font-bold text-lg ${output.currentInput ? 'text-success' : 'text-faint'}">${escapeHtml(output.currentInput || 'None')}</div></div></div><div class="space-y-4"><div><div class="section-label">Inputs (priority order)</div><div class="flex flex-wrap gap-2">${inputTags}</div></div>${
-                formatterTags
-                    ? `<div><div class="section-label">Formatters</div><div class="flex flex-wrap gap-2">${formatterTags}</div></div>`
-                    : ''
-            }</div>`;
-
-            const card = createMetadataCard(
-                output.name,
-                output.type,
-                CARD_CLASSES.outputHeader,
-                content,
-                hasChanged,
-            );
-            return card.replace(
-                'data-changed=',
-                `data-output-name="${output.name}" data-changed=`,
-            );
-        })
-        .join('');
-
-    updateContainerWithCards(container, html);
+    updateContainerWithCards(container, cards);
 
     for (const output of outputs) {
         previousData.outputs[output.name] = {
