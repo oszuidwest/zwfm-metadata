@@ -493,23 +493,14 @@ func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	}
 }
 
-// expirationAction holds information about an action to take for an expired input.
-type expirationAction struct {
-	outputName       string
-	output           Output
-	fallbackMetadata *Metadata
-	shouldClear      bool // true if we should clear currentInputs (no fallback available)
-}
-
 // checkForExpirations scans for expired inputs and schedules fallback updates when needed.
-// Uses two-phase locking: Phase 1 collects actions under RLock, Phase 2 executes writes.
-// NOTE: lastSentContent may change between phases, potentially causing extra scheduled updates.
-// This is harmless because executeUpdate deduplicates before sending (see lines 683-688).
+// Uses a single write lock for the entire operation to ensure consistency between reading
+// lastSentContent and scheduling updates. This is acceptable because the function runs
+// only once per second and the operations are fast.
 func (mr *MetadataRouter) checkForExpirations() {
-	// Phase 1: Collect actions under read lock
-	var actions []expirationAction
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
 
-	mr.mu.RLock()
 	for outputName, output := range mr.outputs {
 		if mr.timeline.hasScheduledUpdatesForOutput(outputName) {
 			continue
@@ -554,46 +545,26 @@ func (mr *MetadataRouter) checkForExpirations() {
 				formattedText := st.String()
 				lastSent := mr.lastSentContent[outputName]
 				if formattedText != lastSent {
-					actions = append(actions, expirationAction{
-						outputName:       outputName,
-						output:           output,
-						fallbackMetadata: fallbackMetadata,
-					})
+					delay := time.Duration(output.GetDelay()) * time.Second
+					executeAt := time.Now().Add(delay)
+
+					update := ScheduledUpdate{
+						ExecuteAt:   executeAt,
+						OutputName:  outputName,
+						Output:      output,
+						Metadata:    fallbackMetadata,
+						UpdateType:  "expiration_fallback",
+						CancelToken: fmt.Sprintf("%s_exp_%d", outputName, time.Now().UnixNano()),
+					}
+
+					mr.timeline.addUpdate(&update)
+					slog.Debug("Scheduled expiration fallback for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
 				}
 			}
 		} else if fallbackMetadata == nil {
-			actions = append(actions, expirationAction{
-				outputName:  outputName,
-				shouldClear: true,
-			})
+			mr.currentInputs[outputName] = ""
+			slog.Info("Output has no available inputs - cleared current input", "output", outputName)
 		}
-	}
-	mr.mu.RUnlock()
-
-	// Phase 2: Process actions (writes require full lock)
-	for _, action := range actions {
-		if action.shouldClear {
-			mr.mu.Lock()
-			mr.currentInputs[action.outputName] = ""
-			mr.mu.Unlock()
-			slog.Info("Output has no available inputs - cleared current input", "output", action.outputName)
-			continue
-		}
-
-		delay := time.Duration(action.output.GetDelay()) * time.Second
-		executeAt := time.Now().Add(delay)
-
-		update := ScheduledUpdate{
-			ExecuteAt:   executeAt,
-			OutputName:  action.outputName,
-			Output:      action.output,
-			Metadata:    action.fallbackMetadata,
-			UpdateType:  "expiration_fallback",
-			CancelToken: fmt.Sprintf("%s_exp_%d", action.outputName, time.Now().UnixNano()),
-		}
-
-		mr.timeline.addUpdate(&update)
-		slog.Debug("Scheduled expiration fallback for output", "output", action.outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
 	}
 }
 
