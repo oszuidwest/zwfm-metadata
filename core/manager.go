@@ -411,25 +411,8 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 			continue
 		}
 
-		inputNames, exists := mr.outputInputs[outputName]
-		if !exists {
-			continue
-		}
-
-		isHighestPriority := false
-		for _, name := range inputNames {
-			if input, exists := mr.inputs[name]; exists {
-				inputMetadata := input.GetMetadata()
-				if inputMetadata != nil && inputMetadata.IsAvailable() {
-					if name == inputName {
-						isHighestPriority = true
-					}
-					break
-				}
-			}
-		}
-
-		if !isHighestPriority {
+		highestPriorityInput, _ := mr.findHighestPriorityInput(outputName)
+		if highestPriorityInput != inputName {
 			continue
 		}
 
@@ -471,6 +454,27 @@ func (mr *MetadataRouter) outputUsesInput(outputName, inputName string) bool {
 	return exists && slices.Contains(inputNames, inputName)
 }
 
+// findHighestPriorityInput returns the name and metadata of the highest priority available input for an output.
+// Returns empty string and nil if no available input is found.
+func (mr *MetadataRouter) findHighestPriorityInput(outputName string) (string, *Metadata) {
+	inputNames, exists := mr.outputInputs[outputName]
+	if !exists {
+		return "", nil
+	}
+
+	for _, inputName := range inputNames {
+		input, exists := mr.inputs[inputName]
+		if !exists {
+			continue
+		}
+		metadata := input.GetMetadata()
+		if metadata != nil && metadata.IsAvailable() {
+			return inputName, metadata
+		}
+	}
+	return "", nil
+}
+
 // cancelScheduledUpdates removes all pending updates for an output from the timeline.
 func (mr *MetadataRouter) cancelScheduledUpdates(outputName string) {
 	mr.timeline.cancelUpdatesForOutput(outputName)
@@ -506,66 +510,69 @@ func (mr *MetadataRouter) checkForExpirations() {
 			continue
 		}
 
-		currentInputName, hasCurrentInput := mr.currentInputs[outputName]
-		if !hasCurrentInput {
+		if !mr.currentInputNeedsFallback(outputName) {
 			continue
 		}
 
-		currentInput, exists := mr.inputs[currentInputName]
-		if !exists {
-			continue
-		}
+		fallbackInputName, fallbackMetadata := mr.findHighestPriorityInput(outputName)
+		currentInputName := mr.currentInputs[outputName]
 
-		currentMetadata := currentInput.GetMetadata()
-		if currentMetadata != nil && currentMetadata.IsAvailable() {
-			continue
-		}
-
-		inputNames, exists := mr.outputInputs[outputName]
-		if !exists {
-			continue
-		}
-
-		var fallbackMetadata *Metadata
-		var fallbackInputName string
-		for _, inputName := range inputNames {
-			if input, exists := mr.inputs[inputName]; exists {
-				metadata := input.GetMetadata()
-				if metadata != nil && metadata.IsAvailable() {
-					fallbackMetadata = metadata
-					fallbackInputName = inputName
-					break
-				}
-			}
-		}
-
-		if fallbackMetadata != nil && fallbackInputName != currentInputName {
-			st := mr.transformMetadataForOutput(outputName, fallbackMetadata, fallbackInputName)
-			if st.HasContent() {
-				formattedText := st.String()
-				lastSent := mr.lastSentContent[outputName]
-				if formattedText != lastSent {
-					delay := time.Duration(output.GetDelay()) * time.Second
-					executeAt := time.Now().Add(delay)
-
-					update := ScheduledUpdate{
-						ExecuteAt:   executeAt,
-						OutputName:  outputName,
-						Output:      output,
-						Metadata:    fallbackMetadata,
-						UpdateType:  "expiration_fallback",
-						CancelToken: fmt.Sprintf("%s_exp_%d", outputName, time.Now().UnixNano()),
-					}
-
-					mr.timeline.addUpdate(&update)
-					slog.Debug("Scheduled expiration fallback for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
-				}
-			}
-		} else if fallbackMetadata == nil {
+		if fallbackMetadata == nil {
 			mr.currentInputs[outputName] = ""
 			slog.Info("Output has no available inputs - cleared current input", "output", outputName)
+			continue
 		}
+
+		if fallbackInputName == currentInputName {
+			continue
+		}
+
+		mr.scheduleFallbackUpdate(outputName, output, fallbackInputName, fallbackMetadata)
 	}
+}
+
+// currentInputNeedsFallback reports whether an output's current input has expired or is unavailable.
+func (mr *MetadataRouter) currentInputNeedsFallback(outputName string) bool {
+	currentInputName, hasCurrentInput := mr.currentInputs[outputName]
+	if !hasCurrentInput {
+		return false
+	}
+
+	currentInput, exists := mr.inputs[currentInputName]
+	if !exists {
+		return true
+	}
+
+	currentMetadata := currentInput.GetMetadata()
+	return currentMetadata == nil || !currentMetadata.IsAvailable()
+}
+
+// scheduleFallbackUpdate schedules an expiration fallback update if the content differs from last sent.
+func (mr *MetadataRouter) scheduleFallbackUpdate(outputName string, output Output, inputName string, metadata *Metadata) {
+	st := mr.transformMetadataForOutput(outputName, metadata, inputName)
+	if !st.HasContent() {
+		return
+	}
+
+	formattedText := st.String()
+	if formattedText == mr.lastSentContent[outputName] {
+		return
+	}
+
+	delay := time.Duration(output.GetDelay()) * time.Second
+	executeAt := time.Now().Add(delay)
+
+	update := ScheduledUpdate{
+		ExecuteAt:   executeAt,
+		OutputName:  outputName,
+		Output:      output,
+		Metadata:    metadata,
+		UpdateType:  "expiration_fallback",
+		CancelToken: fmt.Sprintf("%s_exp_%d", outputName, time.Now().UnixNano()),
+	}
+
+	mr.timeline.addUpdate(&update)
+	slog.Debug("Scheduled expiration fallback for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
 }
 
 // applyFilterAction applies the action specified by a filter to a StructuredText.
