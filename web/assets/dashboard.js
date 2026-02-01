@@ -56,7 +56,7 @@ function createMetadataCard(name, type, headerClass, hasChanged) {
     const header = el('div', `card-header ${headerClass}`);
     const titleRow = el('div', 'card-title-row');
     const h3 = el('h3', null, name);
-    const typeBadge = createBadge(type, 'badge-type');
+    const typeBadge = createBadge(type, TAG_CLASSES.type);
     titleRow.append(h3, typeBadge);
     header.appendChild(titleRow);
 
@@ -82,6 +82,7 @@ const TAG_CLASSES = {
     input: 'badge-input',
     formatter: 'badge-brand',
     filter: 'badge-brand',
+    type: 'badge-type',
 };
 
 const CARD_HEADER_CLASSES = {
@@ -326,6 +327,9 @@ function buildInputCard(input) {
     card.dataset.inputName = input.name;
 
     const body = card.querySelector('.card-body');
+    if (!body) {
+        return card;
+    }
 
     body.appendChild(createStatusBadge(input.status, STATUS_CONFIG));
     appendIfPresent(body, buildPrefixSuffixBox(input));
@@ -363,7 +367,10 @@ function updateInputCards(inputs) {
 function buildStatColumn(label, value, valueClass) {
     const col = el('div');
     col.appendChild(el('div', 'text-muted-dark text-sm', label));
-    col.appendChild(el('div', `font-bold text-lg ${valueClass || ''}`, value));
+    const className = valueClass
+        ? `font-bold text-lg ${valueClass}`
+        : 'font-bold text-lg';
+    col.appendChild(el('div', className, value));
     return col;
 }
 
@@ -380,6 +387,9 @@ function buildOutputCard(output) {
     card.dataset.outputName = output.name;
 
     const body = card.querySelector('.card-body');
+    if (!body) {
+        return card;
+    }
 
     // Stats box with delay and current input
     const statsBox = el('div', 'content-box grid-2-col mb-4');
