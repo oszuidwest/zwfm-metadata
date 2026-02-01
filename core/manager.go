@@ -549,7 +549,7 @@ func (mr *MetadataRouter) checkForExpirations() {
 		}
 
 		if fallbackMetadata != nil && fallbackInputName != currentInputName {
-			st := mr.createStructuredText(outputName, fallbackMetadata, fallbackInputName)
+			st := mr.transformMetadataForOutput(outputName, fallbackMetadata, fallbackInputName)
 			if st.HasContent() {
 				formattedText := st.String()
 				lastSent := mr.lastSentContent[outputName]
@@ -622,7 +622,7 @@ func applyFilterAction(st *StructuredText, action FilterAction) bool {
 
 // wouldFiltersReject checks if filters would reject metadata or clear all content.
 // Used to avoid canceling valid pending updates when new metadata would be rejected.
-// This mirrors the filter evaluation in createStructuredText to catch both explicit
+// This mirrors the filter evaluation in transformMetadataForOutput to catch both explicit
 // rejections and cumulative field clearing (e.g., one filter clears artist, another title).
 func (mr *MetadataRouter) wouldFiltersReject(inputName string, metadata *Metadata) bool {
 	if metadata == nil {
@@ -660,10 +660,10 @@ func (mr *MetadataRouter) wouldFiltersReject(inputName string, metadata *Metadat
 	return !st.HasContent()
 }
 
-// createStructuredText builds a StructuredText from metadata with prefix/suffix and formatters applied.
+// transformMetadataForOutput builds a StructuredText from metadata with prefix/suffix and formatters applied.
 // NOTE: This method reads inputPrefixSuffix, inputTypes, inputFilters, and outputFormatters
 // without locks. These maps are immutable after Start() - enforced by panicIfStarted in Set* methods.
-func (mr *MetadataRouter) createStructuredText(outputName string, metadata *Metadata, inputName string) *StructuredText {
+func (mr *MetadataRouter) transformMetadataForOutput(outputName string, metadata *Metadata, inputName string) *StructuredText {
 	if metadata == nil {
 		return nil
 	}
@@ -766,7 +766,7 @@ func (mr *MetadataRouter) executeUpdate(update *ScheduledUpdate) {
 	}
 	mr.mu.RUnlock()
 
-	st := mr.createStructuredText(update.OutputName, update.Metadata, inputName)
+	st := mr.transformMetadataForOutput(update.OutputName, update.Metadata, inputName)
 	if st == nil || !st.HasContent() {
 		return
 	}
