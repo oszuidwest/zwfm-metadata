@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -124,43 +125,35 @@ func testMetadata(name, artist, title string) *Metadata {
 	}
 }
 
-// TestFilterRejectionPreservesPendingUpdate verifies that when metadata B is rejected
-// by a filter, a pending delayed update for metadata A still proceeds.
-func TestFilterRejectionPreservesPendingUpdate(t *testing.T) {
+// TestFilterRejectsMetadata verifies that a filter can reject metadata entirely.
+func TestFilterRejectsMetadata(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	router := NewMetadataRouter()
 
-	// Set up input with a rejecting filter
 	input := newMockInput("test-input")
 	if err := router.AddInput(input); err != nil {
 		t.Fatalf("AddInput failed: %v", err)
 	}
-	router.SetInputType("test-input", "dynamic")
 	router.SetInputFilters("test-input", []Filter{newMockFilter(FilterReject)})
 
-	// Set up output with 100ms delay
 	output := newMockOutput("test-output", 0)
-	output.SetDelay(0) // We'll use timeline directly for precise control
 	if err := router.AddOutput(output); err != nil {
 		t.Fatalf("AddOutput failed: %v", err)
 	}
 	router.SetOutputInputs("test-output", []string{"test-input"})
 
-	// Start the router
 	if err := router.Start(ctx); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
-	// Give router time to initialize
 	time.Sleep(50 * time.Millisecond)
 
-	// Metadata A should be rejected by filter, so no update scheduled
-	metadataA := testMetadata("input-a", "Artist A", "Title A")
-	input.SetMetadata(metadataA)
+	// Metadata should be rejected by filter, no update sent
+	metadata := testMetadata("input", "Artist", "Title")
+	input.SetMetadata(metadata)
 
-	// Wait a bit and verify no update was sent (filter rejected)
 	time.Sleep(100 * time.Millisecond)
 
 	sent := output.getSent()
@@ -169,28 +162,27 @@ func TestFilterRejectionPreservesPendingUpdate(t *testing.T) {
 	}
 }
 
-// TestFilterRejectionWithDelayPreservesPendingUpdate tests the specific scenario from issue #67:
-// When metadata A is scheduled with delay, and metadata B arrives but is rejected,
-// metadata A's update should still proceed.
-func TestFilterRejectionWithDelayPreservesPendingUpdate(t *testing.T) {
+// TestDelayedUpdatePreservedWhenNewMetadataRejected tests issue #67 scenario 1:
+// Output has delay, metadata A is scheduled, metadata B arrives and is rejected,
+// A's pending update should still proceed.
+func TestDelayedUpdatePreservedWhenNewMetadataRejected(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	router := NewMetadataRouter()
 
-	// Create a filter that rejects metadata with "REJECT" in title
+	// Filter that rejects metadata with "REJECT" in title
 	rejectFilter := &conditionalFilter{rejectPattern: "REJECT"}
 
 	input := newMockInput("test-input")
 	if err := router.AddInput(input); err != nil {
 		t.Fatalf("AddInput failed: %v", err)
 	}
-	router.SetInputType("test-input", "dynamic")
 	router.SetInputFilters("test-input", []Filter{rejectFilter})
 
-	// Output with 200ms delay
+	// Output with 300ms delay - enough time to send B before A executes
 	output := newMockOutput("test-output", 0)
-	output.SetDelay(0) // We'll manually control timing
+	output.SetDelay(1) // 1 second delay
 	if err := router.AddOutput(output); err != nil {
 		t.Fatalf("AddOutput failed: %v", err)
 	}
@@ -202,33 +194,29 @@ func TestFilterRejectionWithDelayPreservesPendingUpdate(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Send metadata A (should pass filter)
+	// Send metadata A (passes filter, scheduled with 1s delay)
 	metadataA := testMetadata("input-a", "Artist A", "Title A")
 	input.SetMetadata(metadataA)
 
-	// Wait for update to be sent (no delay configured)
-	st, ok := output.waitForSend(500 * time.Millisecond)
+	// Immediately send metadata B which should be rejected
+	// This happens BEFORE A's delayed update executes
+	time.Sleep(50 * time.Millisecond)
+	metadataB := testMetadata("input-b", "Artist B", "REJECT this")
+	input.SetMetadata(metadataB)
+
+	// Wait for A's delayed update to arrive (should still happen)
+	st, ok := output.waitForSend(2 * time.Second)
 	if !ok {
-		t.Fatal("Expected metadata A to be sent")
+		t.Fatal("Expected metadata A to be sent after delay - pending update was incorrectly canceled")
 	}
 	if st.Title != "Title A" {
 		t.Errorf("Expected Title A, got %s", st.Title)
 	}
 
-	// Now send metadata B which should be rejected
-	metadataB := testMetadata("input-b", "Artist B", "REJECT this")
-	input.SetMetadata(metadataB)
-
-	// Wait a bit - no new update should arrive
-	_, ok = output.waitForSend(200 * time.Millisecond)
-	if ok {
-		t.Error("Expected metadata B to be rejected by filter")
-	}
-
-	// Verify only one update was sent total
+	// Verify only A was sent (B was rejected)
 	sent := output.getSent()
 	if len(sent) != 1 {
-		t.Errorf("Expected exactly 1 update, got %d", len(sent))
+		t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
 	}
 }
 
@@ -239,31 +227,105 @@ type conditionalFilter struct {
 
 func (f *conditionalFilter) Decide(st *StructuredText) FilterAction {
 	if f.rejectPattern != "" && st.Title != "" {
-		if contains(st.Title, f.rejectPattern) {
+		if strings.Contains(st.Title, f.rejectPattern) {
 			return FilterReject
 		}
 	}
 	return FilterPass
 }
 
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-// TestCumulativeFieldClearingPreservesPendingUpdate verifies that when multiple filters
-// cumulatively clear all fields, the pending update for previous metadata proceeds.
-func TestCumulativeFieldClearingPreservesPendingUpdate(t *testing.T) {
+// TestDelayedUpdatePreservedWhenNewMetadataCumulativelyCleared tests issue #67 scenario 2:
+// Output has delay, metadata A is scheduled, metadata B arrives and filters cumulatively
+// clear all fields, A's pending update should still proceed.
+func TestDelayedUpdatePreservedWhenNewMetadataCumulativelyCleared(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	router := NewMetadataRouter()
 
-	// Two filters: one clears artist, one clears title
+	// Filter that clears artist when title contains "CLEAR"
+	conditionalClearFilter := &conditionalClearArtistFilter{pattern: "CLEAR"}
+	// Filter that always clears title when artist is empty
+	clearTitleWhenNoArtist := &clearTitleWhenNoArtistFilter{}
+
+	input := newMockInput("test-input")
+	if err := router.AddInput(input); err != nil {
+		t.Fatalf("AddInput failed: %v", err)
+	}
+	router.SetInputFilters("test-input", []Filter{conditionalClearFilter, clearTitleWhenNoArtist})
+
+	// Output with 1s delay
+	output := newMockOutput("test-output", 0)
+	output.SetDelay(1)
+	if err := router.AddOutput(output); err != nil {
+		t.Fatalf("AddOutput failed: %v", err)
+	}
+	router.SetOutputInputs("test-output", []string{"test-input"})
+
+	if err := router.Start(ctx); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Send metadata A (passes filters, scheduled with 1s delay)
+	metadataA := testMetadata("input-a", "Artist A", "Title A")
+	input.SetMetadata(metadataA)
+
+	// Send metadata B which will be cumulatively cleared:
+	// - conditionalClearFilter clears artist because title contains "CLEAR"
+	// - clearTitleWhenNoArtist clears title because artist is now empty
+	time.Sleep(50 * time.Millisecond)
+	metadataB := testMetadata("input-b", "Artist B", "CLEAR me")
+	input.SetMetadata(metadataB)
+
+	// Wait for A's delayed update (should still happen)
+	st, ok := output.waitForSend(2 * time.Second)
+	if !ok {
+		t.Fatal("Expected metadata A to be sent - pending update was incorrectly canceled")
+	}
+	if st.Title != "Title A" {
+		t.Errorf("Expected Title A, got %s", st.Title)
+	}
+
+	// Verify only A was sent
+	sent := output.getSent()
+	if len(sent) != 1 {
+		t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
+	}
+}
+
+// conditionalClearArtistFilter clears artist when title contains pattern.
+type conditionalClearArtistFilter struct {
+	pattern string
+}
+
+func (f *conditionalClearArtistFilter) Decide(st *StructuredText) FilterAction {
+	if f.pattern != "" && strings.Contains(st.Title, f.pattern) {
+		return FilterClearArtist
+	}
+	return FilterPass
+}
+
+// clearTitleWhenNoArtistFilter clears title when artist is empty.
+type clearTitleWhenNoArtistFilter struct{}
+
+func (f *clearTitleWhenNoArtistFilter) Decide(st *StructuredText) FilterAction {
+	if st.Artist == "" {
+		return FilterClearTitle
+	}
+	return FilterPass
+}
+
+// TestCumulativeFieldClearingRejectsMetadata verifies that when multiple filters
+// cumulatively clear all fields, metadata is rejected.
+func TestCumulativeFieldClearingRejectsMetadata(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	router := NewMetadataRouter()
+
+	// Two filters that always clear their respective fields
 	clearArtistFilter := newMockFilter(FilterClearArtist)
 	clearTitleFilter := newMockFilter(FilterClearTitle)
 
@@ -285,11 +347,9 @@ func TestCumulativeFieldClearingPreservesPendingUpdate(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	// Send metadata - both filters will clear their respective fields
 	metadata := testMetadata("input", "Artist", "Title")
 	input.SetMetadata(metadata)
 
-	// Should be rejected because cumulative clearing leaves no content
 	time.Sleep(100 * time.Millisecond)
 
 	sent := output.getSent()
