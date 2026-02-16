@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.25-alpine3.23 AS builder
+FROM golang:1.26-alpine3.23 AS builder
 
 LABEL org.opencontainers.image.source="https://github.com/oszuidwest/zwfm-metadata"
 LABEL org.opencontainers.image.description="Metadata handling middleware for ZuidWest FM"
