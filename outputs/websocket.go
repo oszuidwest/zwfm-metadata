@@ -37,7 +37,7 @@ func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *Web
 	}
 	output.SetDelay(settings.Delay)
 
-	output.hub.SetOnConnect(func(conn *utils.WebSocketConn) interface{} {
+	output.hub.SetOnConnect(func(conn *utils.WebSocketConn) any {
 		output.metadataMu.RLock()
 		defer output.metadataMu.RUnlock()
 		if output.currentMetadata != nil {

@@ -391,8 +391,7 @@ func TestWouldFiltersReject(t *testing.T) {
 }
 
 func TestFilterContextMatchesExecution(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	router := NewMetadataRouter()
 

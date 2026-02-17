@@ -154,7 +154,7 @@ func (u *URLInput) poll() {
 // extractJSONValue navigates a JSON structure using a dot-separated key path.
 func extractJSONValue(data any, keyPath string) (any, bool) {
 	current := data
-	for _, key := range strings.Split(keyPath, ".") {
+	for key := range strings.SplitSeq(keyPath, ".") {
 		m, ok := current.(map[string]any)
 		if !ok {
 			return nil, false

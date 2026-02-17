@@ -78,7 +78,7 @@ func NewServer(port int, router *core.MetadataRouter, stationName, brandColor st
 		darkAppleIconPNG: darkAppleIconPNG,
 	}
 
-	s.dashboardHub.SetOnConnect(func(conn *utils.WebSocketConn) interface{} {
+	s.dashboardHub.SetOnConnect(func(conn *utils.WebSocketConn) any {
 		return s.getDashboardData()
 	})
 
