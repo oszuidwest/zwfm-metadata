@@ -61,12 +61,12 @@ func generateFaviconICOFromSVG(svg string) ([]byte, error) {
 
 	buf.Write([]byte{0x00, 0x00})              // Reserved
 	buf.Write([]byte{0x01, 0x00})              // Type (icon)
-	buf.Write([]byte{byte(len(layers)), 0x00}) // Image count
+	buf.Write([]byte{byte(len(layers)), 0x00}) //nolint:gosec // Image count is always 2
 	dataOffset := 6 + 16*len(layers)
 	for _, layer := range layers {
 		size := layer.size
-		width := byte(size)
-		height := byte(size)
+		width := byte(size)  //nolint:gosec // Icon sizes are always 16 or 32
+		height := byte(size) //nolint:gosec // Icon sizes are always 16 or 32
 		if size >= 256 {
 			width = 0
 			height = 0
@@ -79,10 +79,10 @@ func generateFaviconICOFromSVG(svg string) ([]byte, error) {
 		buf.Write([]byte{0x01, 0x00})
 		buf.Write([]byte{0x20, 0x00})
 
-		length := uint32(len(layer.data)) //nolint:gosec // PNG layer data is always small (< 10KB)
-		buf.Write([]byte{byte(length), byte(length >> 8), byte(length >> 16), byte(length >> 24)})
-		offset := uint32(dataOffset) //nolint:gosec // ICO header offset is always small (< 100KB)
-		buf.Write([]byte{byte(offset), byte(offset >> 8), byte(offset >> 16), byte(offset >> 24)})
+		length := uint32(len(layer.data))                                                          //nolint:gosec // PNG layer data is always small (< 10KB)
+		buf.Write([]byte{byte(length), byte(length >> 8), byte(length >> 16), byte(length >> 24)}) //nolint:gosec // values always small
+		offset := uint32(dataOffset)                                                               //nolint:gosec // ICO header offset is always small (< 100KB)
+		buf.Write([]byte{byte(offset), byte(offset >> 8), byte(offset >> 16), byte(offset >> 24)}) //nolint:gosec // values always small
 
 		dataOffset += len(layer.data)
 	}
