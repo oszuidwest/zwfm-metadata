@@ -16,11 +16,11 @@ func Get(ctx context.Context, url string) (*http.Response, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", UserAgent())
-	return httpClient.Do(req)
+	return httpClient.Do(req) //nolint:gosec // URL is from validated user configuration
 }
 
 // Do executes an HTTP request with standard configuration.
 func Do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("User-Agent", UserAgent())
-	return httpClient.Do(req)
+	return httpClient.Do(req) //nolint:gosec // URL is from validated user configuration
 }

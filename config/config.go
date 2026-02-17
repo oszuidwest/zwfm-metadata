@@ -51,7 +51,7 @@ type FilterConfig struct {
 
 // DynamicInputConfig holds settings for HTTP API-driven metadata updates with optional expiration.
 type DynamicInputConfig struct {
-	Secret     string `json:"secret"`
+	Secret     string `json:"secret"` //nolint:gosec // Config field for input authentication
 	Expiration struct {
 		Type    string `json:"type"` // "dynamic", "fixed", "none"
 		Minutes int    `json:"minutes,omitempty"`
@@ -79,7 +79,7 @@ type IcecastOutputConfig struct {
 	Server     string `json:"server"`
 	Port       int    `json:"port"`
 	Username   string `json:"username"`
-	Password   string `json:"password"`
+	Password   string `json:"password"` //nolint:gosec // Config field for Icecast authentication
 	Mountpoint string `json:"mountpoint"`
 }
 
@@ -93,8 +93,8 @@ type FileOutputConfig struct {
 type URLOutputConfig struct {
 	Delay          int            `json:"delay"`
 	URL            string         `json:"url"`
-	Method         string         `json:"method,omitempty"` // GET or POST (required)
-	BearerToken    string         `json:"bearerToken,omitempty"`
+	Method         string         `json:"method,omitempty"`         // GET or POST (required)
+	BearerToken    string         `json:"bearerToken,omitempty"`    //nolint:gosec // Config field for HTTP authentication
 	PayloadMapping map[string]any `json:"payloadMapping,omitempty"` // Only for POST
 }
 

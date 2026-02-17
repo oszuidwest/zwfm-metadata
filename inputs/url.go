@@ -82,7 +82,7 @@ func (u *URLInput) poll() {
 	}
 
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		slog.Error("URL must use http or https scheme", "input", u.GetName(), "url", u.settings.URL, "scheme", parsedURL.Scheme)
+		slog.Error("URL must use http or https scheme", "input", u.GetName(), "url", u.settings.URL, "scheme", parsedURL.Scheme) //nolint:gosec // Logging config value for diagnostics
 		return
 	}
 

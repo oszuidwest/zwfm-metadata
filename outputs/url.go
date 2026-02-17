@@ -49,7 +49,7 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 		return nil
 	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		slog.Error("URL must use http or https scheme", "output", name, "url", settings.URL, "scheme", parsedURL.Scheme)
+		slog.Error("URL must use http or https scheme", "output", name, "url", settings.URL, "scheme", parsedURL.Scheme) //nolint:gosec // Logging config value for diagnostics
 		return nil
 	}
 
@@ -130,7 +130,7 @@ func (u *URLOutput) sendGETRequest(payload *utils.UniversalMetadata) {
 
 	finalURL := parsedURL.String()
 
-	slog.Debug("Sending GET request", "output", u.GetName(), "url", finalURL)
+	slog.Debug("Sending GET request", "output", u.GetName(), "url", finalURL) //nolint:gosec // Logging URL for diagnostics
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, finalURL, http.NoBody)
 	if err != nil {
@@ -151,11 +151,11 @@ func (u *URLOutput) sendGETRequest(payload *utils.UniversalMetadata) {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		slog.Error("GET request failed", "output", u.GetName(), "status", resp.StatusCode, "response", string(bodyBytes))
+		slog.Error("GET request failed", "output", u.GetName(), "status", resp.StatusCode, "response", string(bodyBytes)) //nolint:gosec // Logging response for diagnostics
 		return
 	}
 
-	slog.Debug("Successfully sent GET", "output", u.GetName(), "url", finalURL, "status", resp.StatusCode)
+	slog.Debug("Successfully sent GET", "output", u.GetName(), "url", finalURL, "status", resp.StatusCode) //nolint:gosec // Logging URL for diagnostics
 }
 
 func (u *URLOutput) sendPOSTRequest(payload *utils.UniversalMetadata) {
@@ -196,9 +196,9 @@ func (u *URLOutput) sendPOSTRequest(payload *utils.UniversalMetadata) {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		slog.Error("POST request failed", "output", u.GetName(), "status", resp.StatusCode, "response", string(bodyBytes))
+		slog.Error("POST request failed", "output", u.GetName(), "status", resp.StatusCode, "response", string(bodyBytes)) //nolint:gosec // Logging response for diagnostics
 		return
 	}
 
-	slog.Debug("Successfully sent POST", "output", u.GetName(), "url", u.settings.URL, "status", resp.StatusCode)
+	slog.Debug("Successfully sent POST", "output", u.GetName(), "url", u.settings.URL, "status", resp.StatusCode) //nolint:gosec // Logging URL for diagnostics
 }
