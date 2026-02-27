@@ -51,7 +51,6 @@ func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret st
 	case "fixed":
 		expiresAt := time.Now().Add(time.Duration(d.settings.Expiration.Minutes) * time.Minute)
 		metadata.ExpiresAt = &expiresAt
-	case "none":
 	}
 
 	d.SetMetadata(metadata)

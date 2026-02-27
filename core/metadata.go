@@ -47,7 +47,7 @@ func (m *Metadata) FormatString() string {
 		return ""
 	}
 
-	if m.Artist != "" && m.Title != "" {
+	if m.Artist != "" {
 		return m.Artist + " - " + m.Title
 	}
 

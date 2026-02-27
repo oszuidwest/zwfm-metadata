@@ -37,7 +37,6 @@ func ConvertStructuredText(st *core.StructuredText) *UniversalMetadata {
 		UpdatedAt:         time.Now(),
 	}
 
-	// Copy additional fields from Original metadata if available
 	if st.Original != nil {
 		um.SongID = st.Original.SongID
 		um.Duration = st.Original.Duration

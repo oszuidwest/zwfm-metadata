@@ -53,20 +53,11 @@ func (o *DLPlusOutput) buildDLPlusContent(st *core.StructuredText) string {
 	content.WriteString("DL_PLUS=1\n")
 
 	o.toggleValue = !o.toggleValue
-	toggleInt := 0
-	if o.toggleValue {
-		toggleInt = 1
-	}
 
 	o.addDLPlusTags(&content, st)
 
-	runningInt := 0
-	if st.IsRunning() {
-		runningInt = 1
-	}
-
-	fmt.Fprintf(&content, "DL_PLUS_ITEM_RUNNING=%d\n", runningInt)
-	fmt.Fprintf(&content, "DL_PLUS_ITEM_TOGGLE=%d\n", toggleInt)
+	fmt.Fprintf(&content, "DL_PLUS_ITEM_RUNNING=%d\n", boolToInt(st.IsRunning()))
+	fmt.Fprintf(&content, "DL_PLUS_ITEM_TOGGLE=%d\n", boolToInt(o.toggleValue))
 
 	content.WriteString("##### parameters } #####\n")
 	content.WriteString(st.String())
@@ -82,6 +73,13 @@ func (o *DLPlusOutput) addDLPlusTags(content *strings.Builder, st *core.Structur
 	if start, length, ok := st.TitleRange(); ok && length >= 0 {
 		fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeTitle, start, length)
 	}
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // Start creates an empty output file for ODR-PadEnc to monitor.

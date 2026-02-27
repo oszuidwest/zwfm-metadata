@@ -168,7 +168,7 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
-	if _, err := fmt.Fprintf(w, "OK"); err != nil {
+	if _, err := w.Write([]byte("OK")); err != nil {
 		slog.Warn("Failed to write HTTP response", "error", err)
 	}
 }
