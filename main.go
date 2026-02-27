@@ -108,7 +108,6 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error
 
 	router.SetInputType(inputCfg.Name, inputCfg.Type)
 
-	// Add filters for this input
 	var inputFilters []core.Filter
 	var filterNames []string
 	for i, filterCfg := range inputCfg.Filters {

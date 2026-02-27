@@ -66,7 +66,6 @@ func init() {
 
 // Decide checks if the metadata matches the pattern and returns the action to take.
 func (p *PatternFilter) Decide(st *core.StructuredText) core.FilterAction {
-	// Cache match results to avoid duplicate regex evaluation
 	artistMatched := p.field != FieldTitle && p.pattern.MatchString(st.Artist)
 	titleMatched := p.field != FieldArtist && p.pattern.MatchString(st.Title)
 
@@ -78,9 +77,8 @@ func (p *PatternFilter) Decide(st *core.StructuredText) core.FilterAction {
 		return core.FilterReject
 	}
 
-	// action == ActionClear: clear only the matched field(s)
 	if artistMatched && titleMatched {
-		return core.FilterReject // Both matched, reject entirely
+		return core.FilterReject
 	}
 	if artistMatched {
 		return core.FilterClearArtist

@@ -136,9 +136,6 @@ func (h *HTTPOutput) encodeResponse(data any, responseType string) (encoded []by
 			return []byte(str), "text/plain", nil
 		}
 		fallthrough // Non-string data falls back to JSON
-	case "json", "":
-		encoded, err := json.Marshal(data)
-		return encoded, "application/json", err
 	default:
 		encoded, err := json.Marshal(data)
 		return encoded, "application/json", err
