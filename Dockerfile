@@ -35,8 +35,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
 # Runtime stage
 FROM alpine:3.23
 
-# Install packages + create user + setup directories
-RUN apk --no-cache add ca-certificates tzdata wget && \
+# Upgrade base packages to patch known vulnerabilities + install packages + create user + setup directories
+RUN apk --no-cache upgrade && \
+    apk --no-cache add ca-certificates tzdata wget && \
     addgroup -g 1000 zwfm && \
     adduser -D -s /bin/sh -u 1000 -G zwfm zwfm && \
     mkdir -p /app && \
