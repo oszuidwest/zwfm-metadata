@@ -1,10 +1,6 @@
 # Build stage
 FROM golang:1.26-alpine3.23 AS builder
 
-LABEL org.opencontainers.image.source="https://github.com/oszuidwest/zwfm-metadata"
-LABEL org.opencontainers.image.description="Metadata handling middleware for ZuidWest FM"
-LABEL org.opencontainers.image.licenses="MIT"
-
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
 
@@ -35,8 +31,13 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
 # Runtime stage
 FROM alpine:3.23
 
-# Install packages + create user + setup directories
-RUN apk --no-cache add ca-certificates tzdata wget && \
+LABEL org.opencontainers.image.source="https://github.com/oszuidwest/zwfm-metadata"
+LABEL org.opencontainers.image.description="Metadata handling middleware for ZuidWest FM"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# Upgrade base packages to patch known vulnerabilities + install packages + create user + setup directories
+RUN apk --no-cache upgrade && \
+    apk --no-cache add ca-certificates tzdata wget && \
     addgroup -g 1000 zwfm && \
     adduser -D -s /bin/sh -u 1000 -G zwfm zwfm && \
     mkdir -p /app && \
