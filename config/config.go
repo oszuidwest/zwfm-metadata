@@ -53,8 +53,9 @@ type FilterConfig struct {
 type DynamicInputConfig struct {
 	Secret     string `json:"secret"` //nolint:gosec // Config field for input authentication
 	Expiration struct {
-		Type    string `json:"type"` // "dynamic", "fixed", "none"
-		Minutes int    `json:"minutes,omitempty"`
+		Type           string `json:"type"`                     // "dynamic", "fixed", "none"
+		Minutes        int    `json:"minutes,omitempty"`        // Fallback minutes for dynamic, or fixed duration
+		RoundUpMinutes *bool  `json:"roundUpMinutes,omitempty"` // Round up dynamic expiration to full minutes (default: true)
 	} `json:"expiration"`
 }
 
