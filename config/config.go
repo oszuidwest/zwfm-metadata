@@ -55,7 +55,7 @@ type DynamicInputConfig struct {
 	Expiration struct {
 		Type           string `json:"type"`                     // "dynamic", "fixed", "none"
 		Minutes        int    `json:"minutes,omitempty"`        // Fallback minutes for dynamic, or fixed duration
-		RoundUpMinutes *bool  `json:"roundUpMinutes,omitempty"` // Round up expiration to full minutes (default: true)
+		RoundUpMinutes *bool  `json:"roundUpMinutes,omitempty"` // Round up dynamic expiration to full minutes (default: true)
 	} `json:"expiration"`
 }
 

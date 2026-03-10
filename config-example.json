@@ -26,7 +26,8 @@
       "settings": {
         "secret": "supersecret123",
         "expiration": {
-          "type": "dynamic"
+          "type": "dynamic",
+          "roundUpMinutes": true
         }
       }
     },

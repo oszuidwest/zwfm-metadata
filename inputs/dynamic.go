@@ -20,6 +20,10 @@ type DynamicInput struct {
 
 // NewDynamicInput initializes an HTTP API-driven input with the given settings.
 func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicInput {
+	if settings.Expiration.RoundUpMinutes != nil && settings.Expiration.Type != "dynamic" {
+		slog.Warn("roundUpMinutes is only used with expiration type \"dynamic\" and will be ignored", "input", name, "type", settings.Expiration.Type)
+	}
+
 	return &DynamicInput{
 		InputBase:      core.NewInputBase(name),
 		settings:       settings,

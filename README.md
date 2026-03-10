@@ -119,7 +119,7 @@ HTTP API for live updates
 - `secret` (optional) - Authentication secret for API calls
 - `expiration.type` - `"dynamic"` (expires based on song duration), `"fixed"` (expires after a set number of minutes), or `"none"` (never expires)
 - `expiration.minutes` (required if type=fixed, optional for type=dynamic) - Number of minutes until expiration. When `type` is `"dynamic"`, this serves as a fallback when the duration parameter is missing or invalid
-- `expiration.roundUpMinutes` (optional, default: true) - When `true` (or omitted), dynamic expiration rounds up to full minutes (e.g., 3:30 → 4 minutes). This prevents metadata "flapping" when short segments like talk or jingles follow a song. Set to `false` to use exact second-based expiration
+- `expiration.roundUpMinutes` (optional, default: true, only for type=dynamic) - When `true` (or omitted), dynamic expiration rounds up to full minutes (e.g., 3:30 → 4 minutes). This prevents metadata "flapping" when short segments like talk or jingles follow a song. Set to `false` to use exact second-based expiration
 
 #### API Usage
 ```bash
