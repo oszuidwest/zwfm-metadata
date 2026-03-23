@@ -327,6 +327,11 @@ func (mr *MetadataRouter) GetCurrentInputForOutput(outputName string) string {
 	return ""
 }
 
+// GetPendingUpdateTime returns the scheduled execution time for a pending output update, or zero if none.
+func (mr *MetadataRouter) GetPendingUpdateTime(outputName string) time.Time {
+	return mr.timeline.nextExecutionTimeForOutput(outputName)
+}
+
 // Start launches all inputs, outputs, and background processors until context cancellation.
 func (mr *MetadataRouter) Start(ctx context.Context) error {
 	mr.mu.Lock()
@@ -841,4 +846,17 @@ func (t *Timeline) hasScheduledUpdatesForOutput(outputName string) bool {
 	return slices.ContainsFunc(t.updates, func(u ScheduledUpdate) bool {
 		return u.OutputName == outputName
 	})
+}
+
+// nextExecutionTimeForOutput returns the earliest scheduled update time for a specific output, or zero if none.
+func (t *Timeline) nextExecutionTimeForOutput(outputName string) time.Time {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	for _, u := range t.updates {
+		if u.OutputName == outputName {
+			return u.ExecuteAt
+		}
+	}
+	return time.Time{}
 }

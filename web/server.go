@@ -34,12 +34,13 @@ type Server struct {
 
 // OutputStatus holds output configuration and state for the dashboard API.
 type OutputStatus struct {
-	Name         string   `json:"name"`
-	Type         string   `json:"type"`
-	Delay        int      `json:"delay"`
-	Inputs       []string `json:"inputs"`
-	Formatters   []string `json:"formatters"`
-	CurrentInput string   `json:"currentInput,omitzero"`
+	Name         string     `json:"name"`
+	Type         string     `json:"type"`
+	Delay        int        `json:"delay"`
+	Inputs       []string   `json:"inputs"`
+	Formatters   []string   `json:"formatters"`
+	CurrentInput string     `json:"currentInput,omitzero"`
+	PendingUntil *time.Time `json:"pendingUntil,omitzero"`
 }
 
 // NewServer initializes the server with pre-generated favicons and a dashboard WebSocket hub.
@@ -303,6 +304,10 @@ func (s *Server) getDashboardData() any {
 		if currentInput != "" {
 			outputStatus.CurrentInput = currentInput
 			activeFlows++
+		}
+
+		if pendingTime := s.router.GetPendingUpdateTime(output.GetName()); !pendingTime.IsZero() {
+			outputStatus.PendingUntil = &pendingTime
 		}
 
 		outputStatuses = append(outputStatuses, outputStatus)
