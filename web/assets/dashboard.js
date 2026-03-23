@@ -5,6 +5,9 @@ const previousData = {
     stats: {},
 };
 
+// Track active delay countdowns per output
+const activeDelays = {};
+
 // WebSocket connection
 let ws = null;
 let reconnectTimeout = null;
@@ -62,7 +65,11 @@ function createMetadataCard(name, type, headerClass, hasChanged) {
 
     const body = el('div', 'card-body');
 
-    card.append(header, body);
+    const delayTrack = el('div', 'delay-bar-track');
+    const delayFill = el('div', 'delay-bar-fill');
+    delayTrack.appendChild(delayFill);
+
+    card.append(header, delayTrack, body);
     return card;
 }
 
@@ -428,11 +435,67 @@ function buildOutputCard(output) {
     return card;
 }
 
+function startDelayBar(outputName, delaySec) {
+    activeDelays[outputName] = {
+        startTime: Date.now(),
+        duration: delaySec * 1000,
+    };
+}
+
+function applyDelayBarState(card, outputName) {
+    const state = activeDelays[outputName];
+    const fill = card.querySelector('.delay-bar-fill');
+    if (!fill) {
+        return;
+    }
+
+    if (!state) {
+        fill.style.width = '0%';
+        fill.className = 'delay-bar-fill';
+        return;
+    }
+
+    const elapsed = Date.now() - state.startTime;
+    const remaining = state.duration - elapsed;
+
+    if (remaining <= 0) {
+        delete activeDelays[outputName];
+        fill.style.width = '0%';
+        fill.className = 'delay-bar-fill';
+        return;
+    }
+
+    const pct = (remaining / state.duration) * 100;
+    fill.className = 'delay-bar-fill active';
+    fill.style.transition = 'none';
+    fill.style.width = `${pct}%`;
+
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            fill.style.transition = `width ${remaining}ms linear`;
+            fill.style.width = '0%';
+        });
+    });
+}
+
 function updateOutputCards(outputs) {
+    // Detect currentInput changes and start delay bars
+    for (const output of outputs) {
+        const prev = previousData.outputs[output.name];
+        if (prev && prev.currentInput !== output.currentInput && output.delay > 0) {
+            startDelayBar(output.name, output.delay);
+        }
+    }
+
     const container = document.getElementById('outputs-grid');
     const cards = outputs.map((output) => buildOutputCard(output));
 
     updateContainerWithCards(container, cards);
+
+    // Restore delay bar state on freshly built cards
+    for (const card of container.querySelectorAll('[data-output-name]')) {
+        applyDelayBarState(card, card.dataset.outputName);
+    }
 
     for (const output of outputs) {
         previousData.outputs[output.name] = {
