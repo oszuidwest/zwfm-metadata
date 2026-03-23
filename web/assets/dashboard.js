@@ -5,7 +5,6 @@ const previousData = {
     stats: {},
 };
 
-
 // WebSocket connection
 let ws = null;
 let reconnectTimeout = null;
@@ -63,11 +62,7 @@ function createMetadataCard(name, type, headerClass, hasChanged) {
 
     const body = el('div', 'card-body');
 
-    const delayTrack = el('div', 'delay-bar-track');
-    const delayFill = el('div', 'delay-bar-fill');
-    delayTrack.appendChild(delayFill);
-
-    card.append(header, delayTrack, body);
+    card.append(header, body);
     return card;
 }
 
@@ -391,6 +386,15 @@ function buildOutputCard(output) {
     );
     card.dataset.outputName = output.name;
 
+    // Insert delay bar between header and body (output cards only)
+    const delayTrack = el('div', 'delay-bar-track');
+    const delayFill = el('div', 'delay-bar-fill');
+    delayTrack.appendChild(delayFill);
+    const header = card.querySelector('.card-header');
+    if (header) {
+        header.after(delayTrack);
+    }
+
     const body = card.querySelector('.card-body');
     if (!body) {
         return card;
@@ -476,13 +480,8 @@ function updateOutputCards(outputs) {
     updateContainerWithCards(container, cards);
 
     // Apply delay bar state from server-provided pendingUntil timestamps
-    for (const output of outputs) {
-        const card = container.querySelector(
-            `[data-output-name="${output.name}"]`,
-        );
-        if (card) {
-            applyDelayBarState(card, output);
-        }
+    for (let i = 0; i < outputs.length; i++) {
+        applyDelayBarState(cards[i], outputs[i]);
     }
 
     for (const output of outputs) {
