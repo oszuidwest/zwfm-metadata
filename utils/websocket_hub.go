@@ -16,10 +16,16 @@ type WebSocketConn struct {
 	*websocket.Conn
 }
 
+type hubClient struct {
+	conn    *websocket.Conn
+	wsConn  *WebSocketConn
+	writeMu sync.Mutex
+}
+
 // WebSocketHub manages WebSocket connections and broadcasting.
 type WebSocketHub struct {
 	name         string
-	clients      map[*websocket.Conn]bool
+	clients      map[*websocket.Conn]*hubClient
 	mu           sync.RWMutex
 	upgrader     websocket.Upgrader
 	onConnect    func(*WebSocketConn) any
@@ -33,7 +39,7 @@ type WebSocketHub struct {
 func NewWebSocketHub(name string) *WebSocketHub {
 	return &WebSocketHub{
 		name:    name,
-		clients: make(map[*websocket.Conn]bool),
+		clients: make(map[*websocket.Conn]*hubClient),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true
@@ -55,6 +61,64 @@ func (h *WebSocketHub) SetOnDisconnect(fn func(*WebSocketConn)) {
 	h.onDisconnect = fn
 }
 
+func (h *WebSocketHub) writeClient(client *hubClient, operation string, write func() error) error {
+	client.writeMu.Lock()
+	defer client.writeMu.Unlock()
+
+	if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
+		slog.Warn("Failed to set WebSocket write deadline", "hub", h.name, "operation", operation, "error", err)
+	}
+	if err := write(); err != nil {
+		return err
+	}
+	if err := client.conn.SetWriteDeadline(time.Time{}); err != nil {
+		slog.Warn("Failed to clear WebSocket write deadline", "hub", h.name, "operation", operation, "error", err)
+	}
+	return nil
+}
+
+func (h *WebSocketHub) writeClientJSON(client *hubClient, operation string, data any) error {
+	return h.writeClient(client, operation, func() error {
+		return client.conn.WriteJSON(data)
+	})
+}
+
+func (h *WebSocketHub) writeClientMessage(client *hubClient, operation string, messageType int, data []byte) error {
+	return h.writeClient(client, operation, func() error {
+		return client.conn.WriteMessage(messageType, data)
+	})
+}
+
+func (h *WebSocketHub) removeClient(client *hubClient) (int, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if _, exists := h.clients[client.conn]; !exists {
+		return len(h.clients), false
+	}
+
+	delete(h.clients, client.conn)
+	return len(h.clients), true
+}
+
+func (h *WebSocketHub) disconnectClient(client *hubClient) int {
+	clientCount, removed := h.removeClient(client)
+	if !removed {
+		return clientCount
+	}
+
+	if err := client.conn.Close(); err != nil {
+		slog.Warn("Failed to close WebSocket connection", "hub", h.name, "error", err)
+	}
+
+	if h.onDisconnect != nil {
+		h.onDisconnect(client.wsConn)
+	}
+
+	slog.Debug("WebSocket client disconnected", "hub", h.name, "clients", clientCount)
+	return clientCount
+}
+
 // HandleConnection handles a new WebSocket connection.
 func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) {
 	conn, err := h.upgrader.Upgrade(w, r, nil)
@@ -63,25 +127,22 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	wsConn := &WebSocketConn{Conn: conn}
+	client := &hubClient{conn: conn, wsConn: wsConn}
+
 	h.mu.Lock()
-	h.clients[conn] = true
+	h.clients[conn] = client
 	clientCount := len(h.clients)
 	h.mu.Unlock()
 
 	slog.Debug("WebSocket client connected", "hub", h.name, "clients", clientCount)
 
-	wsConn := &WebSocketConn{Conn: conn}
-
 	if h.onConnect != nil {
 		if data := h.onConnect(wsConn); data != nil {
-			if err := conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
-				slog.Warn("Failed to set write deadline", "error", err)
-			}
-			if err := conn.WriteJSON(data); err != nil {
-				slog.Debug("Failed to send initial data", "hub", h.name, "error", err)
-			}
-			if err := conn.SetWriteDeadline(time.Time{}); err != nil {
-				slog.Warn("Failed to clear write deadline", "error", err)
+			if err := h.writeClientJSON(client, "on_connect", data); err != nil {
+				slog.Warn("Failed to send initial WebSocket data", "hub", h.name, "error", err)
+				h.disconnectClient(client)
+				return
 			}
 		}
 	}
@@ -106,13 +167,8 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		for {
 			select {
 			case <-ticker.C:
-				if err := conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
-					return
-				}
-				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-					return
-				}
-				if err := conn.SetWriteDeadline(time.Time{}); err != nil {
+				if err := h.writeClientMessage(client, "ping", websocket.PingMessage, nil); err != nil {
+					slog.Debug("WebSocket ping failed", "hub", h.name, "error", err)
 					return
 				}
 			case <-done:
@@ -128,44 +184,19 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	if err := conn.Close(); err != nil {
-		slog.Warn("Failed to close connection", "error", err)
-	}
-
-	h.mu.Lock()
-	delete(h.clients, conn)
-	clientCount = len(h.clients)
-	h.mu.Unlock()
-
-	if h.onDisconnect != nil {
-		h.onDisconnect(wsConn)
-	}
-
-	slog.Debug("WebSocket client disconnected", "hub", h.name, "clients", clientCount)
+	h.disconnectClient(client)
 }
 
 // Broadcast sends data to all connected clients.
 func (h *WebSocketHub) Broadcast(data any) {
 	h.mu.RLock()
-	clients := slices.Collect(maps.Keys(h.clients))
+	clients := slices.Collect(maps.Values(h.clients))
 	h.mu.RUnlock()
 
 	for _, client := range clients {
-		if err := client.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
-			slog.Warn("Failed to set write deadline", "error", err)
-			continue
-		}
-		if err := client.WriteJSON(data); err != nil {
-			h.mu.Lock()
-			delete(h.clients, client)
-			h.mu.Unlock()
-			if err := client.Close(); err != nil {
-				slog.Warn("Failed to close client connection", "error", err)
-			}
-		} else {
-			if err := client.SetWriteDeadline(time.Time{}); err != nil {
-				slog.Warn("Failed to clear write deadline", "error", err)
-			}
+		if err := h.writeClientJSON(client, "broadcast", data); err != nil {
+			slog.Warn("Failed to broadcast WebSocket message", "hub", h.name, "error", err)
+			h.disconnectClient(client)
 		}
 	}
 }
