@@ -22,11 +22,12 @@ func TestWebSocketHubBroadcastSerializesConcurrentWriters(t *testing.T) {
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("Dial() error = %v", err)
 	}
-	defer conn.Close() //nolint:errcheck
+	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.Close()      //nolint:errcheck // Best-effort cleanup
 
 	done := make(chan struct{})
 	defer close(done)
