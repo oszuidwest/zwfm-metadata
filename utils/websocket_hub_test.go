@@ -94,12 +94,7 @@ func TestWebSocketHubBroadcastSerializesWithPingWriter(t *testing.T) {
 func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 	hub := NewWebSocketHub("test")
 
-	onConnectStarted := make(chan struct{})
-	releaseOnConnect := make(chan struct{})
-
 	hub.SetOnConnect(func(*WebSocketConn) any {
-		close(onConnectStarted)
-		<-releaseOnConnect
 		return map[string]any{
 			"id":   "initial-state",
 			"kind": "initial",
@@ -112,12 +107,6 @@ func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 
 	messages := startMessageReader(conn)
 	waitForClientCount(t, hub, 1, time.Second)
-
-	select {
-	case <-onConnectStarted:
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for onConnect callback")
-	}
 
 	const broadcasts = 20
 	expectedIDs := make(map[string]struct{}, broadcasts)
@@ -140,7 +129,6 @@ func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 	}
 
 	close(start)
-	close(releaseOnConnect)
 	wg.Wait()
 
 	received := waitForMessages(t, messages, broadcasts+1, 5*time.Second)
@@ -148,6 +136,12 @@ func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 
 	if !hasMessageKind(received, "initial") {
 		t.Fatal("expected initial onConnect message")
+	}
+
+	// The onConnect message must be first: it is enqueued before the client
+	// becomes visible to Broadcast, so no broadcast can precede it.
+	if kind, _ := received[0]["kind"].(string); kind != "initial" {
+		t.Fatal("expected onConnect message to be delivered first")
 	}
 
 	if got := hub.ClientCount(); got != 1 {
@@ -182,26 +176,180 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 	defer server.Close()
 	defer conn.Close() //nolint:errcheck // Best-effort cleanup
 
-	waitForClientCount(t, hub, 1, time.Second)
-
+	// The client is not yet registered (onConnect is blocking), so we wait
+	// for the callback to start instead of polling ClientCount.
 	select {
 	case <-onConnectStarted:
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for onConnect callback")
 	}
 
+	// Close the client connection while onConnect is still blocked. When
+	// released, HandleConnection will enqueue the message, register the
+	// client, and start writePump -- which will fail on the closed connection.
 	if err := conn.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
 
 	close(releaseOnConnect)
 
-	waitForClientCount(t, hub, 0, time.Second)
-
 	select {
 	case <-disconnected:
 	case <-time.After(time.Second):
 		t.Fatal("expected onDisconnect callback after failed initial write")
+	}
+
+	waitForClientCount(t, hub, 0, time.Second)
+}
+
+func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
+	hub := NewWebSocketHub("test")
+	hub.sendBufferSize = 2
+	hub.writeTimeout = 50 * time.Millisecond
+
+	disconnected := make(chan struct{}, 1)
+	hub.SetOnDisconnect(func(*WebSocketConn) {
+		select {
+		case disconnected <- struct{}{}:
+		default:
+		}
+	})
+
+	// Connect but intentionally do not read messages. The small send buffer
+	// will fill up and Broadcast will detect the slow client.
+	conn, server := dialTestWebSocket(t, hub)
+	defer server.Close()
+	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+
+	waitForClientCount(t, hub, 1, time.Second)
+
+	for i := 0; i < 100; i++ {
+		hub.Broadcast(map[string]any{"i": i})
+	}
+
+	select {
+	case <-disconnected:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected slow client to be disconnected")
+	}
+
+	waitForClientCount(t, hub, 0, 2*time.Second)
+}
+
+func TestWebSocketHubClientInitiatedClose(t *testing.T) {
+	hub := NewWebSocketHub("test")
+
+	disconnected := make(chan struct{}, 1)
+	hub.SetOnDisconnect(func(*WebSocketConn) {
+		select {
+		case disconnected <- struct{}{}:
+		default:
+		}
+	})
+
+	conn, server := dialTestWebSocket(t, hub)
+	defer server.Close()
+
+	waitForClientCount(t, hub, 1, time.Second)
+
+	// Client-initiated close: readPump detects the closed connection,
+	// signals done, writePump sends a close frame and exits via its
+	// deferred disconnectClient.
+	conn.WriteMessage( //nolint:errcheck,gosec // Best-effort close frame
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+	)
+	conn.Close() //nolint:errcheck,gosec // Best-effort cleanup
+
+	select {
+	case <-disconnected:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected onDisconnect after client-initiated close")
+	}
+
+	waitForClientCount(t, hub, 0, time.Second)
+}
+
+func TestWebSocketHubBroadcastMarshalFailure(t *testing.T) {
+	hub := NewWebSocketHub("test")
+
+	conn, server := dialTestWebSocket(t, hub)
+	defer server.Close()
+	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+
+	waitForClientCount(t, hub, 1, time.Second)
+
+	// Channels cannot be marshaled to JSON. Broadcast should return
+	// without panicking or disconnecting any client.
+	hub.Broadcast(make(chan int))
+
+	if got := hub.ClientCount(); got != 1 {
+		t.Fatalf("ClientCount() = %d after marshal failure, want 1", got)
+	}
+}
+
+func TestWebSocketHubOnConnectMarshalFailureRemovesClient(t *testing.T) {
+	hub := NewWebSocketHub("test")
+
+	// Return an un-marshalable value from onConnect.
+	hub.SetOnConnect(func(*WebSocketConn) any {
+		return make(chan int)
+	})
+
+	conn, server := dialTestWebSocket(t, hub)
+	defer server.Close()
+	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+
+	// The marshal failure in HandleConnection closes the connection
+	// before registration, so the client never appears in the map.
+	time.Sleep(100 * time.Millisecond)
+
+	if got := hub.ClientCount(); got != 0 {
+		t.Fatalf("ClientCount() = %d after onConnect marshal failure, want 0", got)
+	}
+}
+
+func TestWebSocketHubOnDisconnectCalledOnce(t *testing.T) {
+	hub := NewWebSocketHub("test")
+	hub.sendBufferSize = 1
+	hub.writeTimeout = 50 * time.Millisecond
+
+	var count sync.WaitGroup
+	count.Add(1)
+
+	var calls int32
+	var mu sync.Mutex
+	hub.SetOnDisconnect(func(*WebSocketConn) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		count.Done()
+	})
+
+	// Connect but do not read, so the send buffer fills quickly.
+	conn, server := dialTestWebSocket(t, hub)
+	defer server.Close()
+	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+
+	waitForClientCount(t, hub, 1, time.Second)
+
+	// Flood broadcasts to trigger signalDone from Broadcast (slow client)
+	// while writePump may also exit due to a write error. Both paths
+	// converge on disconnectClient, which must call onDisconnect exactly once.
+	for i := 0; i < 50; i++ {
+		hub.Broadcast(map[string]any{"i": i})
+	}
+
+	count.Wait()
+	waitForClientCount(t, hub, 0, 2*time.Second)
+
+	// Give any stray goroutines a moment to settle.
+	time.Sleep(50 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 1 {
+		t.Fatalf("onDisconnect called %d times, want 1", calls)
 	}
 }
 
