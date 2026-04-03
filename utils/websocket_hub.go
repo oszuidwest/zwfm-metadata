@@ -164,23 +164,29 @@ func (h *WebSocketHub) writePump(client *hubClient) {
 		select {
 		case msg := <-client.send:
 			if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
+				slog.Debug("WebSocket write deadline failed", "hub", h.name, "error", err)
 				return
 			}
 			if err := client.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				slog.Debug("WebSocket write failed", "hub", h.name, "error", err)
 				return
 			}
 
 			// Drain queued messages to reduce select overhead.
 			for n := len(client.send); n > 0; n-- {
 				if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
+					slog.Debug("WebSocket write deadline failed", "hub", h.name, "error", err)
 					return
 				}
 				if err := client.conn.WriteMessage(websocket.TextMessage, <-client.send); err != nil {
+					slog.Debug("WebSocket write failed", "hub", h.name, "error", err)
 					return
 				}
 			}
 
 		case <-client.done:
+			// Best-effort close frame; errors are expected since the
+			// connection may already be closed by the remote peer.
 			_ = client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout))
 			_ = client.conn.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
@@ -188,9 +194,11 @@ func (h *WebSocketHub) writePump(client *hubClient) {
 
 		case <-ticker.C:
 			if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
+				slog.Debug("WebSocket ping deadline failed", "hub", h.name, "error", err)
 				return
 			}
 			if err := client.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				slog.Debug("WebSocket ping failed", "hub", h.name, "error", err)
 				return
 			}
 		}
@@ -212,6 +220,9 @@ func (h *WebSocketHub) readPump(client *hubClient) {
 	for {
 		_, _, err := client.conn.ReadMessage()
 		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				slog.Debug("WebSocket read error", "hub", h.name, "error", err)
+			}
 			return
 		}
 	}
@@ -234,8 +245,14 @@ func (h *WebSocketHub) Broadcast(data any) {
 		select {
 		case client.send <- msg:
 		default:
-			slog.Warn("WebSocket client too slow, disconnecting", "hub", h.name)
-			client.signalDone()
+			// Skip clients already shutting down to avoid redundant warnings.
+			select {
+			case <-client.done:
+			default:
+				slog.Warn("WebSocket client too slow, disconnecting",
+					"hub", h.name, "remote_addr", client.conn.RemoteAddr())
+				client.signalDone()
+			}
 		}
 	}
 }
