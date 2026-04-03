@@ -214,7 +214,11 @@ func (h *WebSocketHub) readPump(client *hubClient) {
 		slog.Warn("Failed to set read deadline", "hub", h.name, "error", err)
 	}
 	client.conn.SetPongHandler(func(string) error {
-		return client.conn.SetReadDeadline(time.Now().Add(h.pongWait))
+		err := client.conn.SetReadDeadline(time.Now().Add(h.pongWait))
+		if err != nil {
+			slog.Debug("WebSocket pong deadline failed", "hub", h.name, "error", err)
+		}
+		return err
 	})
 
 	for {
