@@ -94,12 +94,7 @@ func TestWebSocketHubBroadcastSerializesWithPingWriter(t *testing.T) {
 func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 	hub := NewWebSocketHub("test")
 
-	onConnectStarted := make(chan struct{})
-	releaseOnConnect := make(chan struct{})
-
 	hub.SetOnConnect(func(*WebSocketConn) any {
-		close(onConnectStarted)
-		<-releaseOnConnect
 		return map[string]any{
 			"id":   "initial-state",
 			"kind": "initial",
@@ -112,12 +107,6 @@ func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 
 	messages := startMessageReader(conn)
 	waitForClientCount(t, hub, 1, time.Second)
-
-	select {
-	case <-onConnectStarted:
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for onConnect callback")
-	}
 
 	const broadcasts = 20
 	expectedIDs := make(map[string]struct{}, broadcasts)
@@ -140,7 +129,6 @@ func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 	}
 
 	close(start)
-	close(releaseOnConnect)
 	wg.Wait()
 
 	received := waitForMessages(t, messages, broadcasts+1, 5*time.Second)
@@ -148,6 +136,12 @@ func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 
 	if !hasMessageKind(received, "initial") {
 		t.Fatal("expected initial onConnect message")
+	}
+
+	// The onConnect message must be first: it is enqueued before the client
+	// becomes visible to Broadcast, so no broadcast can precede it.
+	if kind, _ := received[0]["kind"].(string); kind != "initial" {
+		t.Fatal("expected onConnect message to be delivered first")
 	}
 
 	if got := hub.ClientCount(); got != 1 {
@@ -182,27 +176,30 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 	defer server.Close()
 	defer conn.Close() //nolint:errcheck // Best-effort cleanup
 
-	waitForClientCount(t, hub, 1, time.Second)
-
+	// The client is not yet registered (onConnect is blocking), so we wait
+	// for the callback to start instead of polling ClientCount.
 	select {
 	case <-onConnectStarted:
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for onConnect callback")
 	}
 
+	// Close the client connection while onConnect is still blocked. When
+	// released, HandleConnection will enqueue the message, register the
+	// client, and start writePump -- which will fail on the closed connection.
 	if err := conn.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
 
 	close(releaseOnConnect)
 
-	waitForClientCount(t, hub, 0, time.Second)
-
 	select {
 	case <-disconnected:
 	case <-time.After(time.Second):
 		t.Fatal("expected onDisconnect callback after failed initial write")
 	}
+
+	waitForClientCount(t, hub, 0, time.Second)
 }
 
 func TestWebSocketHubSlowClientDisconnected(t *testing.T) {

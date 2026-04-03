@@ -122,24 +122,29 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		done:   make(chan struct{}),
 	}
 
+	// Enqueue the onConnect payload before registering the client in the map.
+	// This guarantees the initial state is first in the buffer and avoids a
+	// potential deadlock: if the client were already visible to Broadcast,
+	// concurrent broadcasts could fill the send buffer before writePump starts,
+	// causing the blocking send below to hang forever.
+	if h.onConnect != nil {
+		if data := h.onConnect(client.wsConn); data != nil {
+			msg, err := json.Marshal(data)
+			if err != nil {
+				slog.Warn("Failed to marshal initial WebSocket data", "hub", h.name, "error", err)
+				conn.Close() //nolint:errcheck,gosec // Best-effort cleanup on marshal failure
+				return
+			}
+			client.send <- msg
+		}
+	}
+
 	h.mu.Lock()
 	h.clients[conn] = client
 	clientCount := len(h.clients)
 	h.mu.Unlock()
 
 	slog.Debug("WebSocket client connected", "hub", h.name, "clients", clientCount)
-
-	if h.onConnect != nil {
-		if data := h.onConnect(client.wsConn); data != nil {
-			msg, err := json.Marshal(data)
-			if err != nil {
-				slog.Warn("Failed to marshal initial WebSocket data", "hub", h.name, "error", err)
-				h.disconnectClient(client)
-				return
-			}
-			client.send <- msg
-		}
-	}
 
 	go h.writePump(client)
 	h.readPump(client)
@@ -167,6 +172,9 @@ func (h *WebSocketHub) writePump(client *hubClient) {
 
 			// Drain queued messages to reduce select overhead.
 			for n := len(client.send); n > 0; n-- {
+				if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
+					return
+				}
 				if err := client.conn.WriteMessage(websocket.TextMessage, <-client.send); err != nil {
 					return
 				}
