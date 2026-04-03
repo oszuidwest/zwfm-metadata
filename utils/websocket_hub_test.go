@@ -205,6 +205,40 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 	}
 }
 
+func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
+	hub := NewWebSocketHub("test")
+	hub.sendBufferSize = 2
+	hub.writeTimeout = 50 * time.Millisecond
+
+	disconnected := make(chan struct{}, 1)
+	hub.SetOnDisconnect(func(*WebSocketConn) {
+		select {
+		case disconnected <- struct{}{}:
+		default:
+		}
+	})
+
+	// Connect but intentionally do not read messages. The small send buffer
+	// will fill up and Broadcast will detect the slow client.
+	conn, server := dialTestWebSocket(t, hub)
+	defer server.Close()
+	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+
+	waitForClientCount(t, hub, 1, time.Second)
+
+	for i := 0; i < 100; i++ {
+		hub.Broadcast(map[string]any{"i": i})
+	}
+
+	select {
+	case <-disconnected:
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected slow client to be disconnected")
+	}
+
+	waitForClientCount(t, hub, 0, 2*time.Second)
+}
+
 func dialTestWebSocket(t *testing.T, hub *WebSocketHub) (*websocket.Conn, *httptest.Server) {
 	t.Helper()
 
