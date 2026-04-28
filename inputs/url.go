@@ -82,7 +82,11 @@ func (u *URLInput) poll() {
 	}
 
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		slog.Error("URL must use http or https scheme", "input", u.GetName(), "url", u.settings.URL, "scheme", parsedURL.Scheme) //nolint:gosec // Logging config value for diagnostics
+		slog.Error("URL must use http or https scheme", //nolint:gosec // Logging config value for diagnostics
+			"input", u.GetName(),
+			"url", u.settings.URL,
+			"scheme", parsedURL.Scheme,
+		)
 		return
 	}
 
@@ -114,7 +118,7 @@ func (u *URLInput) poll() {
 			slog.Error("Cannot navigate JSON path", "input", u.GetName(), "path", u.settings.JSONKey)
 			return
 		}
-		content = fmt.Sprintf("%v", contentVal)
+		content = fmt.Sprint(contentVal)
 
 		if u.settings.ExpiryKey != "" {
 			expVal, ok := extractJSONValue(data, u.settings.ExpiryKey)

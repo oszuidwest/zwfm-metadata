@@ -441,7 +441,11 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 		mr.timeline.addUpdate(&update)
 
 		if delay > 0 {
-			slog.Debug("Scheduled update for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
+			slog.Debug("Scheduled update for output",
+				"output", outputName,
+				"time", executeAt.Format("15:04:05"),
+				"delay_seconds", int(delay.Seconds()),
+			)
 		} else {
 			slog.Debug("Scheduled immediate update for output", "output", outputName)
 		}
@@ -548,7 +552,9 @@ func (mr *MetadataRouter) currentInputNeedsFallback(outputName string) bool {
 }
 
 // scheduleFallbackUpdate schedules an expiration fallback update if the content differs from last sent.
-func (mr *MetadataRouter) scheduleFallbackUpdate(outputName string, output Output, inputName string, metadata *Metadata) {
+func (mr *MetadataRouter) scheduleFallbackUpdate(
+	outputName string, output Output, inputName string, metadata *Metadata,
+) {
 	st := mr.transformMetadataForOutput(outputName, metadata, inputName)
 	if !st.HasContent() {
 		return
@@ -572,7 +578,11 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(outputName string, output Outpu
 	}
 
 	mr.timeline.addUpdate(&update)
-	slog.Debug("Scheduled expiration fallback for output", "output", outputName, "time", executeAt.Format("15:04:05"), "delay_seconds", int(delay.Seconds()))
+	slog.Debug("Scheduled expiration fallback for output",
+		"output", outputName,
+		"time", executeAt.Format("15:04:05"),
+		"delay_seconds", int(delay.Seconds()),
+	)
 }
 
 // applyFilterAction applies the action specified by a filter to a StructuredText.
@@ -641,7 +651,9 @@ func (mr *MetadataRouter) wouldFiltersReject(inputName string, metadata *Metadat
 // transformMetadataForOutput builds a StructuredText from metadata with prefix/suffix and formatters applied.
 // NOTE: This method reads inputPrefixSuffix, inputTypes, inputFilters, and outputFormatters
 // without locks. These maps are immutable after Start() - enforced by panicIfStarted in Set* methods.
-func (mr *MetadataRouter) transformMetadataForOutput(outputName string, metadata *Metadata, inputName string) *StructuredText {
+func (mr *MetadataRouter) transformMetadataForOutput(
+	outputName string, metadata *Metadata, inputName string,
+) *StructuredText {
 	if metadata == nil {
 		return nil
 	}
@@ -761,7 +773,11 @@ func (mr *MetadataRouter) executeUpdate(update *ScheduledUpdate) {
 	mr.currentInputs[update.OutputName] = inputName
 	mr.mu.Unlock()
 
-	slog.Debug("Executing update for output", "update_type", update.UpdateType, "output", update.OutputName, "text", formattedText)
+	slog.Debug("Executing update for output",
+		"update_type", update.UpdateType,
+		"output", update.OutputName,
+		"text", formattedText,
+	)
 
 	update.Output.Send(st)
 }

@@ -21,7 +21,10 @@ type DynamicInput struct {
 // NewDynamicInput initializes an HTTP API-driven input with the given settings.
 func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicInput {
 	if settings.Expiration.RoundUpMinutes != nil && settings.Expiration.Type != "dynamic" {
-		slog.Warn("roundUpMinutes is only used with expiration type \"dynamic\" and will be ignored", "input", name, "type", settings.Expiration.Type)
+		slog.Warn("roundUpMinutes is only used with expiration type \"dynamic\" and will be ignored",
+			"input", name,
+			"type", settings.Expiration.Type,
+		)
 	}
 
 	return &DynamicInput{
@@ -31,28 +34,37 @@ func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicIn
 	}
 }
 
+// MetadataUpdate holds the fields for an incoming metadata update via the HTTP API.
+type MetadataUpdate struct {
+	SongID   string
+	Artist   string
+	Title    string
+	Duration string
+	Secret   string
+}
+
 // UpdateMetadata updates the metadata from an HTTP request.
-func (d *DynamicInput) UpdateMetadata(songID, artist, title, duration, secret string) error {
-	if d.settings.Secret != "" && secret != d.settings.Secret {
+func (d *DynamicInput) UpdateMetadata(update MetadataUpdate) error {
+	if d.settings.Secret != "" && update.Secret != d.settings.Secret {
 		return fmt.Errorf("invalid secret")
 	}
 
-	if title == "" {
+	if update.Title == "" {
 		return fmt.Errorf("title is required")
 	}
 
 	metadata := &core.Metadata{
 		Name:      d.GetName(),
-		SongID:    songID,
-		Artist:    artist,
-		Title:     title,
-		Duration:  duration,
+		SongID:    update.SongID,
+		Artist:    update.Artist,
+		Title:     update.Title,
+		Duration:  update.Duration,
 		UpdatedAt: time.Now(),
 	}
 
 	switch d.settings.Expiration.Type {
 	case "dynamic":
-		expiresAt := d.calculateDynamicExpiration(duration)
+		expiresAt := d.calculateDynamicExpiration(update.Duration)
 		metadata.ExpiresAt = &expiresAt
 	case "fixed":
 		expiresAt := time.Now().Add(time.Duration(d.settings.Expiration.Minutes) * time.Minute)
@@ -72,7 +84,10 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 	}
 
 	if totalSeconds <= 0 {
-		slog.Error("Duration must be greater than 0 seconds - will expire immediately", "input", d.GetName(), "duration", duration)
+		slog.Error("Duration must be greater than 0 seconds - will expire immediately",
+			"input", d.GetName(),
+			"duration", duration,
+		)
 		return time.Now()
 	}
 
@@ -84,7 +99,13 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 		expiresAt = time.Now().Add(time.Duration(totalSeconds) * time.Second)
 	}
 
-	slog.Debug("Calculated dynamic expiration", "input", d.GetName(), "duration", duration, "totalSeconds", totalSeconds, "roundUpMinutes", d.roundUpMinutes, "expiresAt", expiresAt.Format("15:04:05"))
+	slog.Debug("Calculated dynamic expiration",
+		"input", d.GetName(),
+		"duration", duration,
+		"totalSeconds", totalSeconds,
+		"roundUpMinutes", d.roundUpMinutes,
+		"expiresAt", expiresAt.Format("15:04:05"),
+	)
 
 	return expiresAt
 }
@@ -93,9 +114,17 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 func (d *DynamicInput) handleUnsupportedFormat(duration string) time.Time {
 	if d.settings.Expiration.Minutes > 0 {
 		expiresAt := time.Now().Add(time.Duration(d.settings.Expiration.Minutes) * time.Minute)
-		slog.Error("Unsupported duration format - using fixed expiration", "input", d.GetName(), "duration", duration, "expected", "seconds, MM:SS, or HH:MM:SS format only")
+		slog.Error("Unsupported duration format - using fixed expiration",
+			"input", d.GetName(),
+			"duration", duration,
+			"expected", "seconds, MM:SS, or HH:MM:SS format only",
+		)
 		return expiresAt
 	}
-	slog.Error("Unsupported duration format - will expire immediately", "input", d.GetName(), "duration", duration, "expected", "seconds, MM:SS, or HH:MM:SS format only")
+	slog.Error("Unsupported duration format - will expire immediately",
+		"input", d.GetName(),
+		"duration", duration,
+		"expected", "seconds, MM:SS, or HH:MM:SS format only",
+	)
 	return time.Now()
 }

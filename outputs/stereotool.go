@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
@@ -54,7 +55,7 @@ func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error {
 	requestURL := fmt.Sprintf("http://%s:%d/json-1/lis{%q:{%q:%q,%q:%q}}",
 		i.settings.Hostname, i.settings.Port,
-		fmt.Sprintf("%d", id), "forced", "1", "new_value", url.QueryEscape(metadata))
+		strconv.Itoa(id), "forced", "1", "new_value", url.QueryEscape(metadata))
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, http.NoBody)
 	if err != nil {
@@ -69,7 +70,8 @@ func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("StereoTool API error for %s: status %d, response: %s", fieldName, resp.StatusCode, string(bodyBytes))
+		return fmt.Errorf("StereoTool API error for %s: status %d, response: %s",
+			fieldName, resp.StatusCode, string(bodyBytes))
 	}
 
 	slog.Debug("Updated StereoTool field", "output", i.GetName(), "field", fieldName, "metadata", metadata)

@@ -49,7 +49,11 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 		return nil
 	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		slog.Error("URL must use http or https scheme", "output", name, "url", settings.URL, "scheme", parsedURL.Scheme) //nolint:gosec // Logging config value for diagnostics
+		slog.Error("URL must use http or https scheme", //nolint:gosec // Logging config value for diagnostics
+			"output", name,
+			"url", settings.URL,
+			"scheme", parsedURL.Scheme,
+		)
 		return nil
 	}
 
@@ -85,9 +89,9 @@ func (u *URLOutput) Send(st *core.StructuredText) {
 func (u *URLOutput) sendRequest(payload *utils.UniversalMetadata) {
 	if u.settings.Method == "GET" {
 		u.sendGETRequest(payload)
-	} else {
-		u.sendPOSTRequest(payload)
+		return
 	}
+	u.sendPOSTRequest(payload)
 }
 
 func urlEncodeTemplateData(data map[string]any) map[string]any {
@@ -151,11 +155,19 @@ func (u *URLOutput) sendGETRequest(payload *utils.UniversalMetadata) {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		slog.Error("GET request failed", "output", u.GetName(), "status", resp.StatusCode, "response", string(bodyBytes)) //nolint:gosec // Logging response for diagnostics
+		slog.Error("GET request failed", //nolint:gosec // Logging response for diagnostics
+			"output", u.GetName(),
+			"status", resp.StatusCode,
+			"response", string(bodyBytes),
+		)
 		return
 	}
 
-	slog.Debug("Successfully sent GET", "output", u.GetName(), "url", finalURL, "status", resp.StatusCode) //nolint:gosec // Logging URL for diagnostics
+	slog.Debug("Successfully sent GET", //nolint:gosec // Logging URL for diagnostics
+		"output", u.GetName(),
+		"url", finalURL,
+		"status", resp.StatusCode,
+	)
 }
 
 func (u *URLOutput) sendPOSTRequest(payload *utils.UniversalMetadata) {
@@ -176,7 +188,9 @@ func (u *URLOutput) sendPOSTRequest(payload *utils.UniversalMetadata) {
 
 	slog.Debug("Sending POST request", "output", u.GetName(), "url", u.settings.URL, "payload", string(jsonData))
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, u.settings.URL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(
+		context.Background(), http.MethodPost, u.settings.URL, bytes.NewBuffer(jsonData),
+	)
 	if err != nil {
 		slog.Error("Failed to create POST request", "output", u.GetName(), "error", err)
 		return
@@ -196,9 +210,17 @@ func (u *URLOutput) sendPOSTRequest(payload *utils.UniversalMetadata) {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		slog.Error("POST request failed", "output", u.GetName(), "status", resp.StatusCode, "response", string(bodyBytes)) //nolint:gosec // Logging response for diagnostics
+		slog.Error("POST request failed", //nolint:gosec // Logging response for diagnostics
+			"output", u.GetName(),
+			"status", resp.StatusCode,
+			"response", string(bodyBytes),
+		)
 		return
 	}
 
-	slog.Debug("Successfully sent POST", "output", u.GetName(), "url", u.settings.URL, "status", resp.StatusCode) //nolint:gosec // Logging URL for diagnostics
+	slog.Debug("Successfully sent POST", //nolint:gosec // Logging URL for diagnostics
+		"output", u.GetName(),
+		"url", u.settings.URL,
+		"status", resp.StatusCode,
+	)
 }
