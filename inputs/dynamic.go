@@ -44,7 +44,7 @@ type MetadataUpdate struct {
 }
 
 // UpdateMetadata updates the metadata from an HTTP request.
-func (d *DynamicInput) UpdateMetadata(update MetadataUpdate) error {
+func (d *DynamicInput) UpdateMetadata(update *MetadataUpdate) error {
 	if d.settings.Secret != "" && update.Secret != d.settings.Secret {
 		return fmt.Errorf("invalid secret")
 	}
