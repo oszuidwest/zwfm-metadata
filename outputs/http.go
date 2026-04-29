@@ -52,7 +52,11 @@ func (h *HTTPOutput) RegisterRoutes(mux *http.ServeMux) {
 			h.handleEndpoint(w, req, endpoint)
 		})
 
-		slog.Info("HTTP endpoint registered", "output", h.GetName(), "path", endpoint.Path, "type", endpoint.ResponseType)
+		slog.Info("HTTP endpoint registered",
+			"output", h.GetName(),
+			"path", endpoint.Path,
+			"type", endpoint.ResponseType,
+		)
 	}
 }
 
@@ -62,7 +66,11 @@ func (h *HTTPOutput) Send(st *core.StructuredText) {
 	h.storeCurrentMetadata(httpMetadata)
 }
 
-func (h *HTTPOutput) handleEndpoint(w http.ResponseWriter, _ *http.Request, endpoint config.HTTPEndpoint) {
+func (h *HTTPOutput) handleEndpoint(
+	w http.ResponseWriter,
+	_ *http.Request,
+	endpoint config.HTTPEndpoint,
+) {
 	metadata := h.getCurrentMetadata()
 	if metadata == nil {
 		http.Error(w, "No metadata available", http.StatusNoContent)
@@ -71,7 +79,11 @@ func (h *HTTPOutput) handleEndpoint(w http.ResponseWriter, _ *http.Request, endp
 
 	responseData, contentType, err := h.generateResponse(metadata, endpoint)
 	if err != nil {
-		slog.Error("Failed to generate HTTP response", "output", h.GetName(), "path", endpoint.Path, "error", err)
+		slog.Error("Failed to generate HTTP response",
+			"output", h.GetName(),
+			"path", endpoint.Path,
+			"error", err,
+		)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -80,20 +92,32 @@ func (h *HTTPOutput) handleEndpoint(w http.ResponseWriter, _ *http.Request, endp
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if _, err := w.Write(responseData); err != nil {
-		slog.Error("Failed to write HTTP response", "output", h.GetName(), "path", endpoint.Path, "error", err)
+		slog.Error("Failed to write HTTP response",
+			"output", h.GetName(),
+			"path", endpoint.Path,
+			"error", err,
+		)
 	}
 
-	slog.Debug("Served HTTP response", "output", h.GetName(), "path", endpoint.Path, "content_type", contentType)
+	slog.Debug("Served HTTP response",
+		"output", h.GetName(),
+		"path", endpoint.Path,
+		"content_type", contentType,
+	)
 }
 
-func (h *HTTPOutput) generateResponse(metadata *utils.UniversalMetadata, endpoint config.HTTPEndpoint) (data []byte, contentType string, err error) {
+func (h *HTTPOutput) generateResponse(
+	metadata *utils.UniversalMetadata, endpoint config.HTTPEndpoint,
+) (data []byte, contentType string, err error) {
 	if endpoint.PayloadMapping != nil {
 		return h.generateCustomResponse(metadata, endpoint)
 	}
 	return h.generateStandardResponse(metadata, endpoint.ResponseType)
 }
 
-func (h *HTTPOutput) generateCustomResponse(metadata *utils.UniversalMetadata, endpoint config.HTTPEndpoint) (data []byte, contentType string, err error) {
+func (h *HTTPOutput) generateCustomResponse(
+	metadata *utils.UniversalMetadata, endpoint config.HTTPEndpoint,
+) (data []byte, contentType string, err error) {
 	mapper := h.endpointMappers[endpoint.Path]
 	if mapper == nil {
 		mapper = utils.NewPayloadMapper(endpoint.PayloadMapping)
@@ -111,7 +135,9 @@ func (h *HTTPOutput) generateCustomResponse(metadata *utils.UniversalMetadata, e
 	return h.encodeResponse(result, endpoint.ResponseType)
 }
 
-func (h *HTTPOutput) generateStandardResponse(metadata *utils.UniversalMetadata, responseType string) (data []byte, contentType string, err error) {
+func (h *HTTPOutput) generateStandardResponse(
+	metadata *utils.UniversalMetadata, responseType string,
+) (data []byte, contentType string, err error) {
 	switch strings.ToLower(responseType) {
 	case "xml":
 		return h.encodeResponse(h.buildXMLString(metadata), responseType)
@@ -124,7 +150,10 @@ func (h *HTTPOutput) generateStandardResponse(metadata *utils.UniversalMetadata,
 	}
 }
 
-func (h *HTTPOutput) encodeResponse(data any, responseType string) (encoded []byte, contentType string, err error) {
+func (h *HTTPOutput) encodeResponse(
+	data any,
+	responseType string,
+) (encoded []byte, contentType string, err error) {
 	switch strings.ToLower(responseType) {
 	case "xml":
 		if str, ok := data.(string); ok {

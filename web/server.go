@@ -160,7 +160,13 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err := dynamicInput.UpdateMetadata(songID, artist, title, duration, secret)
+	err := dynamicInput.UpdateMetadata(&inputs.MetadataRequest{
+		SongID:   songID,
+		Artist:   artist,
+		Title:    title,
+		Duration: duration,
+		Secret:   secret,
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
