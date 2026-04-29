@@ -39,7 +39,11 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 
 	settings.Method = strings.ToUpper(settings.Method)
 	if settings.Method != "GET" && settings.Method != "POST" {
-		slog.Error("Invalid method for URL output", "output", name, "method", settings.Method, "valid_methods", "GET, POST")
+		slog.Error("Invalid method for URL output",
+			"output", name,
+			"method", settings.Method,
+			"valid_methods", "GET, POST",
+		)
 		return nil
 	}
 
@@ -118,7 +122,11 @@ func (u *URLOutput) sendGETRequest(payload *utils.UniversalMetadata) {
 
 		var urlBuffer strings.Builder
 		if err := u.urlTemplate.Execute(&urlBuffer, encodedData); err != nil {
-			slog.Error("Failed to execute URL template", "output", u.GetName(), "template", u.settings.URL, "error", err)
+			slog.Error("Failed to execute URL template",
+				"output", u.GetName(),
+				"template", u.settings.URL,
+				"error", err,
+			)
 			return
 		}
 		requestURL = urlBuffer.String()
@@ -134,7 +142,10 @@ func (u *URLOutput) sendGETRequest(payload *utils.UniversalMetadata) {
 
 	finalURL := parsedURL.String()
 
-	slog.Debug("Sending GET request", "output", u.GetName(), "url", finalURL) //nolint:gosec // Logging URL for diagnostics
+	slog.Debug("Sending GET request", //nolint:gosec // Logging URL for diagnostics
+		"output", u.GetName(),
+		"url", finalURL,
+	)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, finalURL, http.NoBody)
 	if err != nil {
@@ -186,7 +197,11 @@ func (u *URLOutput) sendPOSTRequest(payload *utils.UniversalMetadata) {
 		return
 	}
 
-	slog.Debug("Sending POST request", "output", u.GetName(), "url", u.settings.URL, "payload", string(jsonData))
+	slog.Debug("Sending POST request",
+		"output", u.GetName(),
+		"url", u.settings.URL,
+		"payload", string(jsonData),
+	)
 
 	req, err := http.NewRequestWithContext(
 		context.Background(), http.MethodPost, u.settings.URL, bytes.NewBuffer(jsonData),
