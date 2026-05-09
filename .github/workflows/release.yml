@@ -5,7 +5,7 @@
 # `docker pull` line in release notes (GitHub Actions expressions can't slice).
 name: Release
 
-on:
+'on':
   push:
     tags: ['v*']
   workflow_dispatch:
@@ -14,6 +14,9 @@ on:
         description: 'Version (edge, vX.Y.Z, or X.Y.Z auto-prefixed)'
         required: true
         default: 'edge'
+
+permissions:
+  contents: read
 
 jobs:
   body:
@@ -28,9 +31,10 @@ jobs:
         run: |
           VERSION="${INPUT_VERSION:-$REF_NAME}"
           VERSION_NO_V="${VERSION#v}"
+          IMAGE="ghcr.io/oszuidwest/zwfm-metadata:${VERSION_NO_V}"
           {
             echo 'text<<RELEASE_BODY_EOF'
-            echo "**Docker**: \`docker pull ghcr.io/oszuidwest/zwfm-metadata:${VERSION_NO_V}\`"
+            echo "**Docker**: \`docker pull ${IMAGE}\`"
             echo ""
             echo "Binary downloads are available below as release assets."
             echo 'RELEASE_BODY_EOF'
@@ -54,7 +58,7 @@ jobs:
       enable-docker: true
       image-labels: |
         org.opencontainers.image.title=ZuidWest FM Metadata
-        org.opencontainers.image.description=Metadata handling middleware for ZuidWest FM
+        org.opencontainers.image.description=Metadata middleware for ZuidWest FM
         org.opencontainers.image.vendor=Streekomroep ZuidWest
         org.opencontainers.image.licenses=MIT
       release-body: ${{ needs.body.outputs.text }}
