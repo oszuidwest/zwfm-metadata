@@ -297,7 +297,7 @@ Duration formats supported: `"272"` (seconds), `"3:45"` (MM:SS), `"1:30:00"` (HH
 - When `action: "clear"` results in both artist and title being empty, no update is sent (outputs keep previous content). This is because empty metadata is not valid.
 
 **Fallback Behavior:**
-When a filter causes an update to be skipped, the outputs continue displaying their previous content. The system does not automatically fall back to lower-priority inputs—the skip simply prevents the current update from being processed.
+When a filter causes an update to be skipped, the outputs continue displaying their previous content. The system does not automatically fall back to lower-priority inputs-the skip simply prevents the current update from being processed.
 
 #### Examples
 
