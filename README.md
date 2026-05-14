@@ -790,6 +790,7 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 - **Field references**: Use `{{.fieldname}}` to reference metadata fields
 - **Template functions**: Use pipe syntax for transformations, e.g., `{{.title | upper}}`
 - **Nested objects**: Create complex JSON structures with nested mappings
+- **Arrays of objects**: Template strings inside objects in arrays are expanded; non-object array values are copied as-is
 - **Mixed templates**: Combine static text with fields, e.g., `"Now playing: {{.title}}"`
 
 #### Available Fields
