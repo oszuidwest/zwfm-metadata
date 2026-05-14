@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"log/slog"
+	"reflect"
 	"strings"
 	"sync"
 	"text/template"
@@ -55,9 +56,33 @@ func (pm *PayloadMapper) processMapping(mapping, result map[string]any, data any
 			pm.processMapping(v, nestedResult, data)
 			result[key] = nestedResult
 		default:
-			result[key] = value
+			if rv := reflect.ValueOf(value); rv.Kind() == reflect.Slice {
+				items := make([]any, rv.Len())
+				for i := range rv.Len() {
+					items[i] = rv.Index(i).Interface()
+				}
+				result[key] = pm.processMappingSlice(items, data)
+			} else {
+				result[key] = value
+			}
 		}
 	}
+}
+
+// processMappingSlice applies template mapping to each object in a JSON array (other elements pass through).
+func (pm *PayloadMapper) processMappingSlice(items []any, data any) []any {
+	out := make([]any, len(items))
+	for i, item := range items {
+		nested, ok := item.(map[string]any)
+		if !ok {
+			out[i] = item
+			continue
+		}
+		nestedResult := make(map[string]any)
+		pm.processMapping(nested, nestedResult, data)
+		out[i] = nestedResult
+	}
+	return out
 }
 
 // processTemplate executes a template string with the provided data.
