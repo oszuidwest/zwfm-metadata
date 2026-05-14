@@ -40,7 +40,7 @@ func (pm *PayloadMapper) MapPayload(data any) map[string]any {
 	return result
 }
 
-// processMapping walks the mapping tree and applies templates to string values.
+// processMapping walks the mapping tree and applies templates to strings, nested maps, and object slices.
 func (pm *PayloadMapper) processMapping(mapping, result map[string]any, data any) {
 	for key, value := range mapping {
 		switch v := value.(type) {
@@ -69,7 +69,7 @@ func (pm *PayloadMapper) processMapping(mapping, result map[string]any, data any
 	}
 }
 
-// processMappingSlice applies template mapping to each object in a JSON array (other elements pass through).
+// processMappingSlice expands templates inside array-of-object mappings; non-object elements are copied as-is.
 func (pm *PayloadMapper) processMappingSlice(items []any, data any) []any {
 	out := make([]any, len(items))
 	for i, item := range items {
