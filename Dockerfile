@@ -1,14 +1,17 @@
+# syntax=docker/dockerfile:1
+
 # Build stage
-FROM golang:1.26-alpine3.23 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine3.23 AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apk add --no-cache ca-certificates git
 
-WORKDIR /app
+WORKDIR /src
 
 # Copy go mod files
 COPY go.mod go.sum ./
-RUN go mod download && go mod verify
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download && go mod verify
 
 # Copy source and build
 COPY . .
@@ -23,41 +26,39 @@ ARG COMMIT=unknown
 ARG BUILD_TIME
 
 # Build the binary for the target platform
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
-    -ldflags="-w -s -extldflags '-static' -X zwfm-metadata/utils.Version=${VERSION} -X zwfm-metadata/utils.Commit=${COMMIT} -X 'zwfm-metadata/utils.BuildTime=${BUILD_TIME}'" \
-    -a -installsuffix cgo \
-    -o zwfm-metadata .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 \
+    GOOS=${TARGETOS:-linux} \
+    GOARCH=${TARGETARCH:-$(go env GOARCH)} \
+    go build \
+    -trimpath \
+    -buildvcs=false \
+    -ldflags="-s -w -buildid= -X zwfm-metadata/utils.Version=${VERSION} -X zwfm-metadata/utils.Commit=${COMMIT} -X 'zwfm-metadata/utils.BuildTime=${BUILD_TIME}'" \
+    -o /runtime/app/zwfm-metadata . && \
+    cp config-example.json /runtime/app/config-example.json
 
 # Runtime stage
-FROM alpine:3.23
+# Chainguard static publishes only :latest (rolling) plus immutable digests; pin via digest in CI for reproducibility.
+# hadolint ignore=DL3007
+FROM cgr.dev/chainguard/static:latest
 
 LABEL org.opencontainers.image.source="https://github.com/oszuidwest/zwfm-metadata"
 LABEL org.opencontainers.image.description="Metadata handling middleware for ZuidWest FM"
 LABEL org.opencontainers.image.licenses="MIT"
 
-# Upgrade base packages to patch known vulnerabilities + install packages + create user + setup directories
-RUN apk --no-cache upgrade && \
-    apk --no-cache add ca-certificates tzdata wget && \
-    addgroup -g 1000 zwfm && \
-    adduser -D -s /bin/sh -u 1000 -G zwfm zwfm && \
-    mkdir -p /app && \
-    chown zwfm:zwfm /app
+# Runtime files run as UID/GID 1000 to match volume permissions from prior alpine-based releases.
+COPY --from=builder --chown=1000:1000 /runtime/app /app
 
 WORKDIR /app
-
-# Copy with correct ownership
-COPY --from=builder --chown=zwfm:zwfm /app/zwfm-metadata ./zwfm-metadata
-COPY --from=builder --chown=zwfm:zwfm /app/config-example.json ./config-example.json
-
-# Switch to non-root user
-USER zwfm
+USER 1000:1000
 
 # Expose port
 EXPOSE 9000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --timeout=3 -O /dev/null http://localhost:9000/ || exit 1
+    CMD ["/app/zwfm-metadata", "-healthcheck", "http://127.0.0.1:9000/"]
 
 # Set default command
-CMD ["./zwfm-metadata", "-config", "config.json"]
+CMD ["/app/zwfm-metadata", "-config", "/app/config.json"]
