@@ -64,3 +64,15 @@ func TestRunHealthcheckRejectsEmptyURL(t *testing.T) {
 		t.Fatal("runHealthcheck() error = nil, want error")
 	}
 }
+
+func TestRunHealthcheckUnreachableServer(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := server.URL
+	server.Close()
+
+	if err := runHealthcheck(context.Background(), url); err == nil {
+		t.Fatal("runHealthcheck() error = nil, want error for unreachable server")
+	}
+}
