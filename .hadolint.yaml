@@ -21,6 +21,7 @@ ignored:
 
 trustedRegistries:
   - docker.io
+  - cgr.dev
   - ghcr.io
   - gcr.io
   - quay.io

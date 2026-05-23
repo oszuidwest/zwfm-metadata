@@ -22,8 +22,17 @@ import (
 
 func main() {
 	configFile := flag.String("config", "config.json", "Path to configuration file")
+	healthcheckURL := flag.String("healthcheck", "", "URL to check and exit")
 	showVersion := flag.Bool("version", false, "Show version information")
 	flag.Parse()
+
+	if *healthcheckURL != "" {
+		if err := runHealthcheck(context.Background(), *healthcheckURL); err != nil {
+			fmt.Fprintf(os.Stderr, "healthcheck failed: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	if *showVersion {
 		fmt.Printf("zwfm-metadata %s (commit: %s, built: %s)\n", utils.Version, utils.Commit, utils.BuildTime)
