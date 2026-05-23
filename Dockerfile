@@ -39,6 +39,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     cp config-example.json /runtime/app/config-example.json
 
 # Runtime stage
+# Chainguard static publishes only :latest (rolling) plus immutable digests; pin via digest in CI for reproducibility.
 # hadolint ignore=DL3007
 FROM cgr.dev/chainguard/static:latest
 
@@ -46,7 +47,7 @@ LABEL org.opencontainers.image.source="https://github.com/oszuidwest/zwfm-metada
 LABEL org.opencontainers.image.description="Metadata handling middleware for ZuidWest FM"
 LABEL org.opencontainers.image.licenses="MIT"
 
-# Copy runtime files and keep the runtime UID compatible with the old image.
+# Runtime files run as UID/GID 1000 to match volume permissions from prior alpine-based releases.
 COPY --from=builder --chown=1000:1000 /runtime/app /app
 
 WORKDIR /app
