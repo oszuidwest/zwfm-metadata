@@ -1,7 +1,6 @@
 package outputs
 
 import (
-	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -17,16 +16,16 @@ type WebSocketOutput struct {
 	core.PassiveComponent
 	settings        config.WebSocketOutputConfig
 	hub             *utils.WebSocketHub
-	currentMetadata *utils.UniversalMetadata
+	currentMetadata *UniversalMetadata
 	metadataMu      sync.RWMutex
-	payloadMapper   *utils.PayloadMapper
+	payloadMapper   *PayloadMapper
 }
 
 // NewWebSocketOutput creates a WebSocketOutput with the given name and settings.
 func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *WebSocketOutput {
-	var mapper *utils.PayloadMapper
+	var mapper *PayloadMapper
 	if settings.PayloadMapping != nil {
-		mapper = utils.NewPayloadMapper(settings.PayloadMapping)
+		mapper = NewPayloadMapper(settings.PayloadMapping)
 	}
 
 	output := &WebSocketOutput{
@@ -37,7 +36,7 @@ func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *Web
 	}
 	output.SetDelay(settings.Delay)
 
-	output.hub.SetOnConnect(func(conn *utils.WebSocketConn) any {
+	output.hub.SetOnConnect(func() any {
 		output.metadataMu.RLock()
 		defer output.metadataMu.RUnlock()
 		if output.currentMetadata != nil {
@@ -57,24 +56,19 @@ func (w *WebSocketOutput) RegisterRoutes(mux *http.ServeMux) {
 
 // Send broadcasts metadata to all connected WebSocket clients.
 func (w *WebSocketOutput) Send(st *core.StructuredText) {
-	msg := utils.ConvertStructuredTextWithType(st, "metadata_update")
+	msg := ConvertStructuredTextWithType(st, "metadata_update")
 
 	w.storeCurrentMetadata(msg)
-	w.broadcastMessage(msg)
+	w.hub.Broadcast(w.preparePayload(msg))
 }
 
-func (w *WebSocketOutput) storeCurrentMetadata(metadata *utils.UniversalMetadata) {
+func (w *WebSocketOutput) storeCurrentMetadata(metadata *UniversalMetadata) {
 	w.metadataMu.Lock()
 	defer w.metadataMu.Unlock()
 	w.currentMetadata = metadata
 }
 
-func (w *WebSocketOutput) broadcastMessage(msg *utils.UniversalMetadata) {
-	payload := w.preparePayload(msg)
-	w.hub.Broadcast(payload)
-}
-
-func (w *WebSocketOutput) preparePayload(msg *utils.UniversalMetadata) any {
+func (w *WebSocketOutput) preparePayload(msg *UniversalMetadata) any {
 	if w.payloadMapper != nil {
 		payload := w.payloadMapper.MapPayload(msg.ToTemplateData())
 		if payload != nil {
@@ -83,11 +77,4 @@ func (w *WebSocketOutput) preparePayload(msg *utils.UniversalMetadata) any {
 		slog.Debug("PayloadMapper returned nil, using original message", "output", w.GetName())
 	}
 	return msg
-}
-
-// String returns a debug representation of the WebSocket output.
-func (w *WebSocketOutput) String() string {
-	connectedClients := w.hub.ClientCount()
-	return fmt.Sprintf("WebSocketOutput{name: %s, path: %s, connections: %d, delay: %ds, hasMapping: %t}",
-		w.GetName(), w.settings.Path, connectedClients, w.GetDelay(), w.payloadMapper != nil)
 }

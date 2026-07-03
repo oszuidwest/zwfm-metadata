@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"zwfm-metadata/utils"
 )
 
 const healthcheckTimeout = 3 * time.Second
@@ -18,14 +20,7 @@ func runHealthcheck(ctx context.Context, targetURL string) error {
 	reqCtx, cancel := context.WithTimeout(ctx, healthcheckTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, targetURL, http.NoBody)
-	if err != nil {
-		return fmt.Errorf("create healthcheck request: %w", err)
-	}
-	req.Header.Set("User-Agent", "zwfm-metadata-healthcheck")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := utils.Get(reqCtx, targetURL)
 	if err != nil {
 		return fmt.Errorf("execute healthcheck request: %w", err)
 	}

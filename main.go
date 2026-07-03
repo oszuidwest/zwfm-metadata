@@ -149,15 +149,11 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 		return fmt.Errorf("failed to create output %q: %w", outputCfg.Name, err)
 	}
 
-	var outputInputs []core.Input
 	for _, inputName := range outputCfg.Inputs {
-		input, exists := router.GetInput(inputName)
-		if !exists {
+		if _, exists := router.GetInput(inputName); !exists {
 			return fmt.Errorf("input %q not found for output %q", inputName, outputCfg.Name)
 		}
-		outputInputs = append(outputInputs, input)
 	}
-	output.SetInputs(outputInputs)
 	router.SetOutputInputs(outputCfg.Name, outputCfg.Inputs)
 
 	var outputFormatters []core.Formatter
@@ -196,7 +192,7 @@ func createInput(cfg *config.InputConfig) (core.Input, error) {
 		if err != nil {
 			return nil, err
 		}
-		return inputs.NewURLInput(cfg.Name, settings), nil
+		return inputs.NewURLInput(cfg.Name, settings)
 
 	case "text":
 		settings, err := utils.ParseJSONSettings[config.TextInputConfig](cfg.Settings)
@@ -206,7 +202,7 @@ func createInput(cfg *config.InputConfig) (core.Input, error) {
 		return inputs.NewTextInput(cfg.Name, *settings), nil
 
 	default:
-		return nil, &unknownTypeError{Type: cfg.Type}
+		return nil, fmt.Errorf("unknown type: %s", cfg.Type)
 	}
 }
 
@@ -232,7 +228,7 @@ func createOutput(cfg *config.OutputConfig) (core.Output, error) {
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewURLOutput(cfg.Name, *settings), nil
+		return outputs.NewURLOutput(cfg.Name, *settings)
 
 	case "dlplus":
 		settings, err := utils.ParseJSONSettings[config.DLPlusOutputConfig](cfg.Settings)
@@ -263,16 +259,6 @@ func createOutput(cfg *config.OutputConfig) (core.Output, error) {
 		return outputs.NewStereoToolOutput(cfg.Name, *settings), nil
 
 	default:
-		return nil, &unknownTypeError{Type: cfg.Type}
+		return nil, fmt.Errorf("unknown type: %s", cfg.Type)
 	}
-}
-
-// unknownTypeError indicates an unrecognized input or output type in configuration.
-type unknownTypeError struct {
-	Type string
-}
-
-// Error returns the error message for an unknown type.
-func (e *unknownTypeError) Error() string {
-	return "unknown type: " + e.Type
 }

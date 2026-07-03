@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -21,56 +21,32 @@ type URLOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
 	settings      config.URLOutputConfig
-	payloadMapper *utils.PayloadMapper
+	payloadMapper *PayloadMapper
 	urlTemplate   *template.Template
 }
 
 // NewURLOutput creates a URLOutput with the given name and settings.
-func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
-	var mapper *utils.PayloadMapper
+func NewURLOutput(name string, settings config.URLOutputConfig) (*URLOutput, error) {
+	var mapper *PayloadMapper
 	if settings.PayloadMapping != nil {
-		mapper = utils.NewPayloadMapper(settings.PayloadMapping)
-	}
-
-	if settings.Method == "" {
-		slog.Error("Method is required for URL output", "output", name)
-		return nil
+		mapper = NewPayloadMapper(settings.PayloadMapping)
 	}
 
 	settings.Method = strings.ToUpper(settings.Method)
 	if settings.Method != "GET" && settings.Method != "POST" {
-		slog.Error("Invalid method for URL output",
-			"output", name,
-			"method", settings.Method,
-			"valid_methods", "GET, POST",
-		)
-		return nil
+		return nil, fmt.Errorf("method must be GET or POST, got %q", settings.Method)
 	}
 
-	parsedURL, err := url.Parse(settings.URL)
-	if err != nil {
-		slog.Error("Invalid URL", "output", name, "url", settings.URL, "error", err)
-		return nil
-	}
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		slog.Error("URL must use http or https scheme", //nolint:gosec // Logging config value for diagnostics
-			"output", name,
-			"url", settings.URL,
-			"scheme", parsedURL.Scheme,
-		)
-		return nil
+	if err := utils.ValidateHTTPURL(settings.URL); err != nil {
+		return nil, err
 	}
 
 	var tmpl *template.Template
 	if strings.Contains(settings.URL, "{{") {
-		tmpl, err = template.New("url").Funcs(template.FuncMap{
-			"upper": strings.ToUpper,
-			"lower": strings.ToLower,
-			"trim":  strings.TrimSpace,
-		}).Parse(settings.URL)
+		var err error
+		tmpl, err = template.New("url").Funcs(TemplateFuncs).Parse(settings.URL)
 		if err != nil {
-			slog.Error("Failed to parse URL template", "output", name, "url", settings.URL, "error", err)
-			return nil
+			return nil, fmt.Errorf("invalid URL template: %w", err)
 		}
 	}
 
@@ -81,16 +57,16 @@ func NewURLOutput(name string, settings config.URLOutputConfig) *URLOutput {
 		urlTemplate:   tmpl,
 	}
 	output.SetDelay(settings.Delay)
-	return output
+	return output, nil
 }
 
 // Send sends metadata via the configured HTTP method.
 func (u *URLOutput) Send(st *core.StructuredText) {
-	payload := utils.ConvertStructuredText(st)
+	payload := ConvertStructuredText(st)
 	u.sendRequest(payload)
 }
 
-func (u *URLOutput) sendRequest(payload *utils.UniversalMetadata) {
+func (u *URLOutput) sendRequest(payload *UniversalMetadata) {
 	if u.settings.Method == "GET" {
 		u.sendGETRequest(payload)
 		return
@@ -113,7 +89,7 @@ func urlEncodeTemplateData(data map[string]any) map[string]any {
 	return encoded
 }
 
-func (u *URLOutput) sendGETRequest(payload *utils.UniversalMetadata) {
+func (u *URLOutput) sendGETRequest(payload *UniversalMetadata) {
 	var requestURL string
 
 	if u.urlTemplate != nil {
@@ -153,35 +129,32 @@ func (u *URLOutput) sendGETRequest(payload *utils.UniversalMetadata) {
 		return
 	}
 
+	u.doRequest(req)
+}
+
+// doRequest sets the configured auth header, executes the request, and logs the outcome.
+func (u *URLOutput) doRequest(req *http.Request) {
 	if u.settings.BearerToken != "" {
 		req.Header.Set("Authorization", "Bearer "+u.settings.BearerToken)
 	}
 
-	resp, err := utils.Do(req)
-	if err != nil {
-		slog.Error("Failed to send GET request", "output", u.GetName(), "error", err)
-		return
-	}
-	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		slog.Error("GET request failed", //nolint:gosec // Logging response for diagnostics
+	if err := utils.DoOK(req); err != nil {
+		slog.Error("Request failed", //nolint:gosec // Logging response for diagnostics
 			"output", u.GetName(),
-			"status", resp.StatusCode,
-			"response", string(bodyBytes),
+			"method", req.Method,
+			"error", err,
 		)
 		return
 	}
 
-	slog.Debug("Successfully sent GET", //nolint:gosec // Logging URL for diagnostics
+	slog.Debug("Successfully sent request", //nolint:gosec // Logging URL for diagnostics
 		"output", u.GetName(),
-		"url", finalURL,
-		"status", resp.StatusCode,
+		"method", req.Method,
+		"url", req.URL.String(),
 	)
 }
 
-func (u *URLOutput) sendPOSTRequest(payload *utils.UniversalMetadata) {
+func (u *URLOutput) sendPOSTRequest(payload *UniversalMetadata) {
 	var payloadToSend any
 
 	if u.payloadMapper != nil {
@@ -212,30 +185,5 @@ func (u *URLOutput) sendPOSTRequest(payload *utils.UniversalMetadata) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	if u.settings.BearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+u.settings.BearerToken)
-	}
-
-	resp, err := utils.Do(req)
-	if err != nil {
-		slog.Error("Failed to send POST request", "output", u.GetName(), "error", err)
-		return
-	}
-	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		slog.Error("POST request failed", //nolint:gosec // Logging response for diagnostics
-			"output", u.GetName(),
-			"status", resp.StatusCode,
-			"response", string(bodyBytes),
-		)
-		return
-	}
-
-	slog.Debug("Successfully sent POST", //nolint:gosec // Logging URL for diagnostics
-		"output", u.GetName(),
-		"url", u.settings.URL,
-		"status", resp.StatusCode,
-	)
+	u.doRequest(req)
 }

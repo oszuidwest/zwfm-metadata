@@ -96,23 +96,23 @@ The codebase provides several utilities you can use:
   settings, err := utils.ParseJSONSettings[YourConfigType](cfg.Settings)
   ```
 
-- **Universal Metadata Converter**: `utils.ConvertStructuredText` for consistent metadata handling
+- **Universal Metadata Converter**: `ConvertStructuredText` (outputs package) for consistent metadata handling
   ```go
   import "zwfm-metadata/utils"
 
   // Convert core.StructuredText to universal format
-  universal := utils.ConvertStructuredText(st)
+  universal := ConvertStructuredText(st)
 
   // Convert with a specific type field
-  universal := utils.ConvertStructuredTextWithType(st, "webhook")
+  universal := ConvertStructuredTextWithType(st, "webhook")
 
   // Convert to template data for payload mapping
   templateData := universal.ToTemplateData()
   ```
 
-- **Payload Mapping**: `utils.NewPayloadMapper` for custom field mapping
+- **Payload Mapping**: `NewPayloadMapper` for custom field mapping
   ```go
-  mapper := utils.NewPayloadMapper(settings.PayloadMapping)
+  mapper := NewPayloadMapper(settings.PayloadMapping)
   result := mapper.MapPayload(templateData)
   ```
 
@@ -1015,7 +1015,6 @@ type Input interface {
     GetName() string                          // Return input name
     GetMetadata() *Metadata                   // Get current metadata
     Subscribe(ch chan<- *Metadata)            // Subscribe to updates
-    Unsubscribe(ch chan<- *Metadata)          // Unsubscribe from updates
 }
 ```
 
@@ -1026,7 +1025,6 @@ type Output interface {
     Start(ctx context.Context) error    // Start processing
     GetName() string                    // Return output name
     GetDelay() int                      // Return delay in seconds
-    SetInputs(inputs []Input)           // Set input list
     Send(st *StructuredText)            // Process structured metadata
 }
 ```
@@ -1137,7 +1135,7 @@ func (o *MyOutput) Send(st *core.StructuredText) {
 
 ### Universal Metadata Converter
 
-Use `utils.ConvertStructuredText` instead of manually mapping fields. This ensures consistency across all outputs and makes maintenance easier:
+Use `ConvertStructuredText` instead of manually mapping fields. This ensures consistency across all outputs and makes maintenance easier:
 
 ```go
 import "zwfm-metadata/utils"
@@ -1149,10 +1147,10 @@ func (o *MyOutput) Send(st *core.StructuredText) {
     }
 
     // Convert to universal format for JSON APIs, webhooks, etc.
-    universal := utils.ConvertStructuredText(st)
+    universal := ConvertStructuredText(st)
 
     // Or with a type field (use one or the other, not both):
-    // universal := utils.ConvertStructuredTextWithType(st, "myoutput")
+    // universal := ConvertStructuredTextWithType(st, "myoutput")
 
     // Send the universal metadata
     o.sendMetadata(*universal)
@@ -1176,14 +1174,14 @@ type MyOutput struct {
     *core.OutputBase
     core.PassiveComponent
     settings      config.MyOutputConfig
-    payloadMapper *utils.PayloadMapper
+    payloadMapper *PayloadMapper
 }
 
 func NewMyOutput(name string, settings config.MyOutputConfig) *MyOutput {
     output := &MyOutput{
         OutputBase:    core.NewOutputBase(name),
         settings:      settings,
-        payloadMapper: utils.NewPayloadMapper(settings.PayloadMapping),
+        payloadMapper: NewPayloadMapper(settings.PayloadMapping),
     }
     return output
 }
@@ -1195,7 +1193,7 @@ func (o *MyOutput) Send(st *core.StructuredText) {
     }
 
     // Convert to universal format
-    universal := utils.ConvertStructuredText(st)
+    universal := ConvertStructuredText(st)
 
     // Convert to template data and apply mapping
     templateData := universal.ToTemplateData()
@@ -1227,7 +1225,7 @@ Configuration example with payload mapping:
 1. **Inputs**: Can return errors from Start(), should log errors during operation
 2. **Outputs**: Should NEVER return errors from Send methods, only log them
 3. **Formatters**: Should handle errors gracefully and transform fields safely
-4. **Metadata Conversion**: Use `utils.ConvertStructuredText` instead of manual field mapping
+4. **Metadata Conversion**: Use `ConvertStructuredText` instead of manual field mapping
 
 ```go
 // Good - Output error handling
@@ -1298,7 +1296,7 @@ The base classes handle thread safety for:
 
 Your code should:
 - Use the provided SetMetadata/GetMetadata methods
-- Use `utils.ConvertStructuredText` for consistent metadata handling
+- Use `ConvertStructuredText` for consistent metadata handling
 - Not directly access shared state
 - Use mutexes for any additional shared state you add
 
@@ -1389,8 +1387,8 @@ curl "http://localhost:9000/input/dynamic?input=test-input&title=Test&artist=Art
    }
    ```
 8. **StructuredText**: Access `st.Artist` and `st.Title` for field-level operations
-9. **Universal Metadata**: Use `utils.ConvertStructuredText` for JSON/webhook payloads
-10. **Payload Mapping**: Use `utils.NewPayloadMapper` for template-based mapping
+9. **Universal Metadata**: Use `ConvertStructuredText` for JSON/webhook payloads
+10. **Payload Mapping**: Use `NewPayloadMapper` for template-based mapping
 11. **HTTP Requests**: Use `http.NewRequestWithContext` with proper timeout context
 12. **HTTP Responses**: Always close response bodies with `defer resp.Body.Close() //nolint:errcheck`
 13. **Error Response Debugging**: Read response body for HTTP errors to aid debugging

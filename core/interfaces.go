@@ -10,7 +10,6 @@ import (
 
 // Metadata carries song information with optional expiration for time-sensitive sources.
 type Metadata struct {
-	Name      string
 	SongID    string
 	Artist    string
 	Title     string
@@ -19,13 +18,22 @@ type Metadata struct {
 	ExpiresAt *time.Time
 }
 
+// MetadataRequest holds the fields for an incoming metadata update request via the HTTP API.
+// Title is required; Secret is checked when configured for the receiving input.
+type MetadataRequest struct {
+	SongID   string
+	Artist   string
+	Title    string
+	Duration string
+	Secret   string
+}
+
 // Input provides metadata from a source and notifies subscribers of changes.
 type Input interface {
 	Start(ctx context.Context) error
 	GetName() string
 	GetMetadata() *Metadata
 	Subscribe(ch chan<- *Metadata)
-	Unsubscribe(ch chan<- *Metadata)
 }
 
 // Output receives formatted metadata and delivers it to a destination.
@@ -33,7 +41,6 @@ type Output interface {
 	Start(ctx context.Context) error
 	GetName() string
 	GetDelay() int
-	SetInputs(inputs []Input)
 	Send(st *StructuredText)
 }
 

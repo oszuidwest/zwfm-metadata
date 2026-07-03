@@ -12,7 +12,6 @@ import (
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
-	"zwfm-metadata/utils"
 )
 
 // HTTPOutput serves metadata via configurable HTTP GET endpoints.
@@ -20,11 +19,11 @@ type HTTPOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
 	settings        config.HTTPOutputConfig
-	currentMetadata *utils.UniversalMetadata
+	currentMetadata *UniversalMetadata
 	metadataMu      sync.RWMutex
 
 	// Pre-compiled templates for performance
-	endpointMappers map[string]*utils.PayloadMapper // path -> pre-compiled mapper
+	endpointMappers map[string]*PayloadMapper // path -> pre-compiled mapper
 }
 
 // NewHTTPOutput initializes an HTTP endpoint server with the given settings.
@@ -32,12 +31,12 @@ func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 	output := &HTTPOutput{
 		OutputBase:      core.NewOutputBase(name),
 		settings:        settings,
-		endpointMappers: make(map[string]*utils.PayloadMapper),
+		endpointMappers: make(map[string]*PayloadMapper),
 	}
 
 	for _, endpoint := range settings.Endpoints {
 		if endpoint.PayloadMapping != nil {
-			output.endpointMappers[endpoint.Path] = utils.NewPayloadMapper(endpoint.PayloadMapping)
+			output.endpointMappers[endpoint.Path] = NewPayloadMapper(endpoint.PayloadMapping)
 		}
 	}
 
@@ -62,7 +61,7 @@ func (h *HTTPOutput) RegisterRoutes(mux *http.ServeMux) {
 
 // Send caches the metadata for subsequent HTTP endpoint responses.
 func (h *HTTPOutput) Send(st *core.StructuredText) {
-	httpMetadata := utils.ConvertStructuredText(st)
+	httpMetadata := ConvertStructuredText(st)
 	h.storeCurrentMetadata(httpMetadata)
 }
 
@@ -107,7 +106,7 @@ func (h *HTTPOutput) handleEndpoint(
 }
 
 func (h *HTTPOutput) generateResponse(
-	metadata *utils.UniversalMetadata, endpoint config.HTTPEndpoint,
+	metadata *UniversalMetadata, endpoint config.HTTPEndpoint,
 ) (data []byte, contentType string, err error) {
 	if endpoint.PayloadMapping != nil {
 		return h.generateCustomResponse(metadata, endpoint)
@@ -116,14 +115,9 @@ func (h *HTTPOutput) generateResponse(
 }
 
 func (h *HTTPOutput) generateCustomResponse(
-	metadata *utils.UniversalMetadata, endpoint config.HTTPEndpoint,
+	metadata *UniversalMetadata, endpoint config.HTTPEndpoint,
 ) (data []byte, contentType string, err error) {
-	mapper := h.endpointMappers[endpoint.Path]
-	if mapper == nil {
-		mapper = utils.NewPayloadMapper(endpoint.PayloadMapping)
-	}
-
-	result := mapper.MapPayload(metadata.ToTemplateData())
+	result := h.endpointMappers[endpoint.Path].MapPayload(metadata.ToTemplateData())
 
 	if len(result) == 1 {
 		for _, value := range result {
@@ -136,42 +130,41 @@ func (h *HTTPOutput) generateCustomResponse(
 }
 
 func (h *HTTPOutput) generateStandardResponse(
-	metadata *utils.UniversalMetadata, responseType string,
+	metadata *UniversalMetadata, responseType string,
 ) (data []byte, contentType string, err error) {
 	switch strings.ToLower(responseType) {
 	case "xml":
-		return h.encodeResponse(h.buildXMLString(metadata), responseType)
+		return []byte(h.buildXMLString(metadata)), "application/xml", nil
 	case "plaintext", "text":
-		return h.encodeResponse(metadata.FormattedMetadata, responseType)
+		return []byte(metadata.FormattedMetadata), "text/plain", nil
 	case "json", "":
-		return h.encodeResponse(metadata, responseType)
+		encoded, err := json.Marshal(metadata)
+		return encoded, "application/json", err
 	default:
 		return nil, "", fmt.Errorf("unknown response type: %s", responseType)
 	}
 }
 
+// encodeResponse serves a custom-mapped value: strings are served raw for xml and
+// plaintext response types; everything else is JSON.
 func (h *HTTPOutput) encodeResponse(
 	data any,
 	responseType string,
 ) (encoded []byte, contentType string, err error) {
-	switch strings.ToLower(responseType) {
-	case "xml":
-		if str, ok := data.(string); ok {
+	if str, ok := data.(string); ok {
+		switch strings.ToLower(responseType) {
+		case "xml":
 			return []byte(str), "application/xml", nil
-		}
-		fallthrough // Complex data falls back to JSON
-	case "plaintext", "text":
-		if str, ok := data.(string); ok {
+		case "plaintext", "text":
 			return []byte(str), "text/plain", nil
 		}
-		fallthrough // Non-string data falls back to JSON
-	default:
-		encoded, err := json.Marshal(data)
-		return encoded, "application/json", err
 	}
+
+	encoded, err = json.Marshal(data)
+	return encoded, "application/json", err
 }
 
-func (h *HTTPOutput) buildXMLString(metadata *utils.UniversalMetadata) string {
+func (h *HTTPOutput) buildXMLString(metadata *UniversalMetadata) string {
 	expiresAt := ""
 	if metadata.ExpiresAt != nil {
 		expiresAt = metadata.ExpiresAt.Format(time.RFC3339)
@@ -197,13 +190,13 @@ func (h *HTTPOutput) buildXMLString(metadata *utils.UniversalMetadata) string {
 	)
 }
 
-func (h *HTTPOutput) storeCurrentMetadata(metadata *utils.UniversalMetadata) {
+func (h *HTTPOutput) storeCurrentMetadata(metadata *UniversalMetadata) {
 	h.metadataMu.Lock()
 	defer h.metadataMu.Unlock()
 	h.currentMetadata = metadata
 }
 
-func (h *HTTPOutput) getCurrentMetadata() *utils.UniversalMetadata {
+func (h *HTTPOutput) getCurrentMetadata() *UniversalMetadata {
 	h.metadataMu.RLock()
 	defer h.metadataMu.RUnlock()
 	if h.currentMetadata == nil {

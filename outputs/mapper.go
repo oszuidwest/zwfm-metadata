@@ -1,9 +1,8 @@
-package utils
+package outputs
 
 import (
 	"bytes"
 	"log/slog"
-	"reflect"
 	"strings"
 	"sync"
 	"text/template"
@@ -17,16 +16,68 @@ var bufferPool = sync.Pool{
 	},
 }
 
-// PayloadMapper handles custom payload transformation based on configuration.
-type PayloadMapper struct {
-	mapping map[string]any
+// TemplateFuncs is the shared function set available in all metadata templates.
+var TemplateFuncs = template.FuncMap{
+	"formatTime": func(t time.Time) string {
+		return t.Format(time.RFC3339)
+	},
+	"formatTimePtr": func(t *time.Time) string {
+		if t != nil {
+			return t.Format(time.RFC3339)
+		}
+		return ""
+	},
+	"lower": strings.ToLower,
+	"upper": strings.ToUpper,
+	"trim":  strings.TrimSpace,
 }
 
-// NewPayloadMapper returns a new PayloadMapper with the given mapping configuration.
+// PayloadMapper handles custom payload transformation based on configuration.
+type PayloadMapper struct {
+	mapping   map[string]any
+	templates map[string]*template.Template // template string -> pre-compiled template (nil if parsing failed)
+}
+
+// NewPayloadMapper returns a new PayloadMapper with all template strings in the mapping pre-compiled.
 func NewPayloadMapper(mapping map[string]any) *PayloadMapper {
-	return &PayloadMapper{
-		mapping: mapping,
+	pm := &PayloadMapper{
+		mapping:   mapping,
+		templates: make(map[string]*template.Template),
 	}
+	pm.compileTemplates(mapping)
+	return pm
+}
+
+// compileTemplates walks the mapping tree and pre-compiles every template string it contains.
+func (pm *PayloadMapper) compileTemplates(value any) {
+	switch v := value.(type) {
+	case string:
+		if !isTemplate(v) {
+			return
+		}
+		if _, seen := pm.templates[v]; seen {
+			return
+		}
+		tmpl, err := template.New("payload").Funcs(TemplateFuncs).Parse(v)
+		if err != nil {
+			slog.Error("Failed to parse template", "error", err, "template", v)
+			tmpl = nil // remembered as broken; processTemplate falls back to the raw string
+		}
+		pm.templates[v] = tmpl
+	case map[string]any:
+		for _, item := range v {
+			pm.compileTemplates(item)
+		}
+	case []any:
+		for _, item := range v {
+			pm.compileTemplates(item)
+		}
+	}
+}
+
+// isTemplate reports whether a mapping string contains template syntax.
+func isTemplate(s string) bool {
+	return strings.Contains(s, "{{") && strings.Contains(s, "}}")
 }
 
 // MapPayload transforms the input data according to the configured mapping.
@@ -45,9 +96,8 @@ func (pm *PayloadMapper) processMapping(mapping, result map[string]any, data any
 	for key, value := range mapping {
 		switch v := value.(type) {
 		case string:
-			if strings.Contains(v, "{{") && strings.Contains(v, "}}") {
-				processedValue := pm.processTemplate(v, data)
-				result[key] = processedValue
+			if isTemplate(v) {
+				result[key] = pm.processTemplate(v, data)
 			} else {
 				result[key] = v
 			}
@@ -55,16 +105,10 @@ func (pm *PayloadMapper) processMapping(mapping, result map[string]any, data any
 			nestedResult := make(map[string]any)
 			pm.processMapping(v, nestedResult, data)
 			result[key] = nestedResult
+		case []any:
+			result[key] = pm.processMappingSlice(v, data)
 		default:
-			if rv := reflect.ValueOf(value); rv.Kind() == reflect.Slice {
-				items := make([]any, rv.Len())
-				for i := range rv.Len() {
-					items[i] = rv.Index(i).Interface()
-				}
-				result[key] = pm.processMappingSlice(items, data)
-			} else {
-				result[key] = value
-			}
+			result[key] = value
 		}
 	}
 }
@@ -85,25 +129,11 @@ func (pm *PayloadMapper) processMappingSlice(items []any, data any) []any {
 	return out
 }
 
-// processTemplate executes a template string with the provided data.
+// processTemplate executes a pre-compiled template with the provided data.
 func (pm *PayloadMapper) processTemplate(templateString string, data any) string {
-	tmpl, err := template.New("payload").Funcs(template.FuncMap{
-		"formatTime": func(t time.Time) string {
-			return t.Format(time.RFC3339)
-		},
-		"formatTimePtr": func(t *time.Time) string {
-			if t != nil {
-				return t.Format(time.RFC3339)
-			}
-			return ""
-		},
-		"lower": strings.ToLower,
-		"upper": strings.ToUpper,
-		"trim":  strings.TrimSpace,
-	}).Parse(templateString)
-
-	if err != nil {
-		slog.Error("Failed to parse template", "error", err, "template", templateString)
+	tmpl := pm.templates[templateString]
+	if tmpl == nil {
+		// Parsing failed at construction (already logged); fall back to the raw string.
 		return templateString
 	}
 

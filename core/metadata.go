@@ -25,7 +25,6 @@ func (m *Metadata) Clone() *Metadata {
 	}
 
 	clone := &Metadata{
-		Name:      strings.Clone(m.Name),
 		SongID:    strings.Clone(m.SongID),
 		Artist:    strings.Clone(m.Artist),
 		Title:     strings.Clone(m.Title),
@@ -39,17 +38,4 @@ func (m *Metadata) Clone() *Metadata {
 	}
 
 	return clone
-}
-
-// FormatString returns "Artist - Title" or just Title, empty if no content.
-func (m *Metadata) FormatString() string {
-	if m == nil || m.Title == "" {
-		return ""
-	}
-
-	if m.Artist != "" {
-		return m.Artist + " - " + m.Title
-	}
-
-	return m.Title
 }

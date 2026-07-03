@@ -3,7 +3,6 @@ package outputs
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -38,14 +37,18 @@ func (i *StereoToolOutput) Send(st *core.StructuredText) {
 	}
 }
 
-func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
-	fieldNames := map[int]string{
-		6751:  "Streaming Output Song",
-		15046: "FM RDS Radio Text",
-	}
+// stereoToolFields are the StereoTool parameter IDs updated with new metadata.
+var stereoToolFields = []struct {
+	id   int
+	name string
+}{
+	{6751, "Streaming Output Song"},
+	{15046, "FM RDS Radio Text"},
+}
 
-	for id, fieldName := range fieldNames {
-		if err := i.updateField(id, fieldName, metadata); err != nil {
+func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
+	for _, field := range stereoToolFields {
+		if err := i.updateField(field.id, field.name, metadata); err != nil {
 			return err
 		}
 	}
@@ -62,16 +65,8 @@ func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error
 		return fmt.Errorf("failed to create request for %s: %w", fieldName, err)
 	}
 
-	resp, err := utils.Do(req)
-	if err != nil {
+	if err := utils.DoOK(req); err != nil {
 		return fmt.Errorf("failed to update %s: %w", fieldName, err)
-	}
-	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("StereoTool API error for %s: status %d, response: %s",
-			fieldName, resp.StatusCode, string(bodyBytes))
 	}
 
 	slog.Debug("Updated StereoTool field", "output", i.GetName(), "field", fieldName, "metadata", metadata)

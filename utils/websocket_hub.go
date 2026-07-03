@@ -14,14 +14,8 @@ import (
 
 const defaultSendBufferSize = 256
 
-// WebSocketConn wraps a WebSocket connection.
-type WebSocketConn struct {
-	*websocket.Conn
-}
-
 type hubClient struct {
 	conn      *websocket.Conn
-	wsConn    *WebSocketConn
 	send      chan []byte
 	done      chan struct{}
 	closeOnce sync.Once
@@ -40,8 +34,8 @@ type WebSocketHub struct {
 	clients        map[*websocket.Conn]*hubClient
 	mu             sync.RWMutex
 	upgrader       websocket.Upgrader
-	onConnect      func(*WebSocketConn) any
-	onDisconnect   func(*WebSocketConn)
+	onConnect      func() any
+	onDisconnect   func()
 	pingInterval   time.Duration
 	pongWait       time.Duration
 	writeTimeout   time.Duration
@@ -65,13 +59,13 @@ func NewWebSocketHub(name string) *WebSocketHub {
 	}
 }
 
-// SetOnConnect sets the callback for new connections.
-func (h *WebSocketHub) SetOnConnect(fn func(*WebSocketConn) any) {
+// SetOnConnect sets the callback that provides the initial payload for new connections.
+func (h *WebSocketHub) SetOnConnect(fn func() any) {
 	h.onConnect = fn
 }
 
 // SetOnDisconnect sets the callback for disconnections.
-func (h *WebSocketHub) SetOnDisconnect(fn func(*WebSocketConn)) {
+func (h *WebSocketHub) SetOnDisconnect(fn func()) {
 	h.onDisconnect = fn
 }
 
@@ -100,7 +94,7 @@ func (h *WebSocketHub) disconnectClient(client *hubClient) int {
 	}
 
 	if h.onDisconnect != nil {
-		h.onDisconnect(client.wsConn)
+		h.onDisconnect()
 	}
 
 	slog.Debug("WebSocket client disconnected", "hub", h.name, "clients", clientCount)
@@ -116,10 +110,9 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	}
 
 	client := &hubClient{
-		conn:   conn,
-		wsConn: &WebSocketConn{Conn: conn},
-		send:   make(chan []byte, h.sendBufferSize),
-		done:   make(chan struct{}),
+		conn: conn,
+		send: make(chan []byte, h.sendBufferSize),
+		done: make(chan struct{}),
 	}
 
 	// Enqueue the onConnect payload before registering the client in the map.
@@ -128,7 +121,7 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	// concurrent broadcasts could fill the send buffer before writePump starts,
 	// causing the blocking send below to hang forever.
 	if h.onConnect != nil {
-		if data := h.onConnect(client.wsConn); data != nil {
+		if data := h.onConnect(); data != nil {
 			msg, err := json.Marshal(data)
 			if err != nil {
 				slog.Warn("Failed to marshal initial WebSocket data", "hub", h.name, "error", err)

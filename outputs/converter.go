@@ -1,4 +1,4 @@
-package utils
+package outputs
 
 import (
 	"time"
@@ -8,16 +8,16 @@ import (
 
 // UniversalMetadata represents the common metadata structure used across all outputs.
 type UniversalMetadata struct {
-	Type              string     `json:"type,omitzero" xml:"type,omitempty"`
-	FormattedMetadata string     `json:"formatted_metadata" xml:"formatted_metadata"`
-	SongID            string     `json:"songID,omitzero" xml:"songID,omitempty"`
-	Title             string     `json:"title" xml:"title"`
-	Artist            string     `json:"artist,omitzero" xml:"artist,omitempty"`
-	Duration          string     `json:"duration,omitzero" xml:"duration,omitempty"`
-	UpdatedAt         time.Time  `json:"updated_at" xml:"updated_at"`
-	ExpiresAt         *time.Time `json:"expires_at,omitzero" xml:"expires_at,omitempty"`
-	Source            string     `json:"source,omitzero" xml:"source,omitempty"`
-	SourceType        string     `json:"source_type,omitzero" xml:"source_type,omitempty"`
+	Type              string     `json:"type,omitzero"`
+	FormattedMetadata string     `json:"formatted_metadata"`
+	SongID            string     `json:"songID,omitzero"`
+	Title             string     `json:"title"`
+	Artist            string     `json:"artist,omitzero"`
+	Duration          string     `json:"duration,omitzero"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	ExpiresAt         *time.Time `json:"expires_at,omitzero"`
+	Source            string     `json:"source,omitzero"`
+	SourceType        string     `json:"source_type,omitzero"`
 }
 
 // ConvertStructuredText converts a StructuredText to UniversalMetadata.
