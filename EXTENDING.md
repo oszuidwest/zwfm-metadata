@@ -96,23 +96,21 @@ The codebase provides several utilities you can use:
   settings, err := utils.ParseJSONSettings[YourConfigType](cfg.Settings)
   ```
 
-- **Universal Metadata Converter**: `utils.ConvertStructuredText` for consistent metadata handling
+- **Universal Metadata Converter**: `ConvertStructuredText` (in the `outputs` package, so call it unqualified from your output) for consistent metadata handling
   ```go
-  import "zwfm-metadata/utils"
-
   // Convert core.StructuredText to universal format
-  universal := utils.ConvertStructuredText(st)
+  universal := ConvertStructuredText(st)
 
   // Convert with a specific type field
-  universal := utils.ConvertStructuredTextWithType(st, "webhook")
+  universal := ConvertStructuredTextWithType(st, "webhook")
 
   // Convert to template data for payload mapping
   templateData := universal.ToTemplateData()
   ```
 
-- **Payload Mapping**: `utils.NewPayloadMapper` for custom field mapping
+- **Payload Mapping**: `NewPayloadMapper` for custom field mapping
   ```go
-  mapper := utils.NewPayloadMapper(settings.PayloadMapping)
+  mapper := NewPayloadMapper(settings.PayloadMapping)
   result := mapper.MapPayload(templateData)
   ```
 
@@ -126,7 +124,7 @@ The codebase provides several utilities you can use:
 6. **HTTP Requests**: Always use `http.NewRequestWithContext` with proper timeout context
 7. **HTTP Body Closing**: Always use `defer resp.Body.Close() //nolint:errcheck`
 8. **Error Response Reading**: For HTTP errors, read response body for debugging information
-9. **HasChanged() Check**: Always call `HasChanged()` in `Send` methods using `st.String()`
+9. **Deduplication**: The router only calls `Send` when the formatted text changed — no output-side change detection needed
 10. **Logging Fields**: Include "output" or "input" field in all log messages for easy filtering
 11. **Context Timeouts**: Use context with timeout for all HTTP requests and external operations
 12. **StructuredText**: All outputs receive `*core.StructuredText` which provides Artist, Title, and position calculations
@@ -351,13 +349,8 @@ func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCus
 ```go
 // Send implements the Output interface
 func (m *MyCustomOutput) Send(st *core.StructuredText) {
-    // Get formatted text for change detection
+    // The router already skips unchanged metadata, so Send only runs on real updates
     text := st.String()
-
-    // IMPORTANT: Check if value changed to avoid unnecessary operations
-    if !m.HasChanged(text) {
-        return
-    }
 
     // Access individual fields if needed
     artist := st.Artist
@@ -861,9 +854,6 @@ func NewDiscordOutput(name string, settings config.DiscordOutputConfig) *Discord
 
 func (d *DiscordOutput) Send(st *core.StructuredText) {
     text := st.String()
-    if !d.HasChanged(text) {
-        return
-    }
 
     // Build Discord embed fields from StructuredText
     fields := []map[string]interface{}{}
@@ -1015,7 +1005,6 @@ type Input interface {
     GetName() string                          // Return input name
     GetMetadata() *Metadata                   // Get current metadata
     Subscribe(ch chan<- *Metadata)            // Subscribe to updates
-    Unsubscribe(ch chan<- *Metadata)          // Unsubscribe from updates
 }
 ```
 
@@ -1026,7 +1015,6 @@ type Output interface {
     Start(ctx context.Context) error    // Start processing
     GetName() string                    // Return output name
     GetDelay() int                      // Return delay in seconds
-    SetInputs(inputs []Input)           // Set input list
     Send(st *StructuredText)            // Process structured metadata
 }
 ```
@@ -1123,36 +1111,19 @@ This is typically used for:
 
 ### Change Detection
 
-Outputs should always use `HasChanged()` to avoid unnecessary operations:
-
-```go
-func (o *MyOutput) Send(st *core.StructuredText) {
-    text := st.String()
-    if !o.HasChanged(text) {
-        return  // Skip if metadata hasn't changed
-    }
-    // Process the update...
-}
-```
+Deduplication is handled centrally by the router: it tracks the last sent content per output and skips the `Send` call entirely when the formatted text hasn't changed. Outputs don't need their own change detection — just process every `Send` you receive.
 
 ### Universal Metadata Converter
 
-Use `utils.ConvertStructuredText` instead of manually mapping fields. This ensures consistency across all outputs and makes maintenance easier:
+Use `ConvertStructuredText` instead of manually mapping fields. This ensures consistency across all outputs and makes maintenance easier:
 
 ```go
-import "zwfm-metadata/utils"
-
 func (o *MyOutput) Send(st *core.StructuredText) {
-    text := st.String()
-    if !o.HasChanged(text) {
-        return
-    }
-
     // Convert to universal format for JSON APIs, webhooks, etc.
-    universal := utils.ConvertStructuredText(st)
+    universal := ConvertStructuredText(st)
 
     // Or with a type field (use one or the other, not both):
-    // universal := utils.ConvertStructuredTextWithType(st, "myoutput")
+    // universal := ConvertStructuredTextWithType(st, "myoutput")
 
     // Send the universal metadata
     o.sendMetadata(*universal)
@@ -1170,32 +1141,25 @@ func (o *MyOutput) Send(st *core.StructuredText) {
 For outputs that need custom field mapping:
 
 ```go
-import "zwfm-metadata/utils"
-
 type MyOutput struct {
     *core.OutputBase
     core.PassiveComponent
     settings      config.MyOutputConfig
-    payloadMapper *utils.PayloadMapper
+    payloadMapper *PayloadMapper
 }
 
 func NewMyOutput(name string, settings config.MyOutputConfig) *MyOutput {
     output := &MyOutput{
         OutputBase:    core.NewOutputBase(name),
         settings:      settings,
-        payloadMapper: utils.NewPayloadMapper(settings.PayloadMapping),
+        payloadMapper: NewPayloadMapper(settings.PayloadMapping),
     }
     return output
 }
 
 func (o *MyOutput) Send(st *core.StructuredText) {
-    text := st.String()
-    if !o.HasChanged(text) {
-        return
-    }
-
     // Convert to universal format
-    universal := utils.ConvertStructuredText(st)
+    universal := ConvertStructuredText(st)
 
     // Convert to template data and apply mapping
     templateData := universal.ToTemplateData()
@@ -1227,16 +1191,12 @@ Configuration example with payload mapping:
 1. **Inputs**: Can return errors from Start(), should log errors during operation
 2. **Outputs**: Should NEVER return errors from Send methods, only log them
 3. **Formatters**: Should handle errors gracefully and transform fields safely
-4. **Metadata Conversion**: Use `utils.ConvertStructuredText` instead of manual field mapping
+4. **Metadata Conversion**: Use `ConvertStructuredText` instead of manual field mapping
 
 ```go
 // Good - Output error handling
 func (o *MyOutput) Send(st *core.StructuredText) {
-    text := st.String()
-    if !o.HasChanged(text) {
-        return
-    }
-    if err := o.send(text); err != nil {
+    if err := o.send(st.String()); err != nil {
         slog.Error("Send failed", "output", o.GetName(), "error", err)  // Log but don't return
     }
 }
@@ -1298,7 +1258,7 @@ The base classes handle thread safety for:
 
 Your code should:
 - Use the provided SetMetadata/GetMetadata methods
-- Use `utils.ConvertStructuredText` for consistent metadata handling
+- Use `ConvertStructuredText` for consistent metadata handling
 - Not directly access shared state
 - Use mutexes for any additional shared state you add
 
@@ -1389,12 +1349,12 @@ curl "http://localhost:9000/input/dynamic?input=test-input&title=Test&artist=Art
    }
    ```
 8. **StructuredText**: Access `st.Artist` and `st.Title` for field-level operations
-9. **Universal Metadata**: Use `utils.ConvertStructuredText` for JSON/webhook payloads
-10. **Payload Mapping**: Use `utils.NewPayloadMapper` for template-based mapping
+9. **Universal Metadata**: Use `ConvertStructuredText` for JSON/webhook payloads
+10. **Payload Mapping**: Use `NewPayloadMapper` for template-based mapping
 11. **HTTP Requests**: Use `http.NewRequestWithContext` with proper timeout context
 12. **HTTP Responses**: Always close response bodies with `defer resp.Body.Close() //nolint:errcheck`
 13. **Error Response Debugging**: Read response body for HTTP errors to aid debugging
-14. **Change Detection**: Always call `HasChanged()` with `st.String()` before processing
+14. **Deduplication**: The router skips `Send` when the formatted text is unchanged — don't add your own change detection
 15. **Structured Logging**: Include "output"/"input" field in log messages for filtering
 16. **Position Calculations**: Use `st.ArtistRange()` and `st.TitleRange()` for DL Plus-style protocols
 

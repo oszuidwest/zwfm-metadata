@@ -3,7 +3,6 @@ package outputs
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -59,15 +58,8 @@ func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	req.SetBasicAuth(i.settings.Username, i.settings.Password)
 	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
 
-	resp, err := utils.Do(req)
-	if err != nil {
+	if err := utils.DoOK(req); err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected status code: %d, response: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	slog.Debug("Successfully updated Icecast", "output", i.GetName(), "metadata", metadata)

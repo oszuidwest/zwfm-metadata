@@ -10,20 +10,23 @@ import (
 	"strconv"
 	"time"
 	"zwfm-metadata/core"
-	"zwfm-metadata/inputs"
 	"zwfm-metadata/utils"
 )
 
 const cacheControlNoCache = "public, max-age=0, must-revalidate"
+
+// metadataUpdater is satisfied by inputs that accept metadata updates via the HTTP API.
+type metadataUpdater interface {
+	UpdateMetadata(update *core.MetadataRequest) error
+}
 
 // Server provides the HTTP dashboard, API endpoints, and WebSocket connections.
 type Server struct {
 	port             int
 	router           *core.MetadataRouter
 	server           *http.Server
-	stationName      string
-	brandColor       string
 	dashboardHub     *utils.WebSocketHub
+	dashboardPage    []byte
 	faviconICO       []byte
 	iconSVG          []byte
 	appleIconPNG     []byte
@@ -67,22 +70,19 @@ func NewServer(port int, router *core.MetadataRouter, stationName, brandColor st
 	s := &Server{
 		port:             port,
 		router:           router,
-		stationName:      stationName,
-		brandColor:       brandColor,
 		dashboardHub:     utils.NewWebSocketHub("dashboard"),
+		dashboardPage:    []byte(dashboardHTML(stationName, brandColor, utils.Version, utils.GetBuildYear())),
 		faviconICO:       faviconICO,
-		iconSVG:          []byte(generateFaviconSVG(brandColor)),
+		iconSVG:          []byte(buildHubSVG(brandColor)),
 		appleIconPNG:     appleIconPNG,
 		darkFaviconICO:   darkFaviconICO,
-		darkIconSVG:      []byte(generateFaviconSVGDark(brandColor)),
+		darkIconSVG:      []byte(buildHubSVGDark(brandColor)),
 		darkAppleIconPNG: darkAppleIconPNG,
 	}
 
-	s.dashboardHub.SetOnConnect(func(conn *utils.WebSocketConn) any {
+	s.dashboardHub.SetOnConnect(func() any {
 		return s.getDashboardData()
 	})
-
-	go s.startPeriodicDashboardUpdates()
 
 	return s, nil
 }
@@ -91,17 +91,19 @@ func NewServer(port int, router *core.MetadataRouter, stationName, brandColor st
 func (s *Server) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /favicon.ico", s.faviconHandler)
-	mux.HandleFunc("GET /favicon-dark.ico", s.faviconDarkHandler)
-	mux.HandleFunc("GET /icon.svg", s.iconSVGHandler)
-	mux.HandleFunc("GET /icon-dark.svg", s.iconSVGDarkHandler)
-	mux.HandleFunc("GET /apple-touch-icon.png", s.appleTouchIconHandler)
-	mux.HandleFunc("GET /apple-touch-icon-dark.png", s.appleTouchIconDarkHandler)
+	mux.HandleFunc("GET /favicon.ico", serveAsset(s.faviconICO, "image/x-icon"))
+	mux.HandleFunc("GET /favicon-dark.ico", serveAsset(s.darkFaviconICO, "image/x-icon"))
+	mux.HandleFunc("GET /icon.svg", serveAsset(s.iconSVG, "image/svg+xml"))
+	mux.HandleFunc("GET /icon-dark.svg", serveAsset(s.darkIconSVG, "image/svg+xml"))
+	mux.HandleFunc("GET /apple-touch-icon.png", serveAsset(s.appleIconPNG, "image/png"))
+	mux.HandleFunc("GET /apple-touch-icon-dark.png", serveAsset(s.darkAppleIconPNG, "image/png"))
 	mux.HandleFunc("GET /{$}", s.dashboardHandler)
 	mux.HandleFunc("GET /input/dynamic", s.dynamicInputHandler)
 	mux.HandleFunc("GET /ws/dashboard", s.dashboardHub.HandleConnection)
 
 	s.registerOutputRoutes(mux)
+
+	go s.startPeriodicDashboardUpdates(ctx)
 
 	s.server = &http.Server{
 		Addr:              ":" + strconv.Itoa(s.port),
@@ -154,13 +156,13 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	dynamicInput, ok := input.(*inputs.DynamicInput)
+	updater, ok := input.(metadataUpdater)
 	if !ok {
 		http.Error(w, fmt.Sprintf("Input '%s' is not a dynamic input", inputName), http.StatusBadRequest)
 		return
 	}
 
-	err := dynamicInput.UpdateMetadata(&inputs.MetadataRequest{
+	err := updater.UpdateMetadata(&core.MetadataRequest{
 		SongID:   songID,
 		Artist:   artist,
 		Title:    title,
@@ -183,98 +185,20 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 func (s *Server) dashboardHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	if _, err := w.Write([]byte(dashboardHTML(s.stationName, s.brandColor, utils.Version, utils.GetBuildYear()))); err != nil {
+	if _, err := w.Write(s.dashboardPage); err != nil {
 		slog.Error("Failed to write dashboard HTML response", "error", err)
 	}
 }
 
-// faviconHandler serves ICO favicons with support for legacy browsers.
-func (s *Server) faviconHandler(w http.ResponseWriter, _ *http.Request) {
-	if len(s.faviconICO) == 0 {
-		http.Error(w, "favicon not available", http.StatusInternalServerError)
-		return
-	}
+// serveAsset returns a handler that serves a pre-generated static asset.
+func serveAsset(data []byte, contentType string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Cache-Control", cacheControlNoCache)
 
-	w.Header().Set("Content-Type", "image/x-icon")
-	w.Header().Set("Cache-Control", cacheControlNoCache)
-
-	if _, err := w.Write(s.faviconICO); err != nil {
-		slog.Warn("Failed to write favicon.ico response", "error", err)
-	}
-}
-
-// faviconDarkHandler serves the dark mode variant of the ICO favicon.
-func (s *Server) faviconDarkHandler(w http.ResponseWriter, _ *http.Request) {
-	if len(s.darkFaviconICO) == 0 {
-		http.Error(w, "favicon not available", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "image/x-icon")
-	w.Header().Set("Cache-Control", cacheControlNoCache)
-
-	if _, err := w.Write(s.darkFaviconICO); err != nil {
-		slog.Warn("Failed to write favicon-dark.ico response", "error", err)
-	}
-}
-
-// iconSVGHandler serves the scalable favicon variant.
-func (s *Server) iconSVGHandler(w http.ResponseWriter, _ *http.Request) {
-	if len(s.iconSVG) == 0 {
-		http.Error(w, "icon not available", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Header().Set("Cache-Control", cacheControlNoCache)
-
-	if _, err := w.Write(s.iconSVG); err != nil {
-		slog.Warn("Failed to write icon.svg response", "error", err)
-	}
-}
-
-// iconSVGDarkHandler serves the dark mode variant of the SVG icon.
-func (s *Server) iconSVGDarkHandler(w http.ResponseWriter, _ *http.Request) {
-	if len(s.darkIconSVG) == 0 {
-		http.Error(w, "icon not available", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Header().Set("Cache-Control", cacheControlNoCache)
-
-	if _, err := w.Write(s.darkIconSVG); err != nil {
-		slog.Warn("Failed to write icon-dark.svg response", "error", err)
-	}
-}
-
-// appleTouchIconHandler serves the Apple touch icon variant.
-func (s *Server) appleTouchIconHandler(w http.ResponseWriter, _ *http.Request) {
-	if len(s.appleIconPNG) == 0 {
-		http.Error(w, "apple touch icon not available", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", cacheControlNoCache)
-
-	if _, err := w.Write(s.appleIconPNG); err != nil {
-		slog.Warn("Failed to write apple-touch-icon.png response", "error", err)
-	}
-}
-
-// appleTouchIconDarkHandler serves the dark mode variant of the Apple touch icon.
-func (s *Server) appleTouchIconDarkHandler(w http.ResponseWriter, _ *http.Request) {
-	if len(s.darkAppleIconPNG) == 0 {
-		http.Error(w, "apple touch icon not available", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", cacheControlNoCache)
-
-	if _, err := w.Write(s.darkAppleIconPNG); err != nil {
-		slog.Warn("Failed to write apple-touch-icon-dark.png response", "error", err)
+		if _, err := w.Write(data); err != nil {
+			slog.Warn("Failed to write asset response", "content_type", contentType, "error", err)
+		}
 	}
 }
 
@@ -325,13 +249,21 @@ func (s *Server) getDashboardData() any {
 	}
 }
 
-// startPeriodicDashboardUpdates broadcasts status to all connected dashboard clients.
-func (s *Server) startPeriodicDashboardUpdates() {
+// startPeriodicDashboardUpdates broadcasts status to all connected dashboard clients
+// until context cancellation. Idle ticks (no connected clients) skip the payload build.
+func (s *Server) startPeriodicDashboardUpdates(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		data := s.getDashboardData()
-		s.dashboardHub.Broadcast(data)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if s.dashboardHub.ClientCount() == 0 {
+				continue
+			}
+			s.dashboardHub.Broadcast(s.getDashboardData())
+		}
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
 	"strings"
 	"time"
 
@@ -23,11 +22,18 @@ type URLInput struct {
 }
 
 // NewURLInput creates a URLInput with the given name and settings.
-func NewURLInput(name string, settings *config.URLInputConfig) *URLInput {
+func NewURLInput(name string, settings *config.URLInputConfig) (*URLInput, error) {
+	if err := utils.ValidateHTTPURL(settings.URL); err != nil {
+		return nil, err
+	}
+	if settings.PollingInterval < 1 {
+		return nil, fmt.Errorf("pollingInterval must be at least 1 second, got %d", settings.PollingInterval)
+	}
+
 	return &URLInput{
 		InputBase: core.NewInputBase(name),
 		settings:  *settings,
-	}
+	}, nil
 }
 
 // Start begins the polling loop and runs until context cancellation.
@@ -71,25 +77,10 @@ func (u *URLInput) expiryTimerChan(timer *time.Timer) <-chan time.Time {
 	if timer != nil {
 		return timer.C
 	}
-	return make(chan time.Time) // never fires
+	return nil // receive from a nil channel blocks forever, so this case never fires
 }
 
 func (u *URLInput) poll() {
-	parsedURL, err := url.Parse(u.settings.URL)
-	if err != nil {
-		slog.Error("Invalid URL in configuration", "input", u.GetName(), "url", u.settings.URL, "error", err)
-		return
-	}
-
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		slog.Error("URL must use http or https scheme", //nolint:gosec // Logging config value for diagnostics
-			"input", u.GetName(),
-			"url", u.settings.URL,
-			"scheme", parsedURL.Scheme,
-		)
-		return
-	}
-
 	resp, err := utils.Get(context.Background(), u.settings.URL)
 	if err != nil {
 		slog.Error("Failed to fetch data from URL input", "input", u.GetName(), "error", err)
@@ -144,7 +135,6 @@ func (u *URLInput) poll() {
 	}
 
 	metadata := &core.Metadata{
-		Name:      u.GetName(),
 		Title:     content,
 		UpdatedAt: time.Now(),
 		ExpiresAt: expiresAt,

@@ -23,15 +23,6 @@ func buildHubSVGDark(brandColor string) string {
 	return fmt.Sprintf(darkTemplate, brandColor)
 }
 
-// generateFaviconSVG returns the SVG favicon string.
-func generateFaviconSVG(brandColor string) string {
-	return buildHubSVG(brandColor)
-}
-
-func generateFaviconSVGDark(brandColor string) string {
-	return buildHubSVGDark(brandColor)
-}
-
 // generateFaviconICO produces an ICO container with 16px and 32px PNG layers.
 func generateFaviconICO(brandColor string) ([]byte, error) {
 	return generateFaviconICOFromSVG(buildHubSVG(brandColor))

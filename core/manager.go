@@ -38,14 +38,14 @@ type InputStatus struct {
 	Metadata  *CleanMetadata `json:"metadata,omitzero"`
 }
 
-// ScheduledUpdate holds a pending output update with its execution time and cancellation token.
+// ScheduledUpdate holds a pending output update with its execution time.
 type ScheduledUpdate struct {
-	ExecuteAt   time.Time
-	OutputName  string
-	Output      Output
-	Metadata    *Metadata
-	UpdateType  string // "input_change" or "expiration_fallback"
-	CancelToken string // unique token to allow cancellation
+	ExecuteAt  time.Time
+	OutputName string
+	InputName  string
+	Output     Output
+	Metadata   *Metadata
+	UpdateType string // "input_change" or "expiration_fallback"
 }
 
 // Timeline maintains a sorted queue of scheduled updates for time-delayed processing.
@@ -59,19 +59,17 @@ type Timeline struct {
 type MetadataRouter struct {
 	inputs               map[string]Input
 	outputs              map[string]Output
-	inputSubscriptions   map[string]chan *Metadata // input name -> subscription channel
-	outputInputs         map[string][]string       // output name -> input names
-	outputFormatters     map[string][]Formatter    // output name -> formatters
-	outputFormatterNames map[string][]string       // output name -> formatter names
-	inputFilters         map[string][]Filter       // input name -> filters
-	inputFilterNames     map[string][]string       // input name -> filter type names (for dashboard)
+	outputInputs         map[string][]string    // output name -> input names
+	outputFormatters     map[string][]Formatter // output name -> formatters
+	outputFormatterNames map[string][]string    // output name -> formatter names
+	inputFilters         map[string][]Filter    // input name -> filters
+	inputFilterNames     map[string][]string    // input name -> filter type names (for dashboard)
 	inputPrefixSuffix    map[string]InputPrefixSuffix
 	inputTypes           map[string]string // input name -> input type
 	outputTypes          map[string]string // output name -> output type
 	lastSentContent      map[string]string // output name -> last sent content
 	currentInputs        map[string]string // output name -> current input name
 	timeline             *Timeline
-	processorStop        chan struct{}
 	started              bool // true after Start() is called; config maps become immutable
 	mu                   sync.RWMutex
 }
@@ -81,7 +79,6 @@ func NewMetadataRouter() *MetadataRouter {
 	return &MetadataRouter{
 		inputs:               make(map[string]Input),
 		outputs:              make(map[string]Output),
-		inputSubscriptions:   make(map[string]chan *Metadata),
 		outputInputs:         make(map[string][]string),
 		outputFormatters:     make(map[string][]Formatter),
 		outputFormatterNames: make(map[string][]string),
@@ -93,7 +90,6 @@ func NewMetadataRouter() *MetadataRouter {
 		lastSentContent:      make(map[string]string),
 		currentInputs:        make(map[string]string),
 		timeline:             &Timeline{updates: make([]ScheduledUpdate, 0), signal: make(chan struct{}, 1)},
-		processorStop:        make(chan struct{}),
 	}
 }
 
@@ -205,10 +201,7 @@ func (mr *MetadataRouter) SetOutputType(outputName, outputType string) {
 func (mr *MetadataRouter) GetOutputType(outputName string) string {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
-	if outputType, exists := mr.outputTypes[outputName]; exists {
-		return outputType
-	}
-	return "unknown"
+	return cmp.Or(mr.outputTypes[outputName], "unknown")
 }
 
 // GetInputStatus builds a sorted snapshot of all inputs for the dashboard API.
@@ -321,10 +314,7 @@ func (mr *MetadataRouter) GetCurrentInputForOutput(outputName string) string {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
 
-	if currentInput, exists := mr.currentInputs[outputName]; exists {
-		return currentInput
-	}
-	return ""
+	return mr.currentInputs[outputName]
 }
 
 // Start launches all inputs, outputs, and background processors until context cancellation.
@@ -354,7 +344,6 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 		}(name, input)
 
 		metadataChannel := make(chan *Metadata, 10)
-		mr.inputSubscriptions[name] = metadataChannel
 		input.Subscribe(metadataChannel)
 		go mr.handleInputMetadata(ctx, name, metadataChannel)
 	}
@@ -423,19 +412,18 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 			continue
 		}
 
-		cancelToken := fmt.Sprintf("%s_%d", outputName, time.Now().UnixNano())
-		mr.cancelScheduledUpdates(outputName)
+		mr.timeline.cancelUpdatesForOutput(outputName)
 
 		delay := time.Duration(output.GetDelay()) * time.Second
 		executeAt := time.Now().Add(delay)
 
 		update := ScheduledUpdate{
-			ExecuteAt:   executeAt,
-			OutputName:  outputName,
-			Output:      output,
-			Metadata:    metadata,
-			UpdateType:  "input_change",
-			CancelToken: cancelToken,
+			ExecuteAt:  executeAt,
+			OutputName: outputName,
+			InputName:  inputName,
+			Output:     output,
+			Metadata:   metadata,
+			UpdateType: "input_change",
 		}
 
 		mr.timeline.addUpdate(&update)
@@ -477,11 +465,6 @@ func (mr *MetadataRouter) findHighestPriorityInput(outputName string) (string, *
 		}
 	}
 	return "", nil
-}
-
-// cancelScheduledUpdates removes all pending updates for an output from the timeline.
-func (mr *MetadataRouter) cancelScheduledUpdates(outputName string) {
-	mr.timeline.cancelUpdatesForOutput(outputName)
 }
 
 // startExpirationChecker monitors inputs for expiration and triggers fallback to lower-priority sources.
@@ -569,12 +552,12 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 	executeAt := time.Now().Add(delay)
 
 	update := ScheduledUpdate{
-		ExecuteAt:   executeAt,
-		OutputName:  outputName,
-		Output:      output,
-		Metadata:    metadata,
-		UpdateType:  "expiration_fallback",
-		CancelToken: fmt.Sprintf("%s_exp_%d", outputName, time.Now().UnixNano()),
+		ExecuteAt:  executeAt,
+		OutputName: outputName,
+		InputName:  inputName,
+		Output:     output,
+		Metadata:   metadata,
+		UpdateType: "expiration_fallback",
 	}
 
 	mr.timeline.addUpdate(&update)
@@ -608,49 +591,50 @@ func applyFilterAction(st *StructuredText, action FilterAction) bool {
 	}
 }
 
+// applyInputStage builds a StructuredText from metadata with prefix/suffix, input context,
+// and input filters applied. The returned bool reports whether processing should continue
+// to the output formatters: false when the metadata has no content or a filter rejected it.
+// NOTE: This method reads inputPrefixSuffix, inputTypes, and inputFilters without locks.
+// These maps are immutable after Start() - enforced by panicIfStarted in Set* methods.
+func (mr *MetadataRouter) applyInputStage(inputName string, metadata *Metadata) (*StructuredText, bool) {
+	st := NewStructuredText(metadata)
+	if !st.HasContent() {
+		return st, false
+	}
+
+	if prefixSuffix, exists := mr.inputPrefixSuffix[inputName]; exists {
+		st.Prefix = prefixSuffix.Prefix
+		st.Suffix = prefixSuffix.Suffix
+	}
+
+	st.InputName = inputName
+	st.InputType = mr.inputTypes[inputName]
+
+	// Apply input filters - filters can reject metadata entirely
+	for _, filter := range mr.inputFilters[inputName] {
+		if !applyFilterAction(st, filter.Decide(st)) {
+			// Filter rejected the metadata - StructuredText fields are cleared
+			return st, false
+		}
+	}
+
+	return st, true
+}
+
 // wouldFiltersReject checks if filters would reject metadata or clear all content.
 // Used to avoid canceling valid pending updates when new metadata would be rejected.
-// This mirrors the filter evaluation in transformMetadataForOutput to catch both explicit
-// rejections and cumulative field clearing (e.g., one filter clears artist, another title).
+// Catches both explicit rejections and cumulative field clearing (e.g., one filter
+// clears artist, another title).
 func (mr *MetadataRouter) wouldFiltersReject(inputName string, metadata *Metadata) bool {
 	if metadata == nil {
 		return true
 	}
 
-	// Create temporary StructuredText with same context as execution time
-	st := NewStructuredText(metadata)
-	if !st.HasContent() {
-		return true
-	}
-
-	// Set prefix/suffix and input type to match execution-time context
-	if prefixSuffix, exists := mr.inputPrefixSuffix[inputName]; exists {
-		st.Prefix = prefixSuffix.Prefix
-		st.Suffix = prefixSuffix.Suffix
-	}
-	st.InputName = inputName
-	st.InputType = mr.inputTypes[inputName]
-
-	// Apply all filters, checking for both explicit rejection and cumulative clearing
-	inputFilters, exists := mr.inputFilters[inputName]
-	if !exists || len(inputFilters) == 0 {
-		return false
-	}
-
-	for _, filter := range inputFilters {
-		action := filter.Decide(st)
-		if !applyFilterAction(st, action) {
-			return true // Explicit rejection
-		}
-	}
-
-	// Check if filters cumulatively cleared all content
-	return !st.HasContent()
+	st, ok := mr.applyInputStage(inputName, metadata)
+	return !ok || !st.HasContent()
 }
 
 // transformMetadataForOutput builds a StructuredText from metadata with prefix/suffix and formatters applied.
-// NOTE: This method reads inputPrefixSuffix, inputTypes, inputFilters, and outputFormatters
-// without locks. These maps are immutable after Start() - enforced by panicIfStarted in Set* methods.
 func (mr *MetadataRouter) transformMetadataForOutput(
 	outputName string, metadata *Metadata, inputName string,
 ) *StructuredText {
@@ -658,35 +642,14 @@ func (mr *MetadataRouter) transformMetadataForOutput(
 		return nil
 	}
 
-	st := NewStructuredText(metadata)
-	if !st.HasContent() {
+	st, ok := mr.applyInputStage(inputName, metadata)
+	if !ok {
 		return st
 	}
 
-	if prefixSuffix, exists := mr.inputPrefixSuffix[inputName]; exists {
-		st.Prefix = prefixSuffix.Prefix
-		st.Suffix = prefixSuffix.Suffix
-	}
-
-	st.InputName = inputName
-	st.InputType = mr.inputTypes[inputName]
-
-	// Apply input filters first - filters can reject metadata entirely
-	if inputFilters, exists := mr.inputFilters[inputName]; exists {
-		for _, filter := range inputFilters {
-			action := filter.Decide(st)
-			if !applyFilterAction(st, action) {
-				// Filter rejected the metadata - return StructuredText with cleared fields
-				return st
-			}
-		}
-	}
-
 	// Apply output formatters
-	if outputFormatters, exists := mr.outputFormatters[outputName]; exists {
-		for _, formatter := range outputFormatters {
-			formatter.Format(st)
-		}
+	for _, formatter := range mr.outputFormatters[outputName] {
+		formatter.Format(st)
 	}
 
 	return st
@@ -746,17 +709,7 @@ func (mr *MetadataRouter) processReadyUpdates() {
 
 // executeUpdate sends metadata to an output, skipping if content matches the last sent value.
 func (mr *MetadataRouter) executeUpdate(update *ScheduledUpdate) {
-	var inputName string
-	mr.mu.RLock()
-	for name, input := range mr.inputs {
-		if input.GetMetadata() != nil && input.GetMetadata().Name == update.Metadata.Name {
-			inputName = name
-			break
-		}
-	}
-	mr.mu.RUnlock()
-
-	st := mr.transformMetadataForOutput(update.OutputName, update.Metadata, inputName)
+	st := mr.transformMetadataForOutput(update.OutputName, update.Metadata, update.InputName)
 	if st == nil || !st.HasContent() {
 		return
 	}
@@ -770,7 +723,7 @@ func (mr *MetadataRouter) executeUpdate(update *ScheduledUpdate) {
 		return
 	}
 	mr.lastSentContent[update.OutputName] = formattedText
-	mr.currentInputs[update.OutputName] = inputName
+	mr.currentInputs[update.OutputName] = update.InputName
 	mr.mu.Unlock()
 
 	slog.Debug("Executing update for output",

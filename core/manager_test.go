@@ -165,9 +165,8 @@ func (f *contextAwareFilter) wasContextMatched() bool {
 
 // Test helpers.
 
-func testMetadata(name, artist, title string) *Metadata {
+func testMetadata(artist, title string) *Metadata {
 	return &Metadata{
-		Name:      name,
 		Artist:    artist,
 		Title:     title,
 		UpdatedAt: time.Now(),
@@ -217,7 +216,7 @@ func TestFilterRejectsMetadata(t *testing.T) {
 	_, input, output, cancel := setupTestRouter(t, 0, []Filter{newMockFilter(FilterReject)})
 	defer cancel()
 
-	input.SetMetadata(testMetadata("input", "Artist", "Title"))
+	input.SetMetadata(testMetadata("Artist", "Title"))
 	time.Sleep(100 * time.Millisecond)
 
 	sent := output.getSent()
@@ -232,11 +231,11 @@ func TestDelayedUpdatePreservedWhenNewMetadataRejected(t *testing.T) {
 	defer cancel()
 
 	// Send metadata A (passes filter, scheduled with 1s delay)
-	input.SetMetadata(testMetadata("input-a", "Artist A", "Title A"))
+	input.SetMetadata(testMetadata("Artist A", "Title A"))
 
 	// Immediately send metadata B which should be rejected
 	time.Sleep(50 * time.Millisecond)
-	input.SetMetadata(testMetadata("input-b", "Artist B", "REJECT this"))
+	input.SetMetadata(testMetadata("Artist B", "REJECT this"))
 
 	// Wait for A's delayed update to arrive
 	st, ok := output.waitForSend(2 * time.Second)
@@ -270,11 +269,11 @@ func TestDelayedUpdatePreservedWhenNewMetadataCumulativelyCleared(t *testing.T) 
 	defer cancel()
 
 	// Send metadata A (passes filters, scheduled with 1s delay)
-	input.SetMetadata(testMetadata("input-a", "Artist A", "Title A"))
+	input.SetMetadata(testMetadata("Artist A", "Title A"))
 
 	// Send metadata B which will be cumulatively cleared
 	time.Sleep(50 * time.Millisecond)
-	input.SetMetadata(testMetadata("input-b", "Artist B", "CLEAR me"))
+	input.SetMetadata(testMetadata("Artist B", "CLEAR me"))
 
 	// Wait for A's delayed update
 	st, ok := output.waitForSend(2 * time.Second)
@@ -306,7 +305,7 @@ func TestCumulativeFieldClearingRejectsMetadata(t *testing.T) {
 	_, input, output, cancel := setupTestRouter(t, 0, filters)
 	defer cancel()
 
-	input.SetMetadata(testMetadata("input", "Artist", "Title"))
+	input.SetMetadata(testMetadata("Artist", "Title"))
 	time.Sleep(100 * time.Millisecond)
 
 	sent := output.getSent()
@@ -325,25 +324,25 @@ func TestWouldFiltersReject(t *testing.T) {
 		{
 			name:           "cumulative clearing rejects",
 			filters:        []Filter{newMockFilter(FilterClearArtist), newMockFilter(FilterClearTitle)},
-			metadata:       testMetadata("input", "Artist", "Title"),
+			metadata:       testMetadata("Artist", "Title"),
 			expectedReject: true,
 		},
 		{
 			name:           "explicit rejection",
 			filters:        []Filter{newMockFilter(FilterReject)},
-			metadata:       testMetadata("input", "Artist", "Title"),
+			metadata:       testMetadata("Artist", "Title"),
 			expectedReject: true,
 		},
 		{
 			name:           "pass through",
 			filters:        []Filter{newMockFilter(FilterPass)},
-			metadata:       testMetadata("input", "Artist", "Title"),
+			metadata:       testMetadata("Artist", "Title"),
 			expectedReject: false,
 		},
 		{
 			name:           "no filters passes",
 			filters:        nil,
-			metadata:       testMetadata("input", "Artist", "Title"),
+			metadata:       testMetadata("Artist", "Title"),
 			expectedReject: false,
 		},
 		{
@@ -355,19 +354,19 @@ func TestWouldFiltersReject(t *testing.T) {
 		{
 			name:           "empty content rejects",
 			filters:        nil,
-			metadata:       testMetadata("input", "", ""),
+			metadata:       testMetadata("", ""),
 			expectedReject: true,
 		},
 		{
 			name:           "partial clear artist allows",
 			filters:        []Filter{newMockFilter(FilterClearArtist)},
-			metadata:       testMetadata("input", "Artist", "Title"),
+			metadata:       testMetadata("Artist", "Title"),
 			expectedReject: false,
 		},
 		{
 			name:           "partial clear title allows",
 			filters:        []Filter{newMockFilter(FilterClearTitle)},
-			metadata:       testMetadata("input", "Artist", "Title"),
+			metadata:       testMetadata("Artist", "Title"),
 			expectedReject: false,
 		},
 	}
@@ -417,7 +416,7 @@ func TestFilterContextMatchesExecution(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	input.SetMetadata(testMetadata("input", "Artist", "Title"))
+	input.SetMetadata(testMetadata("Artist", "Title"))
 	time.Sleep(100 * time.Millisecond)
 
 	if !contextFilter.wasContextMatched() {
@@ -436,7 +435,7 @@ func TestWouldFiltersRejectContextFields(t *testing.T) {
 	router.SetInputPrefixSuffix("test-input", "Hello ", " World")
 	router.SetInputFilters("test-input", []Filter{captureFilter})
 
-	router.wouldFiltersReject("test-input", testMetadata("input", "Artist", "Title"))
+	router.wouldFiltersReject("test-input", testMetadata("Artist", "Title"))
 
 	captured := captureFilter.getCaptured()
 	if captured == nil {

@@ -94,7 +94,7 @@ func TestWebSocketHubBroadcastSerializesWithPingWriter(t *testing.T) {
 func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 	hub := NewWebSocketHub("test")
 
-	hub.SetOnConnect(func(*WebSocketConn) any {
+	hub.SetOnConnect(func() any {
 		return map[string]any{
 			"id":   "initial-state",
 			"kind": "initial",
@@ -156,7 +156,7 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 	releaseOnConnect := make(chan struct{})
 	disconnected := make(chan struct{}, 1)
 
-	hub.SetOnConnect(func(*WebSocketConn) any {
+	hub.SetOnConnect(func() any {
 		close(onConnectStarted)
 		<-releaseOnConnect
 		return map[string]any{
@@ -165,7 +165,7 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 		}
 	})
 
-	hub.SetOnDisconnect(func(*WebSocketConn) {
+	hub.SetOnDisconnect(func() {
 		select {
 		case disconnected <- struct{}{}:
 		default:
@@ -208,7 +208,7 @@ func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
 	hub.writeTimeout = 50 * time.Millisecond
 
 	disconnected := make(chan struct{}, 1)
-	hub.SetOnDisconnect(func(*WebSocketConn) {
+	hub.SetOnDisconnect(func() {
 		select {
 		case disconnected <- struct{}{}:
 		default:
@@ -240,7 +240,7 @@ func TestWebSocketHubClientInitiatedClose(t *testing.T) {
 	hub := NewWebSocketHub("test")
 
 	disconnected := make(chan struct{}, 1)
-	hub.SetOnDisconnect(func(*WebSocketConn) {
+	hub.SetOnDisconnect(func() {
 		select {
 		case disconnected <- struct{}{}:
 		default:
@@ -292,7 +292,7 @@ func TestWebSocketHubOnConnectMarshalFailureRemovesClient(t *testing.T) {
 	hub := NewWebSocketHub("test")
 
 	// Return an un-marshalable value from onConnect.
-	hub.SetOnConnect(func(*WebSocketConn) any {
+	hub.SetOnConnect(func() any {
 		return make(chan int)
 	})
 
@@ -319,7 +319,7 @@ func TestWebSocketHubOnDisconnectCalledOnce(t *testing.T) {
 
 	var calls int32
 	var mu sync.Mutex
-	hub.SetOnDisconnect(func(*WebSocketConn) {
+	hub.SetOnDisconnect(func() {
 		mu.Lock()
 		calls++
 		mu.Unlock()

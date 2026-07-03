@@ -129,9 +129,9 @@ func (r *RDSFormatter) Format(st *core.StructuredText) {
 }
 
 // cleanField converts text to RDS-safe ASCII with normalized spacing.
+// stripHTMLTags already transliterates to ASCII before filtering visible characters.
 func cleanField(s string) string {
 	s = stripHTMLTags(s)
-	s = transliterateToASCII(s)
 	s = whitespaceReg.ReplaceAllString(s, " ")
 	return strings.TrimSpace(s)
 }
@@ -217,11 +217,10 @@ func truncateAtWord(s string, maxRunes int) string {
 func stripHTMLTags(text string) string {
 	doc, err := html.Parse(strings.NewReader(text))
 	if err != nil {
-		return text
+		return filterVisibleText(text)
 	}
 
-	result := extractText(doc)
-	return filterVisibleText(result)
+	return filterVisibleText(extractText(doc))
 }
 
 func extractText(n *html.Node) string {
@@ -242,7 +241,7 @@ func filterVisibleText(text string) string {
 
 	var result strings.Builder
 	for _, r := range text {
-		if (r >= 32 && r <= 126) || r == ' ' {
+		if r >= 32 && r <= 126 {
 			result.WriteRune(r)
 		} else if r == '\n' || r == '\r' || r == '\t' {
 			result.WriteRune(' ')

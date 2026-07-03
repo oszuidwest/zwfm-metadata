@@ -34,18 +34,8 @@ func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicIn
 	}
 }
 
-// MetadataRequest holds the fields for an incoming metadata update request via the HTTP API.
-// Title is required; Secret is checked when configured for the dynamic input.
-type MetadataRequest struct {
-	SongID   string
-	Artist   string
-	Title    string
-	Duration string
-	Secret   string
-}
-
 // UpdateMetadata updates the metadata from an HTTP request.
-func (d *DynamicInput) UpdateMetadata(update *MetadataRequest) error {
+func (d *DynamicInput) UpdateMetadata(update *core.MetadataRequest) error {
 	if update == nil {
 		return fmt.Errorf("metadata update is required")
 	}
@@ -59,7 +49,6 @@ func (d *DynamicInput) UpdateMetadata(update *MetadataRequest) error {
 	}
 
 	metadata := &core.Metadata{
-		Name:      d.GetName(),
 		SongID:    update.SongID,
 		Artist:    update.Artist,
 		Title:     update.Title,

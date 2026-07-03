@@ -19,7 +19,6 @@ const (
 // DLPlusOutput writes DAB/DAB+ Dynamic Label Plus formatted metadata for ODR-PadEnc.
 type DLPlusOutput struct {
 	*core.OutputBase
-	core.PassiveComponent
 	settings    config.DLPlusOutputConfig
 	toggleValue bool // Alternates between true/false to indicate content changes
 }
@@ -90,11 +89,5 @@ func (o *DLPlusOutput) Start(_ context.Context) error {
 		return fmt.Errorf("failed to create DL Plus file: %w", err)
 	}
 
-	return nil
-}
-
-// Stop handles graceful shutdown of the DL Plus output.
-func (o *DLPlusOutput) Stop() error {
-	slog.Debug("Stopped DL Plus output", "output", o.GetName(), "filename", o.settings.Filename)
 	return nil
 }

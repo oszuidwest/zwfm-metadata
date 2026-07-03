@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-// Config holds application settings including web server port, inputs, outputs, and formatters.
+// Config holds application settings including web server port, inputs, and outputs.
 type Config struct {
 	WebServerPort int            `json:"webServerPort"`
 	Debug         bool           `json:"debug,omitempty"`
@@ -18,7 +18,6 @@ type Config struct {
 	BrandColor    string         `json:"brandColor,omitempty"`
 	Inputs        []InputConfig  `json:"inputs"`
 	Outputs       []OutputConfig `json:"outputs"`
-	Formatters    []string       `json:"formatters,omitempty"`
 }
 
 // InputConfig defines a metadata source with its type, name, and type-specific settings.

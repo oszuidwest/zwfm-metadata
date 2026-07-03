@@ -1119,7 +1119,7 @@ See `EXTENDING.md` for detailed guidance on adding new inputs, outputs, formatte
 - All outputs receive `*core.StructuredText` with full metadata access
 - Filters implement `core.Filter` interface (accept/reject semantics)
 - Formatters implement `core.Formatter` interface (text transformation)
-- Using `utils.ConvertStructuredText()` for JSON/webhook payloads
+- Using `ConvertStructuredText()` (outputs package) for JSON/webhook payloads
 - Embedding base types (`core.InputBase`, `core.OutputBase`) for common functionality
 - Using `core.PassiveComponent` for components without background tasks
 

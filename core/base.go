@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"html"
-	"slices"
 	"sync"
 )
 
@@ -55,16 +54,6 @@ func (b *InputBase) Subscribe(ch chan<- *Metadata) {
 	b.subscribers = append(b.subscribers, ch)
 }
 
-// Unsubscribe removes a previously registered subscription channel.
-func (b *InputBase) Unsubscribe(ch chan<- *Metadata) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.subscribers = slices.DeleteFunc(b.subscribers, func(sub chan<- *Metadata) bool {
-		return sub == ch
-	})
-}
-
 // SetMetadata stores new metadata and notifies subscribers if content changed.
 func (b *InputBase) SetMetadata(metadata *Metadata) {
 	if metadata != nil {
@@ -103,9 +92,8 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 
 // OutputBase provides the base implementation for metadata output destinations.
 type OutputBase struct {
-	name   string
-	inputs []Input
-	delay  int
+	name  string
+	delay int
 }
 
 // NewOutputBase initializes an OutputBase with the given name.
@@ -118,11 +106,6 @@ func NewOutputBase(name string) *OutputBase {
 // GetName returns the name of this output destination.
 func (b *OutputBase) GetName() string {
 	return b.name
-}
-
-// SetInputs assigns the priority-ordered list of inputs for this output.
-func (b *OutputBase) SetInputs(inputs []Input) {
-	b.inputs = inputs
 }
 
 // SetDelay configures the output delay in seconds.
