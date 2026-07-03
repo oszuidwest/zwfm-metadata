@@ -61,6 +61,45 @@ func TestPayloadMapper_ArrayOfMapsExpandsTemplates(t *testing.T) {
 	}
 }
 
+func TestPayloadMapper_TypedSliceExpandsTemplates(t *testing.T) {
+	mapping := map[string]any{
+		"items": []map[string]any{
+			{"track": "{{.title}}"},
+		},
+		"tags": []string{"static", "{{.artist}}"},
+	}
+	pm := NewPayloadMapper(mapping)
+	got := pm.MapPayload(map[string]any{
+		"title":  "Test Song",
+		"artist": "Test Artist",
+	})
+
+	items, ok := got["items"].([]any)
+	if !ok {
+		t.Fatalf("items: got %T", got["items"])
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d", len(items))
+	}
+	row, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("items[0]: got %T", items[0])
+	}
+	if row["track"] != "Test Song" {
+		t.Errorf("track = %q", row["track"])
+	}
+	tags, ok := got["tags"].([]any)
+	if !ok {
+		t.Fatalf("tags: got %T", got["tags"])
+	}
+	if tags[0] != "static" {
+		t.Errorf("tags[0] = %v", tags[0])
+	}
+	if tags[1] != "{{.artist}}" {
+		t.Errorf("tags[1] = %v", tags[1])
+	}
+}
+
 func TestPayloadMapper_ArrayPrimitiveValuesPassThrough(t *testing.T) {
 	mapping := map[string]any{
 		"items": []any{

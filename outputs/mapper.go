@@ -3,6 +3,7 @@ package outputs
 import (
 	"bytes"
 	"log/slog"
+	"reflect"
 	"strings"
 	"sync"
 	"text/template"
@@ -68,11 +69,31 @@ func (pm *PayloadMapper) compileTemplates(value any) {
 		for _, item := range v {
 			pm.compileTemplates(item)
 		}
-	case []any:
-		for _, item := range v {
-			pm.compileTemplates(item)
+	default:
+		if items, ok := asAnySlice(v); ok {
+			for _, item := range items {
+				pm.compileTemplates(item)
+			}
 		}
 	}
+}
+
+// asAnySlice normalizes a slice of any element type to []any; JSON-decoded
+// mappings already arrive as []any, but programmatic callers may pass typed
+// slices like []map[string]any.
+func asAnySlice(value any) ([]any, bool) {
+	if items, ok := value.([]any); ok {
+		return items, true
+	}
+	rv := reflect.ValueOf(value)
+	if rv.Kind() != reflect.Slice {
+		return nil, false
+	}
+	items := make([]any, rv.Len())
+	for i := range rv.Len() {
+		items[i] = rv.Index(i).Interface()
+	}
+	return items, true
 }
 
 // isTemplate reports whether a mapping string contains template syntax.
@@ -105,10 +126,12 @@ func (pm *PayloadMapper) processMapping(mapping, result map[string]any, data any
 			nestedResult := make(map[string]any)
 			pm.processMapping(v, nestedResult, data)
 			result[key] = nestedResult
-		case []any:
-			result[key] = pm.processMappingSlice(v, data)
 		default:
-			result[key] = value
+			if items, ok := asAnySlice(value); ok {
+				result[key] = pm.processMappingSlice(items, data)
+			} else {
+				result[key] = value
+			}
 		}
 	}
 }
