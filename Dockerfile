@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build stage
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine3.23 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine3.23 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache ca-certificates git
