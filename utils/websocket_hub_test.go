@@ -26,11 +26,11 @@ func TestWebSocketHubBroadcastSerializesConcurrentWriters(t *testing.T) {
 
 	expectedIDs := make(map[string]struct{}, rounds*writersPerRound)
 
-	for round := 0; round < rounds; round++ {
+	for round := range rounds {
 		start := make(chan struct{})
 		var wg sync.WaitGroup
 
-		for writer := 0; writer < writersPerRound; writer++ {
+		for writer := range writersPerRound {
 			id := fmt.Sprintf("round-%d-writer-%d", round, writer)
 			expectedIDs[id] = struct{}{}
 
@@ -71,7 +71,7 @@ func TestWebSocketHubBroadcastSerializesWithPingWriter(t *testing.T) {
 	const broadcasts = 30
 	expectedIDs := make(map[string]struct{}, broadcasts)
 
-	for i := 0; i < broadcasts; i++ {
+	for i := range broadcasts {
 		id := fmt.Sprintf("ping-race-%d", i)
 		expectedIDs[id] = struct{}{}
 
@@ -113,7 +113,7 @@ func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 
-	for i := 0; i < broadcasts; i++ {
+	for i := range broadcasts {
 		id := fmt.Sprintf("on-connect-race-%d", i)
 		expectedIDs[id] = struct{}{}
 
@@ -223,7 +223,7 @@ func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
 
 	waitForClientCount(t, hub, 1, time.Second)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		hub.Broadcast(map[string]any{"i": i})
 	}
 
@@ -336,7 +336,7 @@ func TestWebSocketHubOnDisconnectCalledOnce(t *testing.T) {
 	// Flood broadcasts to trigger signalDone from Broadcast (slow client)
 	// while writePump may also exit due to a write error. Both paths
 	// converge on disconnectClient, which must call onDisconnect exactly once.
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		hub.Broadcast(map[string]any{"i": i})
 	}
 
