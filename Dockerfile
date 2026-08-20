@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build stage
-FROM --platform=$BUILDPLATFORM golang:1.26.6-alpine3.23 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.0-alpine3.24 AS builder
 
 # Install build dependencies
 RUN apk add --no-cache ca-certificates git
@@ -23,7 +23,7 @@ ARG TARGETARCH
 # Build arguments for version information
 ARG VERSION=dev
 ARG COMMIT=unknown
-ARG BUILD_TIME
+ARG BUILD_TIME=unknown
 
 # Build the binary for the target platform
 RUN --mount=type=cache,target=/go/pkg/mod \
