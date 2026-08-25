@@ -23,7 +23,7 @@ ARG TARGETARCH
 # Build arguments for version information
 ARG VERSION=dev
 ARG COMMIT=unknown
-ARG BUILD_TIME
+ARG BUILD_TIME=unknown
 
 # Build the binary for the target platform
 RUN --mount=type=cache,target=/go/pkg/mod \
