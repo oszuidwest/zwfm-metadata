@@ -41,6 +41,7 @@ type Output interface {
 	Start(ctx context.Context) error
 	GetName() string
 	GetDelay() int
+	GetFallbackDelay() int
 	Send(st *StructuredText)
 }
 

@@ -26,6 +26,7 @@ func NewIcecastOutput(name string, settings *config.IcecastOutputConfig) *Icecas
 		settings:   *settings,
 	}
 	output.SetDelay(settings.Delay)
+	output.SetFallbackDelay(settings.FallbackDelay)
 	return output
 }
 
