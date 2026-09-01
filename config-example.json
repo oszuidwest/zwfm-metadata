@@ -26,8 +26,7 @@
       "settings": {
         "secret": "supersecret123",
         "expiration": {
-          "type": "dynamic",
-          "roundUpMinutes": true
+          "type": "dynamic"
         }
       }
     },
@@ -108,6 +107,7 @@
       "formatters": ["uppercase"],
       "settings": {
         "delay": 0,
+        "fallbackDelay": 20,
         "filename": "/tmp/nowplaying.txt"
       }
     },

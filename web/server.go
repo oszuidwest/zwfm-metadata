@@ -37,12 +37,13 @@ type Server struct {
 
 // OutputStatus holds output configuration and state for the dashboard API.
 type OutputStatus struct {
-	Name         string   `json:"name"`
-	Type         string   `json:"type"`
-	Delay        int      `json:"delay"`
-	Inputs       []string `json:"inputs"`
-	Formatters   []string `json:"formatters"`
-	CurrentInput string   `json:"currentInput,omitzero"`
+	Name          string   `json:"name"`
+	Type          string   `json:"type"`
+	Delay         int      `json:"delay"`
+	FallbackDelay int      `json:"fallbackDelay"`
+	Inputs        []string `json:"inputs"`
+	Formatters    []string `json:"formatters"`
+	CurrentInput  string   `json:"currentInput,omitzero"`
 }
 
 // NewServer initializes the server with pre-generated favicons and a dashboard WebSocket hub.
@@ -222,11 +223,12 @@ func (s *Server) getDashboardData() any {
 
 	for _, output := range outputs {
 		outputStatus := OutputStatus{
-			Name:       output.GetName(),
-			Type:       s.router.GetOutputType(output.GetName()),
-			Delay:      output.GetDelay(),
-			Inputs:     s.router.GetOutputInputs(output.GetName()),
-			Formatters: s.router.GetOutputFormatterNames(output.GetName()),
+			Name:          output.GetName(),
+			Type:          s.router.GetOutputType(output.GetName()),
+			Delay:         output.GetDelay(),
+			FallbackDelay: output.GetFallbackDelay(),
+			Inputs:        s.router.GetOutputInputs(output.GetName()),
+			Formatters:    s.router.GetOutputFormatterNames(output.GetName()),
 		}
 
 		currentInput := s.router.GetCurrentInputForOutput(output.GetName())
