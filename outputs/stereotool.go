@@ -27,6 +27,7 @@ func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *S
 		settings:   settings,
 	}
 	output.SetDelay(settings.Delay)
+	output.SetFallbackDelay(settings.FallbackDelay)
 	return output
 }
 

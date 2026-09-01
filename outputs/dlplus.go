@@ -30,6 +30,7 @@ func NewDLPlusOutput(name string, settings config.DLPlusOutputConfig) *DLPlusOut
 		settings:   settings,
 	}
 	output.SetDelay(settings.Delay)
+	output.SetFallbackDelay(settings.FallbackDelay)
 	return output
 }
 

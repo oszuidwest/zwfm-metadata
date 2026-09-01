@@ -548,7 +548,10 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 		return
 	}
 
-	delay := time.Duration(output.GetDelay()) * time.Second
+	// The fallback waits for the output's fallback delay. A new track arriving in the
+	// meantime cancels it (see scheduleInputChangeUpdates), so the delay doubles as the
+	// grace period for crossfades and jingles between tracks.
+	delay := time.Duration(output.GetFallbackDelay()) * time.Second
 	executeAt := time.Now().Add(delay)
 
 	update := ScheduledUpdate{

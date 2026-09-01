@@ -23,6 +23,7 @@ Metadata routing middleware for radio stations that routes metadata from inputs 
 - [Outputs](#outputs)
   - [Output Feature Comparison](#output-feature-comparison)
   - [Output Configurations](#output-configurations)
+    - [Delays and fallback](#delays-and-fallback)
     - [Icecast Output](#icecast-output)
     - [File Output](#file-output)
     - [URL Output](#url-output)
@@ -119,7 +120,8 @@ HTTP API for live updates
 - `secret` (optional) - Authentication secret for API calls
 - `expiration.type` - `"dynamic"` (expires based on song duration), `"fixed"` (expires after a set number of minutes), or `"none"` (never expires)
 - `expiration.minutes` (required if type=fixed, optional for type=dynamic) - Number of minutes until expiration. When `type` is `"dynamic"`, this serves as a fallback when the duration parameter is missing or invalid
-- `expiration.roundUpMinutes` (optional, default: true, only for type=dynamic) - When `true` (or omitted), dynamic expiration rounds up to full minutes (e.g., 3:30 → 4 minutes). This prevents metadata "flapping" when short segments like talk or jingles follow a song. Set to `false` to use exact second-based expiration
+
+Dynamic expiration is exact: a track with `duration=03:30` expires 3:30 after it was received. Short gaps between tracks (crossfades, jingles) are covered by the output's `fallbackDelay`, see [Delays and fallback](#delays-and-fallback).
 
 #### API Usage
 ```bash
@@ -404,6 +406,31 @@ All output types support:
 
 **Note on Templates**: Template functions (like `{{.title | upper}}`) are only available in outputs with template support (URL, HTTP, WebSocket). Other outputs use the formatted text directly and cannot use template syntax in their configuration.
 
+#### Delays and fallback
+
+Every output has two timings:
+
+- `delay` - How long a metadata update waits before it is sent. Use this to line up metadata with the audio latency of the destination (an Icecast stream typically runs 10 to 30 seconds behind the studio).
+- `fallbackDelay` - How long the output waits after its current input expires before it sends the next available input. Defaults to `delay`.
+
+When a new track arrives while a fallback is waiting, the fallback is cancelled and the new track is sent instead. The fallback delay therefore doubles as a grace period: as long as the next track shows up within that window, short gaps such as crossfades and jingles never reach the output.
+
+Outputs with a delay of 10 seconds or more usually need no separate `fallbackDelay`, because the regular delay already covers typical gaps. Outputs that send immediately (`delay: 0`, such as RDS RadioText) should set a `fallbackDelay` of around 15 to 30 seconds, otherwise every gap between tracks briefly shows the fallback text.
+
+```json
+{
+  "type": "stereotool",
+  "name": "rds",
+  "inputs": ["radio-live", "default-text"],
+  "settings": {
+    "delay": 0,
+    "fallbackDelay": 20,
+    "hostname": "localhost",
+    "port": 8080
+  }
+}
+```
+
 #### Icecast Output
 
 Updates streaming server metadata
@@ -427,6 +454,7 @@ Updates streaming server metadata
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
+- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
 - `server` (required) - Icecast server hostname/IP
 - `port` (required) - Icecast server port
 - `username` (required) - Icecast username (usually "source")
@@ -452,6 +480,7 @@ Writes metadata to the filesystem.
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
+- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
 - `filename` (required) - Full path to output file
 
 **Note**: File output writes the formatted text as-is. To transform text, use formatters like `uppercase`, `lowercase`, `ucwords`, or `rds`. Template functions are not available for file outputs.
@@ -506,6 +535,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
+- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
 - `url` (required) - Target URL (supports Go templates for GET requests)
 - `method` (required) - HTTP method: "GET" or "POST"
 - `bearerToken` (optional) - Authorization bearer token
@@ -653,6 +683,7 @@ Serves metadata via GET endpoints with multiple response formats
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
+- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
 - `endpoints` (required) - Array of HTTP endpoints to serve
 
 ##### Endpoint Configuration
@@ -685,6 +716,7 @@ Broadcasts metadata to connected clients with real-time updates.
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
+- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
 - `path` (required) - URL path for WebSocket connections (e.g., "/metadata", "/ws")
 - `payloadMapping` (optional) - Custom JSON message structure (see [Custom Payload Mapping](#custom-payload-mapping))
 
@@ -727,6 +759,7 @@ Generates DL Plus format for DAB/DAB+ transmission
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
+- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
 - `filename` (required) - Full path to output file
 
 ##### Output Format
@@ -771,6 +804,7 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
+- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
 - `hostname` (required) - StereoTool server hostname/IP
 - `port` (required) - StereoTool HTTP server port (typically 8080)
 
@@ -1089,7 +1123,7 @@ lowercase: "artist name - song title"
 
 - **Priority fallback**: Outputs use the first available input in the priority list
 - **Input filtering**: Suppress unwanted metadata (jingles, test tracks, placeholders) before it reaches outputs
-- **Configurable delays**: Synchronizes timing across different outputs
+- **Configurable delays**: Synchronizes timing across different outputs, with a separate fallback delay that bridges short gaps between tracks
 - **Input expiration**: Dynamic inputs expire automatically
 - **Prefix/suffix support**: Adds station branding to inputs
 - **Text formatting**: Transform metadata with formatters (uppercase, title case, RDS compliance)

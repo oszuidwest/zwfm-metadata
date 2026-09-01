@@ -57,6 +57,7 @@ func NewURLOutput(name string, settings config.URLOutputConfig) (*URLOutput, err
 		urlTemplate:   tmpl,
 	}
 	output.SetDelay(settings.Delay)
+	output.SetFallbackDelay(settings.FallbackDelay)
 	return output, nil
 }
 

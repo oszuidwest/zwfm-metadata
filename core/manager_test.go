@@ -459,3 +459,120 @@ func TestWouldFiltersRejectContextFields(t *testing.T) {
 		}
 	}
 }
+
+// expiringMetadata returns metadata that expires after the given duration.
+func expiringMetadata(artist, title string, ttl time.Duration) *Metadata {
+	m := testMetadata(artist, title)
+	expiresAt := time.Now().Add(ttl)
+	m.ExpiresAt = &expiresAt
+	return m
+}
+
+// setupFallbackRouter creates a router with a primary input that can expire and a
+// static fallback input. The output has the given delay and fallback delay.
+func setupFallbackRouter(t *testing.T, delay int, fallbackDelay *int) (*mockInput, *mockOutput, context.CancelFunc) {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	router := NewMetadataRouter()
+
+	primary := newMockInput("primary")
+	if err := router.AddInput(primary); err != nil {
+		cancel()
+		t.Fatalf("AddInput failed: %v", err)
+	}
+
+	fallback := &mockInput{InputBase: NewInputBase("fallback")}
+	fallback.SetMetadata(testMetadata("", "Station Name"))
+	if err := router.AddInput(fallback); err != nil {
+		cancel()
+		t.Fatalf("AddInput failed: %v", err)
+	}
+
+	output := newMockOutput("test-output", delay)
+	output.SetFallbackDelay(fallbackDelay)
+	if err := router.AddOutput(output); err != nil {
+		cancel()
+		t.Fatalf("AddOutput failed: %v", err)
+	}
+	router.SetOutputInputs("test-output", []string{"primary", "fallback"})
+
+	if err := router.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	// The static fallback is sent on start; drain it so tests only see what follows.
+	if _, ok := output.waitForSend(time.Second); !ok {
+		cancel()
+		t.Fatal("expected initial fallback text to be sent")
+	}
+
+	return primary, output, cancel
+}
+
+func TestGetFallbackDelayDefaultsToDelay(t *testing.T) {
+	output := newMockOutput("test-output", 7)
+	if got := output.GetFallbackDelay(); got != 7 {
+		t.Fatalf("expected fallback delay to default to delay 7, got %d", got)
+	}
+
+	explicit := 20
+	output.SetFallbackDelay(&explicit)
+	if got := output.GetFallbackDelay(); got != 20 {
+		t.Fatalf("expected explicit fallback delay 20, got %d", got)
+	}
+}
+
+func TestFallbackWaitsForFallbackDelay(t *testing.T) {
+	fallbackDelay := 2
+	primary, output, cancel := setupFallbackRouter(t, 0, &fallbackDelay)
+	defer cancel()
+
+	primary.SetMetadata(expiringMetadata("Artist", "Song", 500*time.Millisecond))
+	if st, ok := output.waitForSend(time.Second); !ok || st.Title != "Song" {
+		t.Fatalf("expected song to be sent immediately, got %v (ok=%v)", st, ok)
+	}
+
+	// The expiration checker runs every second; the fallback then waits fallbackDelay.
+	// Well before that window closes nothing may be sent.
+	if st, ok := output.waitForSend(1500 * time.Millisecond); ok {
+		t.Fatalf("fallback sent too early: %q", st.String())
+	}
+
+	st, ok := output.waitForSend(3 * time.Second)
+	if !ok {
+		t.Fatal("expected fallback text after the fallback delay")
+	}
+	if st.Title != "Station Name" {
+		t.Fatalf("expected fallback text, got %q", st.String())
+	}
+}
+
+func TestNewTrackWithinFallbackDelayCancelsFallback(t *testing.T) {
+	fallbackDelay := 3
+	primary, output, cancel := setupFallbackRouter(t, 0, &fallbackDelay)
+	defer cancel()
+
+	primary.SetMetadata(expiringMetadata("Artist", "First Song", 300*time.Millisecond))
+	if st, ok := output.waitForSend(time.Second); !ok || st.Title != "First Song" {
+		t.Fatalf("expected first song to be sent, got %v (ok=%v)", st, ok)
+	}
+
+	// Let the first song expire and the fallback get scheduled, then send the next
+	// track inside the fallback window, as a playout system does after a jingle.
+	time.Sleep(1500 * time.Millisecond)
+	primary.SetMetadata(expiringMetadata("Artist", "Second Song", time.Minute))
+
+	st, ok := output.waitForSend(time.Second)
+	if !ok {
+		t.Fatal("expected second song to be sent")
+	}
+	if st.Title != "Second Song" {
+		t.Fatalf("expected second song to replace the pending fallback, got %q", st.String())
+	}
+
+	if st, ok := output.waitForSend(4 * time.Second); ok {
+		t.Fatalf("fallback must be cancelled by the new track, but got %q", st.String())
+	}
+}

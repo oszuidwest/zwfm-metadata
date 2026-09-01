@@ -24,6 +24,7 @@ func NewFileOutput(name string, settings config.FileOutputConfig) *FileOutput {
 		settings:   settings,
 	}
 	output.SetDelay(settings.Delay)
+	output.SetFallbackDelay(settings.FallbackDelay)
 	return output
 }
 

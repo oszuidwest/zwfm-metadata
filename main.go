@@ -172,7 +172,12 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 	}
 	router.SetOutputType(outputCfg.Name, outputCfg.Type)
 
-	slog.Info("Added output", "name", outputCfg.Name, "type", outputCfg.Type, "delay", output.GetDelay())
+	slog.Info("Added output",
+		"name", outputCfg.Name,
+		"type", outputCfg.Type,
+		"delay", output.GetDelay(),
+		"fallbackDelay", output.GetFallbackDelay(),
+	)
 
 	return nil
 }

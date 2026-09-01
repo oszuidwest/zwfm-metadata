@@ -92,8 +92,9 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 
 // OutputBase provides the base implementation for metadata output destinations.
 type OutputBase struct {
-	name  string
-	delay int
+	name          string
+	delay         int
+	fallbackDelay *int
 }
 
 // NewOutputBase initializes an OutputBase with the given name.
@@ -115,5 +116,21 @@ func (b *OutputBase) SetDelay(delay int) {
 
 // GetDelay returns the configured delay in seconds before output delivery.
 func (b *OutputBase) GetDelay() int {
+	return b.delay
+}
+
+// SetFallbackDelay configures how many seconds a fallback waits after the current
+// input expires. A nil value means the fallback uses the regular output delay.
+func (b *OutputBase) SetFallbackDelay(delay *int) {
+	b.fallbackDelay = delay
+}
+
+// GetFallbackDelay returns the delay in seconds before a fallback replaces expired
+// metadata. A new track arriving within this window cancels the fallback, which
+// keeps short gaps between tracks (crossfades, jingles) from flapping to fallback text.
+func (b *OutputBase) GetFallbackDelay() int {
+	if b.fallbackDelay != nil {
+		return *b.fallbackDelay
+	}
 	return b.delay
 }

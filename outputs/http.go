@@ -41,6 +41,7 @@ func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 	}
 
 	output.SetDelay(settings.Delay)
+	output.SetFallbackDelay(settings.FallbackDelay)
 	return output
 }
 

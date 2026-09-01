@@ -3,7 +3,6 @@ package inputs
 import (
 	"fmt"
 	"log/slog"
-	"math"
 	"time"
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
@@ -14,23 +13,14 @@ import (
 type DynamicInput struct {
 	*core.InputBase
 	core.PassiveComponent
-	settings       config.DynamicInputConfig
-	roundUpMinutes bool // cached from config at init time
+	settings config.DynamicInputConfig
 }
 
 // NewDynamicInput initializes an HTTP API-driven input with the given settings.
 func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicInput {
-	if settings.Expiration.RoundUpMinutes != nil && settings.Expiration.Type != "dynamic" {
-		slog.Warn("roundUpMinutes is only used with expiration type \"dynamic\" and will be ignored",
-			"input", name,
-			"type", settings.Expiration.Type,
-		)
-	}
-
 	return &DynamicInput{
-		InputBase:      core.NewInputBase(name),
-		settings:       settings,
-		roundUpMinutes: settings.Expiration.RoundUpMinutes == nil || *settings.Expiration.RoundUpMinutes,
+		InputBase: core.NewInputBase(name),
+		settings:  settings,
 	}
 }
 
@@ -70,7 +60,9 @@ func (d *DynamicInput) UpdateMetadata(update *core.MetadataRequest) error {
 	return nil
 }
 
-// calculateDynamicExpiration parses duration and returns expiration time.
+// calculateDynamicExpiration parses duration and returns the exact expiration time.
+// Gaps between tracks are covered by the per-output fallback delay, not by padding
+// the expiration, so downstream consumers receive the real end of the track.
 func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 	totalSeconds, ok := utils.ParseDurationToSeconds(duration)
 	if !ok {
@@ -85,19 +77,12 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 		return time.Now()
 	}
 
-	var expiresAt time.Time
-	if d.roundUpMinutes {
-		minutes := int(math.Ceil(float64(totalSeconds) / 60.0))
-		expiresAt = time.Now().Add(time.Duration(minutes) * time.Minute)
-	} else {
-		expiresAt = time.Now().Add(time.Duration(totalSeconds) * time.Second)
-	}
+	expiresAt := time.Now().Add(time.Duration(totalSeconds) * time.Second)
 
 	slog.Debug("Calculated dynamic expiration",
 		"input", d.GetName(),
 		"duration", duration,
 		"totalSeconds", totalSeconds,
-		"roundUpMinutes", d.roundUpMinutes,
 		"expiresAt", expiresAt.Format("15:04:05"),
 	)
 

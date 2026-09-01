@@ -340,6 +340,7 @@ func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCus
         httpClient: &http.Client{Timeout: 10 * time.Second},
     }
     output.SetDelay(settings.Delay)
+    output.SetFallbackDelay(settings.FallbackDelay)
     return output
 }
 ```
@@ -433,6 +434,7 @@ Add your configuration struct to `config/config.go`:
 // MyCustomOutputConfig represents settings for custom output
 type MyCustomOutputConfig struct {
     Delay          int                    `json:"delay"`
+    FallbackDelay  *int                   `json:"fallbackDelay,omitempty"`
     URL            string                 `json:"url"`
     APIKey         string                 `json:"apiKey"`
     PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
@@ -849,6 +851,7 @@ func NewDiscordOutput(name string, settings config.DiscordOutputConfig) *Discord
         httpClient: &http.Client{Timeout: 10 * time.Second},
     }
     output.SetDelay(settings.Delay)
+    output.SetFallbackDelay(settings.FallbackDelay)
     return output
 }
 
@@ -1015,6 +1018,7 @@ type Output interface {
     Start(ctx context.Context) error    // Start processing
     GetName() string                    // Return output name
     GetDelay() int                      // Return delay in seconds
+    GetFallbackDelay() int              // Return delay before a fallback replaces expired metadata
     Send(st *StructuredText)            // Process structured metadata
 }
 ```

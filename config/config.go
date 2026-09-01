@@ -52,9 +52,8 @@ type FilterConfig struct {
 type DynamicInputConfig struct {
 	Secret     string `json:"secret"` //nolint:gosec // Config field for input authentication
 	Expiration struct {
-		Type           string `json:"type"`                     // "dynamic", "fixed", "none"
-		Minutes        int    `json:"minutes,omitempty"`        // Fallback minutes for dynamic, or fixed duration
-		RoundUpMinutes *bool  `json:"roundUpMinutes,omitempty"` // Round up dynamic expiration to full minutes (default: true)
+		Type    string `json:"type"`              // "dynamic", "fixed", "none"
+		Minutes int    `json:"minutes,omitempty"` // Fallback minutes for dynamic, or fixed duration
 	} `json:"expiration"`
 }
 
@@ -75,23 +74,26 @@ type TextInputConfig struct {
 
 // IcecastOutputConfig holds connection settings for updating Icecast stream metadata.
 type IcecastOutputConfig struct {
-	Delay      int    `json:"delay"`
-	Server     string `json:"server"`
-	Port       int    `json:"port"`
-	Username   string `json:"username"`
-	Password   string `json:"password"` //nolint:gosec // Config field for Icecast authentication
-	Mountpoint string `json:"mountpoint"`
+	Delay         int    `json:"delay"`
+	FallbackDelay *int   `json:"fallbackDelay,omitempty"` // Seconds before a fallback replaces expired metadata (default: delay)
+	Server        string `json:"server"`
+	Port          int    `json:"port"`
+	Username      string `json:"username"`
+	Password      string `json:"password"` //nolint:gosec // Config field for Icecast authentication
+	Mountpoint    string `json:"mountpoint"`
 }
 
 // FileOutputConfig holds settings for writing metadata to local files.
 type FileOutputConfig struct {
-	Delay    int    `json:"delay"`
-	Filename string `json:"filename"`
+	Delay         int    `json:"delay"`
+	FallbackDelay *int   `json:"fallbackDelay,omitempty"` // Seconds before a fallback replaces expired metadata (default: delay)
+	Filename      string `json:"filename"`
 }
 
 // URLOutputConfig holds settings for sending metadata via HTTP GET or POST requests.
 type URLOutputConfig struct {
 	Delay          int            `json:"delay"`
+	FallbackDelay  *int           `json:"fallbackDelay,omitempty"` // Seconds before a fallback replaces expired metadata (default: delay)
 	URL            string         `json:"url"`
 	Method         string         `json:"method,omitempty"`         // GET or POST (required)
 	BearerToken    string         `json:"bearerToken,omitempty"`    //nolint:gosec // Config field for HTTP authentication
@@ -100,21 +102,24 @@ type URLOutputConfig struct {
 
 // DLPlusOutputConfig holds settings for DAB/DAB+ DL Plus text output.
 type DLPlusOutputConfig struct {
-	Delay    int    `json:"delay"`
-	Filename string `json:"filename"`
+	Delay         int    `json:"delay"`
+	FallbackDelay *int   `json:"fallbackDelay,omitempty"` // Seconds before a fallback replaces expired metadata (default: delay)
+	Filename      string `json:"filename"`
 }
 
 // WebSocketOutputConfig holds settings for real-time WebSocket metadata broadcasting.
 type WebSocketOutputConfig struct {
 	Delay          int            `json:"delay"`
+	FallbackDelay  *int           `json:"fallbackDelay,omitempty"` // Seconds before a fallback replaces expired metadata (default: delay)
 	Path           string         `json:"path"`
 	PayloadMapping map[string]any `json:"payloadMapping,omitempty"`
 }
 
 // HTTPOutputConfig holds settings for serving metadata via HTTP GET endpoints.
 type HTTPOutputConfig struct {
-	Delay     int            `json:"delay"`
-	Endpoints []HTTPEndpoint `json:"endpoints"`
+	Delay         int            `json:"delay"`
+	FallbackDelay *int           `json:"fallbackDelay,omitempty"` // Seconds before a fallback replaces expired metadata (default: delay)
+	Endpoints     []HTTPEndpoint `json:"endpoints"`
 }
 
 // HTTPEndpoint defines a single HTTP GET endpoint with response format and optional payload mapping.
@@ -126,9 +131,10 @@ type HTTPEndpoint struct {
 
 // StereoToolOutputConfig holds connection settings for StereoTool RDS RadioText updates.
 type StereoToolOutputConfig struct {
-	Delay    int    `json:"delay"`
-	Hostname string `json:"hostname"`
-	Port     int    `json:"port"`
+	Delay         int    `json:"delay"`
+	FallbackDelay *int   `json:"fallbackDelay,omitempty"` // Seconds before a fallback replaces expired metadata (default: delay)
+	Hostname      string `json:"hostname"`
+	Port          int    `json:"port"`
 }
 
 // LoadConfig reads a configuration from the specified file.

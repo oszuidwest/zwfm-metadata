@@ -35,6 +35,7 @@ func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *Web
 		payloadMapper: mapper,
 	}
 	output.SetDelay(settings.Delay)
+	output.SetFallbackDelay(settings.FallbackDelay)
 
 	output.hub.SetOnConnect(func() any {
 		output.metadataMu.RLock()
