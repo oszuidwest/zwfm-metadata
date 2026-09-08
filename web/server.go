@@ -226,7 +226,7 @@ func (s *Server) getDashboardData() any {
 			Name:          output.GetName(),
 			Type:          s.router.GetOutputType(output.GetName()),
 			Delay:         output.GetDelay(),
-			FallbackDelay: output.GetFallbackDelay(),
+			FallbackDelay: core.OutputFallbackDelay(output),
 			Inputs:        s.router.GetOutputInputs(output.GetName()),
 			Formatters:    s.router.GetOutputFormatterNames(output.GetName()),
 		}
