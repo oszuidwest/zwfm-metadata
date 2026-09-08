@@ -247,7 +247,7 @@
       "type": "stereotool",
       "name": "stereotool-main",
       "inputs": ["radio-live", "nowplaying-api", "default-text"],
-      "formatters": [],
+      "formatters": ["rds"],
       "settings": {
         "delay": 2,
         "fallbackDelay": 20,

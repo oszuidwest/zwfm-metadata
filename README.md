@@ -30,7 +30,7 @@ Metadata routing middleware for radio stations that routes metadata from inputs 
     - [HTTP Output](#http-output)
     - [WebSocket Output](#websocket-output)
     - [DL Plus Output](#dl-plus-output)
-    - [StereoTool Output](#stereotool-output)
+    - [Stereo Tool Output](#stereo-tool-output)
   - [Custom Payload Mapping](#custom-payload-mapping)
 - [Formatters](#formatters)
   - [Available Formatters](#available-formatters)
@@ -784,9 +784,9 @@ The output automatically:
 
 Note: ODR-PadEnc automatically re-reads DL files before each transmission.
 
-#### StereoTool Output
+#### Stereo Tool Output
 
-Updates StereoTool's RDS RadioText and Streaming Output Metadata
+Updates Stereo Tool's RDS RadioText and streaming song metadata.
 
 ```json
 {
@@ -804,17 +804,17 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 ```
 
 ##### Settings
+
 - `delay` (required) - Number of seconds to delay metadata updates
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
-- `hostname` (required) - StereoTool server hostname/IP
-- `port` (required) - StereoTool HTTP server port (typically 8080)
+- `hostname` (required) - Stereo Tool server hostname/IP
+- `port` (required) - Stereo Tool HTTP server port (typically 8080)
 
 ##### Notes
-- Updates both FM RDS RadioText and Streaming Output Song
-- Uses StereoTool's undocumented JSON API. Field ID's might be different in other versions
-- Currently validated with StereoTool version 10.71
-- **REQUIRED:** Must be used with the RDS formatter for proper character encoding
-- **StereoTool Bug Workaround:** The RDS formatter converts all extended Latin characters (é, ø, ß, etc.) to pure ASCII as a temporary workaround for a bug in StereoTool's RDS implementation. While the EBU Latin character set (0x80-0xFF) should be valid for RDS, StereoTool doesn't handle these characters correctly. The formatter transliterates them (é→e, ø→o, ß→ss) to ensure compatibility until this bug is fixed
+
+- Uses Stereo Tool 11's undocumented JSON API: `9985` for RadioText and `6751` for Song. Both IDs were verified against 11.05 and 10.75; v3 only supports Stereo Tool 11.
+- Requires the `rds` formatter to enforce the 64-character RadioText limit and clean the input.
+- The formatter transliterates extended Latin characters to ASCII because Stereo Tool's RDS encoder corrupts them; verified in 10.71, 10.75, and 11.05.
 
 ### Custom Payload Mapping
 
@@ -1046,11 +1046,10 @@ Radio Data System formatter (64-character limit)
 
 Smart processing for RDS compliance:
 - **HTML cleaning**: Strips all HTML tags (`<b>`, `<i>`, `<span>`, `<script>`) and decodes entities (`&amp;` → `&`, `&lt;` → `<`, `&quot;` → `"`, `&shy;` → soft hyphen, `&nbsp;` → non-breaking space)
-- **ASCII transliteration**: Converts all extended Latin characters to pure ASCII (0-127 range) as a workaround for a StereoTool RDS bug. This is temporary until StereoTool properly supports the EBU Latin character set. Examples:
+- **ASCII transliteration**: Converts extended Latin characters to ASCII. Examples:
   - `BLØF` → `BLOF`
   - `Café` → `Cafe`
   - `Straße` → `Strasse`
-  - And 150+ other European characters
 
 - **Single-line output**: Converts newlines (`\n`, `\r`) and tabs (`\t`) to spaces for RDS displays
 - **Smart truncation** (applied in order until under 64 chars):
