@@ -222,11 +222,12 @@ func (s *Server) getDashboardData() any {
 	activeFlows := 0
 
 	for _, output := range outputs {
+		timing := s.router.GetOutputTiming(output.GetName())
 		outputStatus := OutputStatus{
 			Name:          output.GetName(),
 			Type:          s.router.GetOutputType(output.GetName()),
-			Delay:         output.GetDelay(),
-			FallbackDelay: output.GetFallbackDelay(),
+			Delay:         timing.Delay,
+			FallbackDelay: timing.FallbackDelay,
 			Inputs:        s.router.GetOutputInputs(output.GetName()),
 			Formatters:    s.router.GetOutputFormatterNames(output.GetName()),
 		}

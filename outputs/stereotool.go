@@ -26,7 +26,7 @@ type StereoToolOutput struct {
 // NewStereoToolOutput creates a Stereo Tool metadata output.
 func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *StereoToolOutput {
 	output := &StereoToolOutput{
-		OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
+		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
 	}
 	return output

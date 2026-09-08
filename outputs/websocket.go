@@ -29,7 +29,7 @@ func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *Web
 	}
 
 	output := &WebSocketOutput{
-		OutputBase:    core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
+		OutputBase:    core.NewOutputBase(name),
 		settings:      settings,
 		hub:           utils.NewWebSocketHub(name),
 		payloadMapper: mapper,

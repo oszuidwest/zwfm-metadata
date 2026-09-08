@@ -6,6 +6,8 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"zwfm-metadata/config"
 )
 
 type mockInput struct {
@@ -25,9 +27,9 @@ type mockOutput struct {
 	sendChan chan *StructuredText
 }
 
-func newMockOutput(name string, delay, fallbackDelay int) *mockOutput {
+func newMockOutput(name string) *mockOutput {
 	return &mockOutput{
-		OutputBase: NewOutputBase(name, delay, fallbackDelay),
+		OutputBase: NewOutputBase(name),
 		sent:       make([]*StructuredText, 0),
 		sendChan:   make(chan *StructuredText, 10),
 	}
@@ -190,7 +192,8 @@ func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*mockInpu
 	router.SetInputFilters("test-input", filters)
 
 	input := newMockInput("test-input")
-	output := newMockOutput("test-output", outputDelay, 0)
+	output := newMockOutput("test-output")
+	router.SetOutputTiming(output.GetName(), config.OutputTiming{Delay: outputDelay})
 	startRouter(t, router, output, input)
 
 	return input, output
@@ -375,7 +378,7 @@ func TestFilterContextMatchesExecution(t *testing.T) {
 		router.SetInputFilters("test-input", []Filter{contextFilter})
 
 		input := newMockInput("test-input")
-		output := newMockOutput("test-output", 0, 0)
+		output := newMockOutput("test-output")
 		startRouter(t, router, output, input)
 
 		input.SetMetadata(testMetadata("Artist", "Title"))
@@ -441,8 +444,13 @@ func setupFallbackRouter(t *testing.T) (primary, fallback *mockInput, output *mo
 	primary = newMockInput("primary")
 	fallback = newMockInput("fallback")
 	fallback.SetMetadata(testMetadata("", "Station Name"))
-	output = newMockOutput("test-output", delaySeconds, fallbackSeconds)
-	startRouter(t, NewMetadataRouter(), output, primary, fallback)
+	output = newMockOutput("test-output")
+	router := NewMetadataRouter()
+	router.SetOutputTiming(output.GetName(), config.OutputTiming{
+		Delay:         delaySeconds,
+		FallbackDelay: fallbackSeconds,
+	})
+	startRouter(t, router, output, primary, fallback)
 
 	// Drain the initial static fallback.
 	expectSent(t, output, "Station Name")

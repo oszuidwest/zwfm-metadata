@@ -8,6 +8,8 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"zwfm-metadata/config"
 )
 
 // InputPrefixSuffix holds text to prepend and append to an input's metadata.
@@ -59,11 +61,12 @@ type Timeline struct {
 type MetadataRouter struct {
 	inputs               map[string]Input
 	outputs              map[string]Output
-	outputInputs         map[string][]string    // output name -> input names
-	outputFormatters     map[string][]Formatter // output name -> formatters
-	outputFormatterNames map[string][]string    // output name -> formatter names
-	inputFilters         map[string][]Filter    // input name -> filters
-	inputFilterNames     map[string][]string    // input name -> filter type names (for dashboard)
+	outputInputs         map[string][]string            // output name -> input names
+	outputFormatters     map[string][]Formatter         // output name -> formatters
+	outputFormatterNames map[string][]string            // output name -> formatter names
+	outputTiming         map[string]config.OutputTiming // output name -> delivery timing
+	inputFilters         map[string][]Filter            // input name -> filters
+	inputFilterNames     map[string][]string            // input name -> filter type names (for dashboard)
 	inputPrefixSuffix    map[string]InputPrefixSuffix
 	inputTypes           map[string]string // input name -> input type
 	outputTypes          map[string]string // output name -> output type
@@ -82,6 +85,7 @@ func NewMetadataRouter() *MetadataRouter {
 		outputInputs:         make(map[string][]string),
 		outputFormatters:     make(map[string][]Formatter),
 		outputFormatterNames: make(map[string][]string),
+		outputTiming:         make(map[string]config.OutputTiming),
 		inputFilters:         make(map[string][]Filter),
 		inputFilterNames:     make(map[string][]string),
 		inputPrefixSuffix:    make(map[string]InputPrefixSuffix),
@@ -135,6 +139,14 @@ func (mr *MetadataRouter) SetOutputInputs(outputName string, inputNames []string
 	defer mr.mu.Unlock()
 	mr.panicIfStarted("SetOutputInputs")
 	mr.outputInputs[outputName] = inputNames
+}
+
+// SetOutputTiming configures the delivery timing for an output.
+func (mr *MetadataRouter) SetOutputTiming(outputName string, timing config.OutputTiming) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	mr.panicIfStarted("SetOutputTiming")
+	mr.outputTiming[outputName] = timing
 }
 
 // SetOutputFormatters configures the formatter chain applied to an output's metadata.
@@ -201,6 +213,13 @@ func (mr *MetadataRouter) GetOutputType(outputName string) string {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
 	return cmp.Or(mr.outputTypes[outputName], "unknown")
+}
+
+// GetOutputTiming retrieves the delivery timing configured for an output.
+func (mr *MetadataRouter) GetOutputTiming(outputName string) config.OutputTiming {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+	return mr.outputTiming[outputName]
 }
 
 // GetInputStatus builds a sorted snapshot of all inputs for the dashboard API.
@@ -410,7 +429,7 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 
 		mr.timeline.cancelUpdatesForOutput(outputName)
 
-		delay := mr.updateDelay(outputName, output, inputName)
+		delay := mr.updateDelay(outputName, inputName)
 		executeAt := time.Now().Add(delay)
 
 		update := ScheduledUpdate{
@@ -536,7 +555,7 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 		return
 	}
 
-	delay := mr.updateDelay(outputName, output, inputName)
+	delay := mr.updateDelay(outputName, inputName)
 	executeAt := time.Now().Add(delay)
 
 	update := ScheduledUpdate{
@@ -558,12 +577,13 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 
 // updateDelay adds the fallback delay when switching to a lower-priority input.
 // Callers must hold at least mr.mu.RLock.
-func (mr *MetadataRouter) updateDelay(outputName string, output Output, inputName string) time.Duration {
-	seconds := output.GetDelay()
+func (mr *MetadataRouter) updateDelay(outputName, inputName string) time.Duration {
+	timing := mr.outputTiming[outputName]
+	seconds := timing.Delay
 	inputs := mr.outputInputs[outputName]
 	current := slices.Index(inputs, mr.currentInputs[outputName])
 	if current >= 0 && slices.Index(inputs, inputName) > current {
-		seconds += output.GetFallbackDelay()
+		seconds += timing.FallbackDelay
 	}
 	return time.Duration(seconds) * time.Second
 }

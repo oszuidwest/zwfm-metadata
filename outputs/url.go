@@ -51,7 +51,7 @@ func NewURLOutput(name string, settings config.URLOutputConfig) (*URLOutput, err
 	}
 
 	output := &URLOutput{
-		OutputBase:    core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
+		OutputBase:    core.NewOutputBase(name),
 		settings:      settings,
 		payloadMapper: mapper,
 		urlTemplate:   tmpl,

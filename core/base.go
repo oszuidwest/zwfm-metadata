@@ -92,27 +92,15 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 
 // OutputBase provides the base implementation for metadata output destinations.
 type OutputBase struct {
-	name          string
-	delay         int
-	fallbackDelay int
+	name string
 }
 
-// NewOutputBase initializes an OutputBase with its name and timings in seconds.
-func NewOutputBase(name string, delay, fallbackDelay int) *OutputBase {
-	return &OutputBase{name: name, delay: delay, fallbackDelay: fallbackDelay}
+// NewOutputBase initializes an OutputBase with the given name.
+func NewOutputBase(name string) *OutputBase {
+	return &OutputBase{name: name}
 }
 
 // GetName returns the name of this output destination.
 func (b *OutputBase) GetName() string {
 	return b.name
-}
-
-// GetDelay returns the configured delay in seconds before output delivery.
-func (b *OutputBase) GetDelay() int {
-	return b.delay
-}
-
-// GetFallbackDelay returns the extra seconds added when switching to a lower-priority input.
-func (b *OutputBase) GetFallbackDelay() int {
-	return b.fallbackDelay
 }

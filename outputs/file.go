@@ -20,7 +20,7 @@ type FileOutput struct {
 // NewFileOutput creates a FileOutput with the given name and settings.
 func NewFileOutput(name string, settings config.FileOutputConfig) *FileOutput {
 	output := &FileOutput{
-		OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
+		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
 	}
 	return output
