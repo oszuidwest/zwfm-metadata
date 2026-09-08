@@ -70,8 +70,7 @@ type MetadataRouter struct {
 	lastSentContent      map[string]string // output name -> last sent content
 	currentInputs        map[string]string // output name -> current input name
 	timeline             *Timeline
-	expiryCheckInterval  time.Duration // how often inputs are checked for expiration; tests lower it
-	started              bool          // true after Start() is called; config maps become immutable
+	started              bool // true after Start() is called; config maps become immutable
 	mu                   sync.RWMutex
 }
 
@@ -91,7 +90,6 @@ func NewMetadataRouter() *MetadataRouter {
 		lastSentContent:      make(map[string]string),
 		currentInputs:        make(map[string]string),
 		timeline:             &Timeline{updates: make([]ScheduledUpdate, 0), signal: make(chan struct{}, 1)},
-		expiryCheckInterval:  time.Second,
 	}
 }
 
@@ -471,10 +469,10 @@ func (mr *MetadataRouter) findHighestPriorityInput(outputName string) (string, *
 
 // startExpirationChecker monitors inputs for expiration and triggers fallback to lower-priority sources.
 func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
-	ticker := time.NewTicker(mr.expiryCheckInterval)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	slog.Info("Started expiration checker", "interval", mr.expiryCheckInterval)
+	slog.Info("Started expiration checker (1 second interval)")
 
 	for {
 		select {
@@ -550,10 +548,9 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 		return
 	}
 
-	// The fallback waits for the output's fallback delay. A new track arriving in the
-	// meantime cancels it (see scheduleInputChangeUpdates), so the delay doubles as the
-	// grace period for crossfades and jingles between tracks.
-	delay := time.Duration(OutputFallbackDelay(output)) * time.Second
+	// A new track arriving before this fires cancels it (scheduleInputChangeUpdates),
+	// so the fallback delay also bridges short gaps between tracks.
+	delay := time.Duration(output.GetFallbackDelay()) * time.Second
 	executeAt := time.Now().Add(delay)
 
 	update := ScheduledUpdate{

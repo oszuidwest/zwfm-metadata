@@ -1018,12 +1018,10 @@ type Output interface {
     Start(ctx context.Context) error    // Start processing
     GetName() string                    // Return output name
     GetDelay() int                      // Return delay in seconds
+    GetFallbackDelay() int              // Return delay before a fallback replaces expired metadata
     Send(st *StructuredText)            // Process structured metadata
 }
 ```
-
-`GetFallbackDelay() int` is optional. Outputs that provide it can use a separate
-delay before expired metadata falls back; other outputs use `GetDelay()`.
 
 ### core.RouteRegistrar Interface
 

@@ -18,13 +18,6 @@ type DynamicInput struct {
 
 // NewDynamicInput initializes an HTTP API-driven input with the given settings.
 func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicInput {
-	if settings.Expiration.RoundUpMinutes != nil {
-		slog.Warn("expiration.roundUpMinutes has been removed and is ignored; dynamic expiration is now exact. "+
-			"Set fallbackDelay on outputs with a short delay to bridge gaps between tracks",
-			"input", name,
-		)
-	}
-
 	return &DynamicInput{
 		InputBase: core.NewInputBase(name),
 		settings:  settings,
