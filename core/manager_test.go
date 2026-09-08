@@ -190,90 +190,98 @@ func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*mockInpu
 }
 
 func TestFilterRejectsMetadata(t *testing.T) {
-	input, output := setupTestRouter(t, 0, []Filter{newMockFilter(FilterReject)})
+	synctest.Test(t, func(t *testing.T) {
+		input, output := setupTestRouter(t, 0, []Filter{newMockFilter(FilterReject)})
 
-	input.SetMetadata(testMetadata("Artist", "Title"))
-	time.Sleep(100 * time.Millisecond)
+		input.SetMetadata(testMetadata("Artist", "Title"))
+		time.Sleep(100 * time.Millisecond)
 
-	sent := output.getSent()
-	if len(sent) != 0 {
-		t.Errorf("Expected no updates (filter should reject), got %d", len(sent))
-	}
+		sent := output.getSent()
+		if len(sent) != 0 {
+			t.Errorf("Expected no updates (filter should reject), got %d", len(sent))
+		}
+	})
 }
 
 func TestDelayedUpdatePreservedWhenNewMetadataRejected(t *testing.T) {
-	rejectFilter := newPatternFilter("REJECT", FilterReject)
-	input, output := setupTestRouter(t, 1, []Filter{rejectFilter})
+	synctest.Test(t, func(t *testing.T) {
+		rejectFilter := newPatternFilter("REJECT", FilterReject)
+		input, output := setupTestRouter(t, 1, []Filter{rejectFilter})
 
-	input.SetMetadata(testMetadata("Artist A", "Title A"))
+		input.SetMetadata(testMetadata("Artist A", "Title A"))
 
-	time.Sleep(50 * time.Millisecond)
-	input.SetMetadata(testMetadata("Artist B", "REJECT this"))
+		time.Sleep(50 * time.Millisecond)
+		input.SetMetadata(testMetadata("Artist B", "REJECT this"))
 
-	st, ok := output.waitForSend(2 * time.Second)
-	if !ok {
-		t.Fatal("Expected metadata A to be sent after delay - pending update was incorrectly canceled")
-	}
-	if st.Title != "Title A" {
-		t.Errorf("Expected Title A, got %s", st.Title)
-	}
+		st, ok := output.waitForSend(2 * time.Second)
+		if !ok {
+			t.Fatal("Expected metadata A to be sent after delay - pending update was incorrectly canceled")
+		}
+		if st.Title != "Title A" {
+			t.Errorf("Expected Title A, got %s", st.Title)
+		}
 
-	_, gotExtra := output.waitForSend(500 * time.Millisecond)
-	if gotExtra {
-		t.Error("Expected metadata B to be rejected, but received additional update")
-	}
+		_, gotExtra := output.waitForSend(500 * time.Millisecond)
+		if gotExtra {
+			t.Error("Expected metadata B to be rejected, but received additional update")
+		}
 
-	sent := output.getSent()
-	if len(sent) != 1 {
-		t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
-	}
+		sent := output.getSent()
+		if len(sent) != 1 {
+			t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
+		}
+	})
 }
 
 func TestDelayedUpdatePreservedWhenNewMetadataCumulativelyCleared(t *testing.T) {
-	filters := []Filter{
-		newPatternFilter("CLEAR", FilterClearArtist),
-		&artistDependentFilter{},
-	}
-	input, output := setupTestRouter(t, 1, filters)
+	synctest.Test(t, func(t *testing.T) {
+		filters := []Filter{
+			newPatternFilter("CLEAR", FilterClearArtist),
+			&artistDependentFilter{},
+		}
+		input, output := setupTestRouter(t, 1, filters)
 
-	input.SetMetadata(testMetadata("Artist A", "Title A"))
+		input.SetMetadata(testMetadata("Artist A", "Title A"))
 
-	time.Sleep(50 * time.Millisecond)
-	input.SetMetadata(testMetadata("Artist B", "CLEAR me"))
+		time.Sleep(50 * time.Millisecond)
+		input.SetMetadata(testMetadata("Artist B", "CLEAR me"))
 
-	st, ok := output.waitForSend(2 * time.Second)
-	if !ok {
-		t.Fatal("Expected metadata A to be sent - pending update was incorrectly canceled")
-	}
-	if st.Title != "Title A" {
-		t.Errorf("Expected Title A, got %s", st.Title)
-	}
+		st, ok := output.waitForSend(2 * time.Second)
+		if !ok {
+			t.Fatal("Expected metadata A to be sent - pending update was incorrectly canceled")
+		}
+		if st.Title != "Title A" {
+			t.Errorf("Expected Title A, got %s", st.Title)
+		}
 
-	_, gotExtra := output.waitForSend(500 * time.Millisecond)
-	if gotExtra {
-		t.Error("Expected metadata B to be rejected (cumulative clearing), but received additional update")
-	}
+		_, gotExtra := output.waitForSend(500 * time.Millisecond)
+		if gotExtra {
+			t.Error("Expected metadata B to be rejected (cumulative clearing), but received additional update")
+		}
 
-	sent := output.getSent()
-	if len(sent) != 1 {
-		t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
-	}
+		sent := output.getSent()
+		if len(sent) != 1 {
+			t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
+		}
+	})
 }
 
 func TestCumulativeFieldClearingRejectsMetadata(t *testing.T) {
-	filters := []Filter{
-		newMockFilter(FilterClearArtist),
-		newMockFilter(FilterClearTitle),
-	}
-	input, output := setupTestRouter(t, 0, filters)
+	synctest.Test(t, func(t *testing.T) {
+		filters := []Filter{
+			newMockFilter(FilterClearArtist),
+			newMockFilter(FilterClearTitle),
+		}
+		input, output := setupTestRouter(t, 0, filters)
 
-	input.SetMetadata(testMetadata("Artist", "Title"))
-	time.Sleep(100 * time.Millisecond)
+		input.SetMetadata(testMetadata("Artist", "Title"))
+		time.Sleep(100 * time.Millisecond)
 
-	sent := output.getSent()
-	if len(sent) != 0 {
-		t.Errorf("Expected no updates (cumulative clearing should reject), got %d", len(sent))
-	}
+		sent := output.getSent()
+		if len(sent) != 0 {
+			t.Errorf("Expected no updates (cumulative clearing should reject), got %d", len(sent))
+		}
+	})
 }
 
 func TestWouldFiltersReject(t *testing.T) {
@@ -483,10 +491,11 @@ func TestFallbackWaitsForDelayPlusFallbackDelay(t *testing.T) {
 		primary.SetMetadata(expiringMetadata("Song"))
 		expectSent(t, output, "Song")
 
-		// The initial output delay cancels out of the end-to-end wait. The expiration tick
-		// may add one second.
-		fallbackAt := trackLength + fallbackSeconds*time.Second
-		if st, ok := output.waitForSend(fallbackAt - 2*time.Second); ok {
+		// Measured from the "Song" send: expiry lands trackLength later (the output delay applies
+		// to both sends and cancels out), the checker notices within 1s, then delay + fallbackDelay
+		// is added. Stop 2s short so the 1s tick cannot make this flaky.
+		tooEarly := trackLength + fallbackSeconds*time.Second - 2*time.Second
+		if st, ok := output.waitForSend(tooEarly); ok {
 			t.Fatalf("fallback sent too early: %q", st.String())
 		}
 		expectSent(t, output, "Station Name")

@@ -118,6 +118,9 @@ func (mr *MetadataRouter) AddOutput(output Output) error {
 	if _, exists := mr.outputs[name]; exists {
 		return fmt.Errorf("output with name %s already exists", name)
 	}
+	if output.GetDelay() < 0 || output.GetFallbackDelay() < 0 {
+		return fmt.Errorf("output %q: delay and fallbackDelay must not be negative", name)
+	}
 
 	mr.outputs[name] = output
 	return nil
@@ -363,7 +366,9 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 	return nil
 }
 
-// processInitialMetadata schedules preloaded inputs after configuration becomes immutable.
+// processInitialMetadata runs after Start makes mr.inputs immutable, so the map needs no lock.
+// scheduleInputChangeUpdates takes mr.mu itself; nesting an RLock around it could deadlock
+// against the expiration checker's Lock.
 func (mr *MetadataRouter) processInitialMetadata() {
 	for inputName, input := range mr.inputs {
 		metadata := input.GetMetadata()
@@ -555,7 +560,7 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 }
 
 // updateDelay adds the fallback delay when switching to a lower-priority input.
-// Callers must hold mr.mu.
+// Callers must hold mr.mu (a read lock suffices; only currentInputs is read).
 func (mr *MetadataRouter) updateDelay(outputName string, output Output, inputName string) time.Duration {
 	seconds := output.GetDelay()
 	inputs := mr.outputInputs[outputName]

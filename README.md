@@ -811,8 +811,7 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 
 ##### Notes
 - Updates both FM RDS RadioText and Streaming Output Song
-- Uses StereoTool 11's undocumented JSON API with parameter IDs `9985` (RadioText) and `6751` (Song); these IDs were verified against Stereo Tool 11.05
-- Targets Stereo Tool 11; backwards compatibility with older versions is not part of the v3 contract (the same IDs were also verified against Stereo Tool 10.75)
+- Uses StereoTool's undocumented JSON API with parameter IDs `9985` (RadioText) and `6751` (Song). Targets Stereo Tool 11; the IDs were verified against 11.05 and 10.75, but compatibility with versions older than 11 is not part of the v3 contract
 - **REQUIRED:** Must be used with the RDS formatter for proper character encoding
 - **StereoTool Bug Workaround:** The RDS formatter converts all extended Latin characters (é, ø, ß, etc.) to pure ASCII as a temporary workaround for a bug in StereoTool's RDS implementation. While the EBU Latin character set (0x80-0xFF) should be valid for RDS, StereoTool doesn't handle these characters correctly. The formatter transliterates them (é→e, ø→o, ß→ss) to ensure compatibility until this bug is fixed
 

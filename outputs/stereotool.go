@@ -16,11 +16,6 @@ import (
 	"zwfm-metadata/utils"
 )
 
-const (
-	stereoTool11SongFieldID      = 6751
-	stereoTool11RadioTextFieldID = 9985
-)
-
 // StereoToolOutput sends metadata to StereoTool for RDS RadioText display.
 type StereoToolOutput struct {
 	*core.OutputBase
@@ -46,18 +41,18 @@ func (i *StereoToolOutput) Send(st *core.StructuredText) {
 	}
 }
 
-type stereoToolField struct {
+// stereoToolFields are the StereoTool parameter IDs updated with new metadata,
+// verified against Stereo Tool 10.75 and 11.05.
+var stereoToolFields = []struct {
 	id   int
 	name string
+}{
+	{6751, "Streaming Output Song"},
+	{9985, "FM RDS Radio Text"},
 }
 
 func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
-	fields := [...]stereoToolField{
-		{id: stereoTool11SongFieldID, name: "Streaming Output Song"},
-		{id: stereoTool11RadioTextFieldID, name: "FM RDS Radio Text"},
-	}
-
-	for _, field := range fields {
+	for _, field := range stereoToolFields {
 		if err := i.updateField(field.id, field.name, metadata); err != nil {
 			return err
 		}
@@ -66,6 +61,7 @@ func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 }
 
 func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error {
+	// Encoder instead of Marshal so "&" reaches StereoTool literally rather than as \u0026.
 	var payload bytes.Buffer
 	encoder := json.NewEncoder(&payload)
 	encoder.SetEscapeHTML(false)
@@ -78,6 +74,8 @@ func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error
 		return fmt.Errorf("failed to encode request for %s: %w", fieldName, err)
 	}
 
+	// QueryEscape plus "+" -> "%20" percent-encodes ":" and sub-delims; these are the bytes
+	// verified against StereoTool, so url.PathEscape is deliberately not used.
 	escapedPayload := url.QueryEscape(strings.TrimSuffix(payload.String(), "\n"))
 	escapedPayload = strings.ReplaceAll(escapedPayload, "+", "%20")
 	requestURL := fmt.Sprintf(

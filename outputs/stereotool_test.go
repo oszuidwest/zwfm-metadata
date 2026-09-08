@@ -3,10 +3,11 @@ package outputs
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,45 +31,42 @@ func TestStereoToolOutput_FieldIDs(t *testing.T) {
 	}))
 	defer server.Close()
 
-	output := NewStereoToolOutput("test", stereoToolTestSettings(t, server.URL))
+	output := NewStereoToolOutput("test", stereoToolTestSettings(t, server))
 	metadata := "Artist/Title & More + 100%?"
 	if err := output.sendToStereoTool(metadata); err != nil {
 		t.Fatalf("sendToStereoTool() error = %v", err)
 	}
 
-	wantIDs := []int{stereoTool11SongFieldID, stereoTool11RadioTextFieldID}
-	if len(gotIDs) != len(wantIDs) {
-		t.Fatalf("request count = %d, want %d", len(gotIDs), len(wantIDs))
+	// Literal IDs pin the wire contract: Streaming Output Song, then FM RDS Radio Text.
+	if wantIDs := []int{6751, 9985}; !slices.Equal(gotIDs, wantIDs) {
+		t.Errorf("field IDs = %v, want %v", gotIDs, wantIDs)
 	}
-	for index, wantID := range wantIDs {
-		if gotIDs[index] != wantID {
-			t.Errorf("request %d field ID = %d, want %d", index, gotIDs[index], wantID)
-		}
-		if gotMetadata[index] != metadata {
-			t.Errorf("request %d metadata = %q, want %q", index, gotMetadata[index], metadata)
-		}
-		if strings.Contains(gotRequestURIs[index], "Artist/Title") {
-			t.Errorf("request %d URI contains an unescaped slash: %q", index, gotRequestURIs[index])
+	if !slices.Equal(gotMetadata, []string{metadata, metadata}) {
+		t.Errorf("metadata = %q, want both %q", gotMetadata, metadata)
+	}
+	for _, uri := range gotRequestURIs {
+		if strings.Contains(uri, "Artist/Title") {
+			t.Errorf("URI contains an unescaped slash: %q", uri)
 		}
 	}
 }
 
 func TestStereoToolOutput_ReturnsFieldError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id, err := stereoToolRequestID(r)
+		id, _, err := stereoToolRequestField(r)
 		if err != nil {
 			t.Errorf("decode StereoTool request: %v", err)
 			http.Error(w, "invalid request", http.StatusInternalServerError)
 			return
 		}
-		if id == stereoTool11RadioTextFieldID {
+		if id == 9985 { // FM RDS Radio Text
 			http.Error(w, "unknown field", http.StatusBadRequest)
 			return
 		}
 	}))
 	defer server.Close()
 
-	output := NewStereoToolOutput("test", stereoToolTestSettings(t, server.URL))
+	output := NewStereoToolOutput("test", stereoToolTestSettings(t, server))
 	err := output.sendToStereoTool("Artist - Title")
 	if err == nil {
 		t.Fatal("sendToStereoTool() error = nil, want an error")
@@ -78,45 +76,28 @@ func TestStereoToolOutput_ReturnsFieldError(t *testing.T) {
 	}
 }
 
-func stereoToolRequestID(r *http.Request) (int, error) {
-	id, _, err := stereoToolRequestField(r)
-	return id, err
-}
-
-func stereoToolRequestField(r *http.Request) (int, map[string]string, error) {
-	payload := strings.TrimPrefix(r.URL.Path, "/json-1/lis")
+func stereoToolRequestField(r *http.Request) (id int, values map[string]string, err error) {
 	var fields map[string]map[string]string
-	if err := json.Unmarshal([]byte(payload), &fields); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(r.URL.Path, "/json-1/lis")), &fields); err != nil {
 		return 0, nil, fmt.Errorf("decode request path %q: %w", r.URL.Path, err)
 	}
 	if len(fields) != 1 {
 		return 0, nil, fmt.Errorf("field count = %d, want 1", len(fields))
 	}
-	for rawID, values := range fields {
-		id, err := strconv.Atoi(rawID)
-		if err != nil {
-			return 0, nil, fmt.Errorf("parse field ID %q: %w", rawID, err)
-		}
-		return id, values, nil
+	rawID := slices.Collect(maps.Keys(fields))[0]
+	id, err = strconv.Atoi(rawID)
+	if err != nil {
+		return 0, nil, fmt.Errorf("parse field ID %q: %w", rawID, err)
 	}
-	return 0, nil, fmt.Errorf("missing field ID")
+	return id, fields[rawID], nil
 }
 
-func stereoToolTestSettings(t *testing.T, serverURL string) config.StereoToolOutputConfig {
+func stereoToolTestSettings(t *testing.T, server *httptest.Server) config.StereoToolOutputConfig {
 	t.Helper()
 
-	parsedURL, err := url.Parse(serverURL)
-	if err != nil {
-		t.Fatalf("parse test server URL: %v", err)
+	addr, ok := server.Listener.Addr().(*net.TCPAddr)
+	if !ok {
+		t.Fatalf("test server address is %T, want *net.TCPAddr", server.Listener.Addr())
 	}
-	hostname, rawPort, err := net.SplitHostPort(parsedURL.Host)
-	if err != nil {
-		t.Fatalf("split test server address: %v", err)
-	}
-	port, err := strconv.Atoi(rawPort)
-	if err != nil {
-		t.Fatalf("parse test server port: %v", err)
-	}
-
-	return config.StereoToolOutputConfig{Hostname: hostname, Port: port}
+	return config.StereoToolOutputConfig{Hostname: addr.IP.String(), Port: addr.Port}
 }
