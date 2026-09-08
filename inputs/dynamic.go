@@ -60,7 +60,7 @@ func (d *DynamicInput) UpdateMetadata(update *core.MetadataRequest) error {
 	return nil
 }
 
-// calculateDynamicExpiration parses duration and returns the exact expiration time.
+// calculateDynamicExpiration parses duration and returns the expiration time.
 func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 	totalSeconds, ok := utils.ParseDurationToSeconds(duration)
 	if !ok {
@@ -75,16 +75,7 @@ func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 		return time.Now()
 	}
 
-	expiresAt := time.Now().Add(time.Duration(totalSeconds) * time.Second)
-
-	slog.Debug("Calculated dynamic expiration",
-		"input", d.GetName(),
-		"duration", duration,
-		"totalSeconds", totalSeconds,
-		"expiresAt", expiresAt.Format("15:04:05"),
-	)
-
-	return expiresAt
+	return time.Now().Add(time.Duration(totalSeconds) * time.Second)
 }
 
 // handleUnsupportedFormat returns fallback expiration or immediate expiration.
