@@ -10,6 +10,11 @@ on:
       - 'go.sum'
       - '.golangci.yml'
       - '.golangci.yaml'
+      - 'web/assets/**'
+      - 'package.json'
+      - 'bun.lock'
+      - 'biome.json'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: ['main']
     paths:
@@ -18,6 +23,11 @@ on:
       - 'go.sum'
       - '.golangci.yml'
       - '.golangci.yaml'
+      - 'web/assets/**'
+      - 'package.json'
+      - 'bun.lock'
+      - 'biome.json'
+      - '.github/workflows/ci.yml'
 
 permissions:
   contents: read
@@ -25,3 +35,5 @@ permissions:
 jobs:
   ci:
     uses: oszuidwest/.github-templates/.github/workflows/go-ci.yml@v3
+    with:
+      enable-frontend: true
