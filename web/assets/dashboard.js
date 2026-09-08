@@ -396,7 +396,7 @@ function buildOutputCard(output) {
     const inputValueClass = output.currentInput ? 'text-success' : 'text-faint';
     statsBox.append(
         buildStatColumn('Delay', `${output.delay}s`),
-        buildStatColumn('Fallback', `${output.fallbackDelay}s`),
+        buildStatColumn('Fallback', `+${output.fallbackDelay}s`),
         buildStatColumn(
             'Current Input',
             output.currentInput || 'None',

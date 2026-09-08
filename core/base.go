@@ -94,7 +94,7 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 type OutputBase struct {
 	name          string
 	delay         int
-	fallbackDelay *int
+	fallbackDelay int
 }
 
 // NewOutputBase initializes an OutputBase with the given name.
@@ -119,15 +119,13 @@ func (b *OutputBase) GetDelay() int {
 	return b.delay
 }
 
-// SetFallbackDelay sets the fallback delay in seconds; nil means use the output delay.
-func (b *OutputBase) SetFallbackDelay(delay *int) {
+// SetFallbackDelay configures the extra seconds, on top of the delay, that a fallback
+// waits after the current input expires.
+func (b *OutputBase) SetFallbackDelay(delay int) {
 	b.fallbackDelay = delay
 }
 
-// GetFallbackDelay returns the fallback delay in seconds, or the output delay when none was set.
+// GetFallbackDelay returns the extra seconds a fallback waits on top of the delay.
 func (b *OutputBase) GetFallbackDelay() int {
-	if b.fallbackDelay != nil {
-		return *b.fallbackDelay
-	}
-	return b.delay
+	return b.fallbackDelay
 }

@@ -75,7 +75,7 @@ type TextInputConfig struct {
 // IcecastOutputConfig holds connection settings for updating Icecast stream metadata.
 type IcecastOutputConfig struct {
 	Delay         int    `json:"delay"`
-	FallbackDelay *int   `json:"fallbackDelay,omitempty"`
+	FallbackDelay int    `json:"fallbackDelay,omitempty"`
 	Server        string `json:"server"`
 	Port          int    `json:"port"`
 	Username      string `json:"username"`
@@ -86,14 +86,14 @@ type IcecastOutputConfig struct {
 // FileOutputConfig holds settings for writing metadata to local files.
 type FileOutputConfig struct {
 	Delay         int    `json:"delay"`
-	FallbackDelay *int   `json:"fallbackDelay,omitempty"`
+	FallbackDelay int    `json:"fallbackDelay,omitempty"`
 	Filename      string `json:"filename"`
 }
 
 // URLOutputConfig holds settings for sending metadata via HTTP GET or POST requests.
 type URLOutputConfig struct {
 	Delay          int            `json:"delay"`
-	FallbackDelay  *int           `json:"fallbackDelay,omitempty"`
+	FallbackDelay  int            `json:"fallbackDelay,omitempty"`
 	URL            string         `json:"url"`
 	Method         string         `json:"method,omitempty"`         // GET or POST (required)
 	BearerToken    string         `json:"bearerToken,omitempty"`    //nolint:gosec // Config field for HTTP authentication
@@ -103,14 +103,14 @@ type URLOutputConfig struct {
 // DLPlusOutputConfig holds settings for DAB/DAB+ DL Plus text output.
 type DLPlusOutputConfig struct {
 	Delay         int    `json:"delay"`
-	FallbackDelay *int   `json:"fallbackDelay,omitempty"`
+	FallbackDelay int    `json:"fallbackDelay,omitempty"`
 	Filename      string `json:"filename"`
 }
 
 // WebSocketOutputConfig holds settings for real-time WebSocket metadata broadcasting.
 type WebSocketOutputConfig struct {
 	Delay          int            `json:"delay"`
-	FallbackDelay  *int           `json:"fallbackDelay,omitempty"`
+	FallbackDelay  int            `json:"fallbackDelay,omitempty"`
 	Path           string         `json:"path"`
 	PayloadMapping map[string]any `json:"payloadMapping,omitempty"`
 }
@@ -118,7 +118,7 @@ type WebSocketOutputConfig struct {
 // HTTPOutputConfig holds settings for serving metadata via HTTP GET endpoints.
 type HTTPOutputConfig struct {
 	Delay         int            `json:"delay"`
-	FallbackDelay *int           `json:"fallbackDelay,omitempty"`
+	FallbackDelay int            `json:"fallbackDelay,omitempty"`
 	Endpoints     []HTTPEndpoint `json:"endpoints"`
 }
 
@@ -132,7 +132,7 @@ type HTTPEndpoint struct {
 // StereoToolOutputConfig holds connection settings for StereoTool RDS RadioText updates.
 type StereoToolOutputConfig struct {
 	Delay         int    `json:"delay"`
-	FallbackDelay *int   `json:"fallbackDelay,omitempty"`
+	FallbackDelay int    `json:"fallbackDelay,omitempty"`
 	Hostname      string `json:"hostname"`
 	Port          int    `json:"port"`
 }
