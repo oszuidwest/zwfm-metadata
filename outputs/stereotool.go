@@ -1,12 +1,15 @@
 package outputs
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
@@ -14,8 +17,8 @@ import (
 )
 
 const (
-	streamingOutputSongFieldID = 6751
-	defaultRDSRadioTextFieldID = 25046
+	stereoTool11SongFieldID      = 6751
+	stereoTool11RadioTextFieldID = 9985
 )
 
 // StereoToolOutput sends metadata to StereoTool for RDS RadioText display.
@@ -27,10 +30,6 @@ type StereoToolOutput struct {
 
 // NewStereoToolOutput creates a StereoToolOutput with the given name and settings.
 func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *StereoToolOutput {
-	if settings.RDSFieldID == 0 {
-		settings.RDSFieldID = defaultRDSRadioTextFieldID
-	}
-
 	output := &StereoToolOutput{
 		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
@@ -54,8 +53,8 @@ type stereoToolField struct {
 
 func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 	fields := [...]stereoToolField{
-		{streamingOutputSongFieldID, "Streaming Output Song"},
-		{i.settings.RDSFieldID, "FM RDS Radio Text"},
+		{id: stereoTool11SongFieldID, name: "Streaming Output Song"},
+		{id: stereoTool11RadioTextFieldID, name: "FM RDS Radio Text"},
 	}
 
 	for _, field := range fields {
@@ -67,9 +66,26 @@ func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 }
 
 func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error {
-	requestURL := fmt.Sprintf("http://%s:%d/json-1/lis{%q:{%q:%q,%q:%q}}",
-		i.settings.Hostname, i.settings.Port,
-		strconv.Itoa(id), "forced", "1", "new_value", url.QueryEscape(metadata))
+	var payload bytes.Buffer
+	encoder := json.NewEncoder(&payload)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(map[string]map[string]string{
+		strconv.Itoa(id): {
+			"forced":    "1",
+			"new_value": metadata,
+		},
+	}); err != nil {
+		return fmt.Errorf("failed to encode request for %s: %w", fieldName, err)
+	}
+
+	escapedPayload := url.QueryEscape(strings.TrimSuffix(payload.String(), "\n"))
+	escapedPayload = strings.ReplaceAll(escapedPayload, "+", "%20")
+	requestURL := fmt.Sprintf(
+		"http://%s:%d/json-1/lis%s",
+		i.settings.Hostname,
+		i.settings.Port,
+		escapedPayload,
+	)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, http.NoBody)
 	if err != nil {

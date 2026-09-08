@@ -15,51 +15,41 @@ import (
 )
 
 func TestStereoToolOutput_FieldIDs(t *testing.T) {
-	tests := []struct {
-		name       string
-		rdsFieldID int
-		wantIDs    []int
-	}{
-		{
-			name:    "Stereo Tool 11 default",
-			wantIDs: []int{streamingOutputSongFieldID, defaultRDSRadioTextFieldID},
-		},
-		{
-			name:       "Stereo Tool 10 override",
-			rdsFieldID: 15046,
-			wantIDs:    []int{streamingOutputSongFieldID, 15046},
-		},
+	var gotIDs []int
+	var gotMetadata []string
+	var gotRequestURIs []string
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		id, fields, err := stereoToolRequestField(r)
+		if err != nil {
+			t.Errorf("decode StereoTool request: %v", err)
+			return
+		}
+		gotIDs = append(gotIDs, id)
+		gotMetadata = append(gotMetadata, fields["new_value"])
+		gotRequestURIs = append(gotRequestURIs, r.RequestURI)
+	}))
+	defer server.Close()
+
+	output := NewStereoToolOutput("test", stereoToolTestSettings(t, server.URL))
+	metadata := "Artist/Title & More + 100%?"
+	if err := output.sendToStereoTool(metadata); err != nil {
+		t.Fatalf("sendToStereoTool() error = %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var gotIDs []int
-			server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				id, err := stereoToolRequestID(r)
-				if err != nil {
-					t.Errorf("decode StereoTool request: %v", err)
-					return
-				}
-				gotIDs = append(gotIDs, id)
-			}))
-			defer server.Close()
-
-			settings := stereoToolTestSettings(t, server.URL)
-			settings.RDSFieldID = tt.rdsFieldID
-			output := NewStereoToolOutput("test", settings)
-
-			if err := output.sendToStereoTool("Artist & Title"); err != nil {
-				t.Fatalf("sendToStereoTool() error = %v", err)
-			}
-			if len(gotIDs) != len(tt.wantIDs) {
-				t.Fatalf("request count = %d, want %d", len(gotIDs), len(tt.wantIDs))
-			}
-			for index, wantID := range tt.wantIDs {
-				if gotIDs[index] != wantID {
-					t.Errorf("request %d field ID = %d, want %d", index, gotIDs[index], wantID)
-				}
-			}
-		})
+	wantIDs := []int{stereoTool11SongFieldID, stereoTool11RadioTextFieldID}
+	if len(gotIDs) != len(wantIDs) {
+		t.Fatalf("request count = %d, want %d", len(gotIDs), len(wantIDs))
+	}
+	for index, wantID := range wantIDs {
+		if gotIDs[index] != wantID {
+			t.Errorf("request %d field ID = %d, want %d", index, gotIDs[index], wantID)
+		}
+		if gotMetadata[index] != metadata {
+			t.Errorf("request %d metadata = %q, want %q", index, gotMetadata[index], metadata)
+		}
+		if strings.Contains(gotRequestURIs[index], "Artist/Title") {
+			t.Errorf("request %d URI contains an unescaped slash: %q", index, gotRequestURIs[index])
+		}
 	}
 }
 
@@ -71,7 +61,7 @@ func TestStereoToolOutput_ReturnsFieldError(t *testing.T) {
 			http.Error(w, "invalid request", http.StatusInternalServerError)
 			return
 		}
-		if id == defaultRDSRadioTextFieldID {
+		if id == stereoTool11RadioTextFieldID {
 			http.Error(w, "unknown field", http.StatusBadRequest)
 			return
 		}
@@ -89,22 +79,27 @@ func TestStereoToolOutput_ReturnsFieldError(t *testing.T) {
 }
 
 func stereoToolRequestID(r *http.Request) (int, error) {
+	id, _, err := stereoToolRequestField(r)
+	return id, err
+}
+
+func stereoToolRequestField(r *http.Request) (int, map[string]string, error) {
 	payload := strings.TrimPrefix(r.URL.Path, "/json-1/lis")
 	var fields map[string]map[string]string
 	if err := json.Unmarshal([]byte(payload), &fields); err != nil {
-		return 0, fmt.Errorf("decode request path %q: %w", r.URL.Path, err)
+		return 0, nil, fmt.Errorf("decode request path %q: %w", r.URL.Path, err)
 	}
 	if len(fields) != 1 {
-		return 0, fmt.Errorf("field count = %d, want 1", len(fields))
+		return 0, nil, fmt.Errorf("field count = %d, want 1", len(fields))
 	}
-	for rawID := range fields {
+	for rawID, values := range fields {
 		id, err := strconv.Atoi(rawID)
 		if err != nil {
-			return 0, fmt.Errorf("parse field ID %q: %w", rawID, err)
+			return 0, nil, fmt.Errorf("parse field ID %q: %w", rawID, err)
 		}
-		return id, nil
+		return id, values, nil
 	}
-	return 0, fmt.Errorf("missing field ID")
+	return 0, nil, fmt.Errorf("missing field ID")
 }
 
 func stereoToolTestSettings(t *testing.T, serverURL string) config.StereoToolOutputConfig {

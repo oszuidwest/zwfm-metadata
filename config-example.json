@@ -252,8 +252,7 @@
         "delay": 2,
         "fallbackDelay": 20,
         "hostname": "localhost",
-        "port": 8080,
-        "rdsFieldID": 25046
+        "port": 8080
       }
     }
   ]
