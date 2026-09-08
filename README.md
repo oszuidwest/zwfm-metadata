@@ -11,6 +11,7 @@ Metadata routing middleware for radio stations that routes metadata from inputs 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Migrating from v2](#migrating-from-v2)
 - [Configuration](#configuration)
   - [Global Settings](#global-settings)
 - [Inputs](#inputs)
@@ -57,6 +58,10 @@ cp config-example.json config.json
 ```
 
 Dashboard: http://localhost:9000
+
+## Migrating from v2
+
+Version 3 changes dynamic expiration and output fallback timing. Review [MIGRATING.md](MIGRATING.md) before upgrading an existing configuration or custom output.
 
 ## Configuration
 
