@@ -391,7 +391,6 @@ function buildOutputCard(output) {
         return card;
     }
 
-    // Stats box with delay and current input
     const statsBox = el('div', 'content-box output-stats mb-4');
     const inputValueClass = output.currentInput ? 'text-success' : 'text-faint';
     statsBox.append(
@@ -405,7 +404,6 @@ function buildOutputCard(output) {
     );
     body.appendChild(statsBox);
 
-    // Tags container
     const tagsContainer = el('div', 'space-y-4');
 
     const inputsSection = buildBadgeSection(
