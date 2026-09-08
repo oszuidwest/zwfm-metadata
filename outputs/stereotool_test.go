@@ -6,14 +6,18 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"zwfm-metadata/config"
 )
 
 func TestStereoToolOutput_FieldIDs(t *testing.T) {
+	var gotRequestURIsMu sync.Mutex
 	var gotRequestURIs []string
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		gotRequestURIsMu.Lock()
+		defer gotRequestURIsMu.Unlock()
 		gotRequestURIs = append(gotRequestURIs, r.RequestURI)
 	}))
 	defer server.Close()
@@ -29,8 +33,11 @@ func TestStereoToolOutput_FieldIDs(t *testing.T) {
 		return "/json-1/lis%7B%22" + id + "%22%3A%7B%22forced%22%3A%221%22%2C" +
 			"%22new_value%22%3A%22Artist%2FTitle%20%26%20More%20%2B%20100%25%3F%22%7D%7D"
 	}
-	if want := []string{requestURI("6751"), requestURI("9985")}; !slices.Equal(gotRequestURIs, want) {
-		t.Errorf("request URIs = %q, want %q", gotRequestURIs, want)
+	gotRequestURIsMu.Lock()
+	got := slices.Clone(gotRequestURIs)
+	gotRequestURIsMu.Unlock()
+	if want := []string{requestURI("6751"), requestURI("9985")}; !slices.Equal(got, want) {
+		t.Errorf("request URIs = %q, want %q", got, want)
 	}
 }
 
