@@ -123,6 +123,8 @@ HTTP API for live updates
 
 Dynamic expiration is exact: a track with `duration=03:30` expires 3:30 after it was received. Short gaps between tracks (crossfades, jingles) are covered by the output's `fallbackDelay`, see [Delays and fallback](#delays-and-fallback).
 
+**Upgrading:** the former `expiration.roundUpMinutes` option has been removed and is ignored with a warning at startup. It used to pad every expiration to a full minute; set `fallbackDelay` on outputs with a short `delay` instead.
+
 #### API Usage
 ```bash
 # Update with all fields (duration enables auto-expiration for type=dynamic)
