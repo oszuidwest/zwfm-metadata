@@ -41,8 +41,19 @@ type Output interface {
 	Start(ctx context.Context) error
 	GetName() string
 	GetDelay() int
-	GetFallbackDelay() int
 	Send(st *StructuredText)
+}
+
+type fallbackDelayProvider interface {
+	GetFallbackDelay() int
+}
+
+// OutputFallbackDelay returns an output's fallback delay, defaulting to its regular delay.
+func OutputFallbackDelay(output Output) int {
+	if provider, ok := output.(fallbackDelayProvider); ok {
+		return provider.GetFallbackDelay()
+	}
+	return output.GetDelay()
 }
 
 // RouteRegistrar allows outputs to register HTTP handlers on the web server.
