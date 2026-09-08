@@ -410,12 +410,12 @@ All output types support:
 
 Every output has two timings:
 
-- `delay` - How long a metadata update waits before it is sent. Use this to line up metadata with the audio latency of the destination (an Icecast stream typically runs 10 to 30 seconds behind the studio).
-- `fallbackDelay` - How long the output waits after its current input expires before it sends the next available input. Defaults to `delay`.
+- `delay` - How long every metadata update waits before it is sent. Use this to line up metadata with the audio latency of the destination (an Icecast stream typically runs 10 to 30 seconds behind the studio).
+- `fallbackDelay` - Extra seconds, on top of `delay`, that the output waits after its current input expires before it sends the next available input. Defaults to 0.
 
-When a new track arrives while a fallback is waiting, the fallback is cancelled and the new track is sent instead. The fallback delay therefore doubles as a grace period: as long as the next track shows up within that window, short gaps such as crossfades and jingles never reach the output.
+A fallback is sent `delay + fallbackDelay` seconds after the current input expires, so it never appears before the delayed audio has finished. When a new track arrives while a fallback is waiting, the fallback is cancelled and the new track is sent instead. The fallback delay is therefore a grace period: as long as the next track shows up within that window, short gaps such as crossfades and jingles never reach the output.
 
-Outputs with a delay of 10 seconds or more usually need no separate `fallbackDelay`, because the regular delay already covers typical gaps. Outputs that send immediately (`delay: 0`, such as RDS RadioText) should set a `fallbackDelay` of around 15 to 30 seconds, otherwise every gap between tracks briefly shows the fallback text.
+Outputs with a delay of 10 seconds or more usually need no `fallbackDelay`, because the regular delay already covers typical gaps. Outputs with a short delay (such as RDS RadioText) should set a `fallbackDelay` of around 15 to 30 seconds, otherwise every gap between tracks briefly shows the fallback text.
 
 ```json
 {
@@ -454,7 +454,7 @@ Updates streaming server metadata
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
+- `fallbackDelay` (optional, default: 0) - Extra seconds a fallback waits on top of `delay`, see [Delays and fallback](#delays-and-fallback)
 - `server` (required) - Icecast server hostname/IP
 - `port` (required) - Icecast server port
 - `username` (required) - Icecast username (usually "source")
@@ -480,7 +480,7 @@ Writes metadata to the filesystem.
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
+- `fallbackDelay` (optional, default: 0) - Extra seconds a fallback waits on top of `delay`, see [Delays and fallback](#delays-and-fallback)
 - `filename` (required) - Full path to output file
 
 **Note**: File output writes the formatted text as-is. To transform text, use formatters like `uppercase`, `lowercase`, `ucwords`, or `rds`. Template functions are not available for file outputs.
@@ -535,7 +535,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
+- `fallbackDelay` (optional, default: 0) - Extra seconds a fallback waits on top of `delay`, see [Delays and fallback](#delays-and-fallback)
 - `url` (required) - Target URL (supports Go templates for GET requests)
 - `method` (required) - HTTP method: "GET" or "POST"
 - `bearerToken` (optional) - Authorization bearer token
@@ -683,7 +683,7 @@ Serves metadata via GET endpoints with multiple response formats
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
+- `fallbackDelay` (optional, default: 0) - Extra seconds a fallback waits on top of `delay`, see [Delays and fallback](#delays-and-fallback)
 - `endpoints` (required) - Array of HTTP endpoints to serve
 
 ##### Endpoint Configuration
@@ -716,7 +716,7 @@ Broadcasts metadata to connected clients with real-time updates.
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
+- `fallbackDelay` (optional, default: 0) - Extra seconds a fallback waits on top of `delay`, see [Delays and fallback](#delays-and-fallback)
 - `path` (required) - URL path for WebSocket connections (e.g., "/metadata", "/ws")
 - `payloadMapping` (optional) - Custom JSON message structure (see [Custom Payload Mapping](#custom-payload-mapping))
 
@@ -759,7 +759,7 @@ Generates DL Plus format for DAB/DAB+ transmission
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
+- `fallbackDelay` (optional, default: 0) - Extra seconds a fallback waits on top of `delay`, see [Delays and fallback](#delays-and-fallback)
 - `filename` (required) - Full path to output file
 
 ##### Output Format
@@ -805,7 +805,7 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
+- `fallbackDelay` (optional, default: 0) - Extra seconds a fallback waits on top of `delay`, see [Delays and fallback](#delays-and-fallback)
 - `hostname` (required) - StereoTool server hostname/IP
 - `port` (required) - StereoTool HTTP server port (typically 8080)
 

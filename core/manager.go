@@ -548,9 +548,10 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 		return
 	}
 
-	// A new track arriving before this fires cancels it (scheduleInputChangeUpdates),
-	// so the fallback delay also bridges short gaps between tracks.
-	delay := time.Duration(output.GetFallbackDelay()) * time.Second
+	// The regular delay keeps the fallback aligned with the delayed audio; the fallback
+	// delay adds a grace period on top. A new track arriving before this fires cancels it
+	// (scheduleInputChangeUpdates), so short gaps between tracks never reach the output.
+	delay := time.Duration(output.GetDelay()+output.GetFallbackDelay()) * time.Second
 	executeAt := time.Now().Add(delay)
 
 	update := ScheduledUpdate{
