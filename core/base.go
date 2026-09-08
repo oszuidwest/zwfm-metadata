@@ -119,13 +119,13 @@ func (b *OutputBase) GetDelay() int {
 	return b.delay
 }
 
-// SetFallbackDelay configures the extra seconds, on top of the delay, that a fallback
-// waits after the current input expires.
+// SetFallbackDelay configures the fallback delay in seconds.
 func (b *OutputBase) SetFallbackDelay(delay int) {
 	b.fallbackDelay = delay
 }
 
-// GetFallbackDelay returns the extra seconds a fallback waits on top of the delay.
+// GetFallbackDelay returns the extra seconds, on top of the delay, that the output waits
+// before switching to a lower-priority input.
 func (b *OutputBase) GetFallbackDelay() int {
 	return b.fallbackDelay
 }

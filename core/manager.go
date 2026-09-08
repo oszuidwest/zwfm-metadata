@@ -414,7 +414,7 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 
 		mr.timeline.cancelUpdatesForOutput(outputName)
 
-		delay := time.Duration(output.GetDelay()) * time.Second
+		delay := mr.updateDelay(outputName, output, inputName)
 		executeAt := time.Now().Add(delay)
 
 		update := ScheduledUpdate{
@@ -548,10 +548,7 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 		return
 	}
 
-	// The regular delay keeps the fallback aligned with the delayed audio; the fallback
-	// delay adds a grace period on top. A new track arriving before this fires cancels it
-	// (scheduleInputChangeUpdates), so short gaps between tracks never reach the output.
-	delay := time.Duration(output.GetDelay()+output.GetFallbackDelay()) * time.Second
+	delay := mr.updateDelay(outputName, output, inputName)
 	executeAt := time.Now().Add(delay)
 
 	update := ScheduledUpdate{
@@ -569,6 +566,22 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 		"time", executeAt.Format("15:04:05"),
 		"delay_seconds", int(delay.Seconds()),
 	)
+}
+
+// updateDelay returns how long an update from inputName waits before reaching the output.
+// Switching to an input that ranks below the one currently shown adds the fallback delay,
+// whether the switch comes from the expiration checker or from that input changing while
+// a fallback is pending. A higher-priority input arriving in the meantime cancels the
+// pending update (scheduleInputChangeUpdates), so gaps shorter than the fallback delay
+// never reach the output. Callers must hold mr.mu.
+func (mr *MetadataRouter) updateDelay(outputName string, output Output, inputName string) time.Duration {
+	seconds := output.GetDelay()
+	inputs := mr.outputInputs[outputName]
+	current := slices.Index(inputs, mr.currentInputs[outputName])
+	if current >= 0 && slices.Index(inputs, inputName) > current {
+		seconds += output.GetFallbackDelay()
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 // applyFilterAction applies the action specified by a filter to a StructuredText.
