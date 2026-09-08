@@ -186,7 +186,6 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 func createInput(cfg *config.InputConfig) (core.Input, error) {
 	switch cfg.Type {
 	case "dynamic":
-		warnRemovedRoundUpMinutes(cfg)
 		settings, err := utils.ParseJSONSettings[config.DynamicInputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
@@ -266,21 +265,5 @@ func createOutput(cfg *config.OutputConfig) (core.Output, error) {
 
 	default:
 		return nil, fmt.Errorf("unknown type: %s", cfg.Type)
-	}
-}
-
-// warnRemovedRoundUpMinutes flags configs that still set the removed expiration.roundUpMinutes
-// option. Unknown settings are otherwise ignored silently, and this one used to default to
-// true, so an unchanged config would quietly start flapping to fallback text between tracks.
-func warnRemovedRoundUpMinutes(cfg *config.InputConfig) {
-	expiration, ok := cfg.Settings["expiration"].(map[string]any)
-	if !ok {
-		return
-	}
-	if _, present := expiration["roundUpMinutes"]; present {
-		slog.Warn("expiration.roundUpMinutes has been removed and is ignored; dynamic expiration is now exact. "+
-			"Set fallbackDelay on outputs with a short delay to bridge gaps between tracks",
-			"input", cfg.Name,
-		)
 	}
 }
