@@ -467,12 +467,16 @@ func (mr *MetadataRouter) findHighestPriorityInput(outputName string) (string, *
 	return "", nil
 }
 
+// expirationCheckInterval is how often inputs are checked for expiration. Tests lower it
+// so fallback behavior can be verified without waiting for whole seconds.
+var expirationCheckInterval = 1 * time.Second
+
 // startExpirationChecker monitors inputs for expiration and triggers fallback to lower-priority sources.
 func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(expirationCheckInterval)
 	defer ticker.Stop()
 
-	slog.Info("Started expiration checker (1 second interval)")
+	slog.Info("Started expiration checker", "interval", expirationCheckInterval)
 
 	for {
 		select {

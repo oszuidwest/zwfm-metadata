@@ -473,6 +473,11 @@ func expiringMetadata(artist, title string, ttl time.Duration) *Metadata {
 func setupFallbackRouter(t *testing.T, delay int, fallbackDelay *int) (*mockInput, *mockOutput, context.CancelFunc) {
 	t.Helper()
 
+	// Check for expirations often so the tests are bounded by the fallback delay alone.
+	previousInterval := expirationCheckInterval
+	expirationCheckInterval = 50 * time.Millisecond
+	t.Cleanup(func() { expirationCheckInterval = previousInterval })
+
 	ctx, cancel := context.WithCancel(context.Background())
 	router := NewMetadataRouter()
 
@@ -525,22 +530,22 @@ func TestGetFallbackDelayDefaultsToDelay(t *testing.T) {
 }
 
 func TestFallbackWaitsForFallbackDelay(t *testing.T) {
-	fallbackDelay := 2
+	fallbackDelay := 1
 	primary, output, cancel := setupFallbackRouter(t, 0, &fallbackDelay)
 	defer cancel()
 
-	primary.SetMetadata(expiringMetadata("Artist", "Song", 500*time.Millisecond))
+	primary.SetMetadata(expiringMetadata("Artist", "Song", 200*time.Millisecond))
 	if st, ok := output.waitForSend(time.Second); !ok || st.Title != "Song" {
 		t.Fatalf("expected song to be sent immediately, got %v (ok=%v)", st, ok)
 	}
 
-	// The expiration checker runs every second; the fallback then waits fallbackDelay.
+	// The song expires after 200ms and the fallback then waits a full second.
 	// Well before that window closes nothing may be sent.
-	if st, ok := output.waitForSend(1500 * time.Millisecond); ok {
+	if st, ok := output.waitForSend(700 * time.Millisecond); ok {
 		t.Fatalf("fallback sent too early: %q", st.String())
 	}
 
-	st, ok := output.waitForSend(3 * time.Second)
+	st, ok := output.waitForSend(2 * time.Second)
 	if !ok {
 		t.Fatal("expected fallback text after the fallback delay")
 	}
@@ -550,18 +555,18 @@ func TestFallbackWaitsForFallbackDelay(t *testing.T) {
 }
 
 func TestNewTrackWithinFallbackDelayCancelsFallback(t *testing.T) {
-	fallbackDelay := 3
+	fallbackDelay := 2
 	primary, output, cancel := setupFallbackRouter(t, 0, &fallbackDelay)
 	defer cancel()
 
-	primary.SetMetadata(expiringMetadata("Artist", "First Song", 300*time.Millisecond))
+	primary.SetMetadata(expiringMetadata("Artist", "First Song", 200*time.Millisecond))
 	if st, ok := output.waitForSend(time.Second); !ok || st.Title != "First Song" {
 		t.Fatalf("expected first song to be sent, got %v (ok=%v)", st, ok)
 	}
 
 	// Let the first song expire and the fallback get scheduled, then send the next
 	// track inside the fallback window, as a playout system does after a jingle.
-	time.Sleep(1500 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	primary.SetMetadata(expiringMetadata("Artist", "Second Song", time.Minute))
 
 	st, ok := output.waitForSend(time.Second)
@@ -572,7 +577,7 @@ func TestNewTrackWithinFallbackDelayCancelsFallback(t *testing.T) {
 		t.Fatalf("expected second song to replace the pending fallback, got %q", st.String())
 	}
 
-	if st, ok := output.waitForSend(4 * time.Second); ok {
+	if st, ok := output.waitForSend(2500 * time.Millisecond); ok {
 		t.Fatalf("fallback must be cancelled by the new track, but got %q", st.String())
 	}
 }

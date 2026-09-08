@@ -130,6 +130,7 @@
       "formatters": ["lowercase"],
       "settings": {
         "delay": 0,
+        "fallbackDelay": 20,
         "url": "https://api.example.com/custom-metadata",
         "method": "POST",
         "bearerToken": "your-bearer-token-here",
@@ -168,6 +169,7 @@
       "formatters": [],
       "settings": {
         "delay": 0,
+        "fallbackDelay": 20,
         "filename": "/tmp/dlplus.txt"
       }
     },
@@ -178,6 +180,7 @@
       "formatters": ["ucwords"],
       "settings": {
         "delay": 0,
+        "fallbackDelay": 20,
         "path": "/ws/metadata"
       }
     },
@@ -188,6 +191,7 @@
       "formatters": ["ucwords"],
       "settings": {
         "delay": 0,
+        "fallbackDelay": 20,
         "path": "/ws/custom",
         "payloadMapping": {
           "event": "{{.type}}",
@@ -204,6 +208,7 @@
       "formatters": ["ucwords"],
       "settings": {
         "delay": 0,
+        "fallbackDelay": 20,
         "endpoints": [
           {
             "path": "/api/nowplaying.json",
