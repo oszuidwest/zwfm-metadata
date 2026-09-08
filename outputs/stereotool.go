@@ -26,11 +26,9 @@ type StereoToolOutput struct {
 // NewStereoToolOutput creates a Stereo Tool metadata output.
 func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *StereoToolOutput {
 	output := &StereoToolOutput{
-		OutputBase: core.NewOutputBase(name),
+		OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
 		settings:   settings,
 	}
-	output.SetDelay(settings.Delay)
-	output.SetFallbackDelay(settings.FallbackDelay)
 	return output
 }
 
@@ -73,15 +71,12 @@ func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error
 		return fmt.Errorf("failed to encode request for %s: %w", fieldName, err)
 	}
 
-	// Stereo Tool expects query-style escaping with spaces encoded as %20.
+	// Stereo Tool decodes the path query-style, so every reserved character must be
+	// escaped (url.PathEscape would leave & and + literal) and spaces must be %20,
+	// because a literal + would decode as a space.
 	escapedPayload := url.QueryEscape(strings.TrimSuffix(payload.String(), "\n"))
 	escapedPayload = strings.ReplaceAll(escapedPayload, "+", "%20")
-	requestURL := fmt.Sprintf(
-		"http://%s:%d/json-1/lis%s",
-		i.settings.Hostname,
-		i.settings.Port,
-		escapedPayload,
-	)
+	requestURL := fmt.Sprintf("http://%s:%d/json-1/lis%s", i.settings.Hostname, i.settings.Port, escapedPayload)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, http.NoBody)
 	if err != nil {

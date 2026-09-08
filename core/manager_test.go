@@ -25,14 +25,12 @@ type mockOutput struct {
 	sendChan chan *StructuredText
 }
 
-func newMockOutput(name string, delay int) *mockOutput {
-	o := &mockOutput{
-		OutputBase: NewOutputBase(name),
+func newMockOutput(name string, delay, fallbackDelay int) *mockOutput {
+	return &mockOutput{
+		OutputBase: NewOutputBase(name, delay, fallbackDelay),
 		sent:       make([]*StructuredText, 0),
 		sendChan:   make(chan *StructuredText, 10),
 	}
-	o.SetDelay(delay)
-	return o
 }
 
 func (m *mockOutput) Send(st *StructuredText) {
@@ -162,29 +160,38 @@ func testMetadata(artist, title string) *Metadata {
 	}
 }
 
-func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*mockInput, *mockOutput) {
+// startRouter registers the inputs in priority order and starts the router.
+// Callers run inside synctest.Test so router timers use fake time.
+func startRouter(t *testing.T, router *MetadataRouter, output *mockOutput, inputs ...*mockInput) {
 	t.Helper()
 
-	router := NewMetadataRouter()
-
-	input := newMockInput("test-input")
-	if err := router.AddInput(input); err != nil {
-		t.Fatalf("AddInput failed: %v", err)
+	inputNames := make([]string, 0, len(inputs))
+	for _, input := range inputs {
+		if err := router.AddInput(input); err != nil {
+			t.Fatalf("AddInput failed: %v", err)
+		}
+		inputNames = append(inputNames, input.GetName())
 	}
 
-	if len(filters) > 0 {
-		router.SetInputFilters("test-input", filters)
-	}
-
-	output := newMockOutput("test-output", outputDelay)
 	if err := router.AddOutput(output); err != nil {
 		t.Fatalf("AddOutput failed: %v", err)
 	}
-	router.SetOutputInputs("test-output", []string{"test-input"})
+	router.SetOutputInputs(output.GetName(), inputNames)
 
 	if err := router.Start(t.Context()); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
+}
+
+func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*mockInput, *mockOutput) {
+	t.Helper()
+
+	router := NewMetadataRouter()
+	router.SetInputFilters("test-input", filters)
+
+	input := newMockInput("test-input")
+	output := newMockOutput("test-output", outputDelay, 0)
+	startRouter(t, router, output, input)
 
 	return input, output
 }
@@ -360,38 +367,24 @@ func TestWouldFiltersReject(t *testing.T) {
 }
 
 func TestFilterContextMatchesExecution(t *testing.T) {
-	ctx := t.Context()
+	synctest.Test(t, func(t *testing.T) {
+		router := NewMetadataRouter()
+		contextFilter := newContextAwareFilter("test-input", "url", "PREFIX:", ":SUFFIX")
+		router.SetInputType("test-input", "url")
+		router.SetInputPrefixSuffix("test-input", "PREFIX:", ":SUFFIX")
+		router.SetInputFilters("test-input", []Filter{contextFilter})
 
-	router := NewMetadataRouter()
+		input := newMockInput("test-input")
+		output := newMockOutput("test-output", 0, 0)
+		startRouter(t, router, output, input)
 
-	contextFilter := newContextAwareFilter("test-input", "url", "PREFIX:", ":SUFFIX")
+		input.SetMetadata(testMetadata("Artist", "Title"))
+		time.Sleep(100 * time.Millisecond)
 
-	input := newMockInput("test-input")
-	if err := router.AddInput(input); err != nil {
-		t.Fatalf("AddInput failed: %v", err)
-	}
-	router.SetInputType("test-input", "url")
-	router.SetInputPrefixSuffix("test-input", "PREFIX:", ":SUFFIX")
-	router.SetInputFilters("test-input", []Filter{contextFilter})
-
-	output := newMockOutput("test-output", 0)
-	if err := router.AddOutput(output); err != nil {
-		t.Fatalf("AddOutput failed: %v", err)
-	}
-	router.SetOutputInputs("test-output", []string{"test-input"})
-
-	if err := router.Start(ctx); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	time.Sleep(50 * time.Millisecond)
-
-	input.SetMetadata(testMetadata("Artist", "Title"))
-	time.Sleep(100 * time.Millisecond)
-
-	if !contextFilter.wasContextMatched() {
-		t.Error("Filter context did not match expected values during pre-check")
-	}
+		if !contextFilter.wasContextMatched() {
+			t.Error("Filter context did not match expected values during pre-check")
+		}
+	})
 }
 
 func TestWouldFiltersRejectContextFields(t *testing.T) {
@@ -442,35 +435,16 @@ func expiringMetadata(title string) *Metadata {
 	return m
 }
 
-// setupFallbackRouter must run inside synctest.Test so router timers use fake time.
 func setupFallbackRouter(t *testing.T) (primary, fallback *mockInput, output *mockOutput) {
 	t.Helper()
 
-	router := NewMetadataRouter()
-
 	primary = newMockInput("primary")
-	if err := router.AddInput(primary); err != nil {
-		t.Fatalf("AddInput failed: %v", err)
-	}
-
 	fallback = newMockInput("fallback")
 	fallback.SetMetadata(testMetadata("", "Station Name"))
-	if err := router.AddInput(fallback); err != nil {
-		t.Fatalf("AddInput failed: %v", err)
-	}
+	output = newMockOutput("test-output", delaySeconds, fallbackSeconds)
+	startRouter(t, NewMetadataRouter(), output, primary, fallback)
 
-	output = newMockOutput("test-output", delaySeconds)
-	output.SetFallbackDelay(fallbackSeconds)
-	if err := router.AddOutput(output); err != nil {
-		t.Fatalf("AddOutput failed: %v", err)
-	}
-	router.SetOutputInputs("test-output", []string{"primary", "fallback"})
-
-	if err := router.Start(t.Context()); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	// Ignore the initial static fallback.
+	// Drain the initial static fallback.
 	expectSent(t, output, "Station Name")
 
 	return primary, fallback, output
@@ -484,6 +458,13 @@ func expectSent(t *testing.T, output *mockOutput, title string) {
 	}
 }
 
+func expectNoSend(t *testing.T, output *mockOutput, within time.Duration) {
+	t.Helper()
+	if st, ok := output.waitForSend(within); ok {
+		t.Fatalf("expected nothing within %v, got %q", within, st.String())
+	}
+}
+
 func TestFallbackWaitsForDelayPlusFallbackDelay(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		primary, _, output := setupFallbackRouter(t)
@@ -491,12 +472,9 @@ func TestFallbackWaitsForDelayPlusFallbackDelay(t *testing.T) {
 		primary.SetMetadata(expiringMetadata("Song"))
 		expectSent(t, output, "Song")
 
-		// Output delays cancel from the "Song" send; check 2s before the
-		// track-plus-fallback boundary to avoid racing the 1s expiration check.
-		tooEarly := trackLength + fallbackSeconds*time.Second - 2*time.Second
-		if st, ok := output.waitForSend(tooEarly); ok {
-			t.Fatalf("fallback sent too early: %q", st.String())
-		}
+		// Measured from the "Song" send, so the output delay has already elapsed.
+		// The expiration checker ticks once a second, hence the 1s margin.
+		expectNoSend(t, output, trackLength+fallbackSeconds*time.Second-time.Second)
 		expectSent(t, output, "Station Name")
 	})
 }
@@ -512,9 +490,7 @@ func TestNewTrackWithinFallbackDelayCancelsFallback(t *testing.T) {
 		primary.SetMetadata(expiringMetadata("Second Song"))
 		expectSent(t, output, "Second Song")
 
-		if st, ok := output.waitForSend(time.Minute); ok {
-			t.Fatalf("fallback must be cancelled by the new track, but %q was sent", st.String())
-		}
+		expectNoSend(t, output, time.Minute)
 	})
 }
 
@@ -528,9 +504,7 @@ func TestFallbackInputChangeWithinFallbackDelayStillWaits(t *testing.T) {
 		// Replacing a pending fallback restarts its full delay.
 		time.Sleep(trackLength + 5*time.Second)
 		fallback.SetMetadata(testMetadata("", "New Station Name"))
-		if st, ok := output.waitForSend((delaySeconds + fallbackSeconds - 1) * time.Second); ok {
-			t.Fatalf("lower-priority change sent too early: %q", st.String())
-		}
+		expectNoSend(t, output, (delaySeconds+fallbackSeconds)*time.Second-time.Second)
 		expectSent(t, output, "New Station Name")
 	})
 }

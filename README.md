@@ -391,7 +391,7 @@ Control where formatted metadata is sent.
 | **HTTP** | Serve metadata via GET endpoints | ✅ (via payloadMapping) | N/A |
 | **DL Plus** | DAB/DAB+ radio text | ❌ | N/A |
 | **WebSocket** | Real-time browser/app updates | ✅ (via payloadMapping) | N/A |
-| **StereoTool** | Update RDS RadioText | ❌ | N/A |
+| **Stereo Tool** | Update RDS RadioText and streaming song | ❌ | N/A |
 
 All outputs receive full metadata (artist, title, duration, etc.) via StructuredText. The table shows additional capabilities:
 

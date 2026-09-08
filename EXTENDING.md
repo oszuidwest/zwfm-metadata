@@ -335,12 +335,10 @@ type MyCustomOutput struct {
 // NewMyCustomOutput creates a new custom output
 func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCustomOutput {
     output := &MyCustomOutput{
-        OutputBase: core.NewOutputBase(name),
+        OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
         settings:   settings,
         httpClient: &http.Client{Timeout: 10 * time.Second},
     }
-    output.SetDelay(settings.Delay)
-    output.SetFallbackDelay(settings.FallbackDelay)
     return output
 }
 ```
@@ -659,7 +657,7 @@ The `core.FilterAction` enum controls what happens:
 - **http** - Creates HTTP endpoints with multiple response formats
 - **websocket** - Real-time metadata streaming via WebSocket
 - **dlplus** - DAB/DAB+ radio text format (ODR-PadEnc)
-- **stereotool** - StereoTool RDS RadioText integration
+- **stereotool** - Stereo Tool RDS RadioText and streaming song integration
 
 ### Formatters
 
@@ -846,12 +844,10 @@ type DiscordOutput struct {
 
 func NewDiscordOutput(name string, settings config.DiscordOutputConfig) *DiscordOutput {
     output := &DiscordOutput{
-        OutputBase: core.NewOutputBase(name),
+        OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
         settings:   settings,
         httpClient: &http.Client{Timeout: 10 * time.Second},
     }
-    output.SetDelay(settings.Delay)
-    output.SetFallbackDelay(settings.FallbackDelay)
     return output
 }
 
@@ -1154,7 +1150,7 @@ type MyOutput struct {
 
 func NewMyOutput(name string, settings config.MyOutputConfig) *MyOutput {
     output := &MyOutput{
-        OutputBase:    core.NewOutputBase(name),
+        OutputBase:    core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
         settings:      settings,
         payloadMapper: NewPayloadMapper(settings.PayloadMapping),
     }

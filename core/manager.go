@@ -363,8 +363,9 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 	return nil
 }
 
-// processInitialMetadata reads immutable inputs without locking. A surrounding RLock
-// could deadlock when scheduleInputChangeUpdates reacquires it behind a writer.
+// processInitialMetadata takes no lock: mr.inputs is immutable after Start, and
+// scheduleInputChangeUpdates takes its own RLock. A nested RLock would deadlock as
+// soon as a writer (the expiration checker or executeUpdate) is waiting in between.
 func (mr *MetadataRouter) processInitialMetadata() {
 	for inputName, input := range mr.inputs {
 		metadata := input.GetMetadata()
@@ -588,7 +589,8 @@ func applyFilterAction(st *StructuredText, action FilterAction) bool {
 	}
 }
 
-// applyInputStage reads configuration without locking because Start makes it immutable.
+// applyInputStage applies prefix/suffix and the input filters. The bool is false when
+// nothing sendable remains. It reads only config maps, which are immutable after Start.
 func (mr *MetadataRouter) applyInputStage(inputName string, metadata *Metadata) (*StructuredText, bool) {
 	st := NewStructuredText(metadata)
 	if !st.HasContent() {

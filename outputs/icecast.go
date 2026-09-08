@@ -22,11 +22,9 @@ type IcecastOutput struct {
 // NewIcecastOutput creates an IcecastOutput with the given name and settings.
 func NewIcecastOutput(name string, settings *config.IcecastOutputConfig) *IcecastOutput {
 	output := &IcecastOutput{
-		OutputBase: core.NewOutputBase(name),
+		OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
 		settings:   *settings,
 	}
-	output.SetDelay(settings.Delay)
-	output.SetFallbackDelay(settings.FallbackDelay)
 	return output
 }
 

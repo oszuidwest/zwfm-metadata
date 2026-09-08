@@ -97,11 +97,9 @@ type OutputBase struct {
 	fallbackDelay int
 }
 
-// NewOutputBase initializes an OutputBase with the given name.
-func NewOutputBase(name string) *OutputBase {
-	return &OutputBase{
-		name: name,
-	}
+// NewOutputBase initializes an OutputBase with its name and timings in seconds.
+func NewOutputBase(name string, delay, fallbackDelay int) *OutputBase {
+	return &OutputBase{name: name, delay: delay, fallbackDelay: fallbackDelay}
 }
 
 // GetName returns the name of this output destination.
@@ -109,19 +107,9 @@ func (b *OutputBase) GetName() string {
 	return b.name
 }
 
-// SetDelay configures the output delay in seconds.
-func (b *OutputBase) SetDelay(delay int) {
-	b.delay = delay
-}
-
 // GetDelay returns the configured delay in seconds before output delivery.
 func (b *OutputBase) GetDelay() int {
 	return b.delay
-}
-
-// SetFallbackDelay sets the extra wait before switching to a lower-priority input.
-func (b *OutputBase) SetFallbackDelay(delay int) {
-	b.fallbackDelay = delay
 }
 
 // GetFallbackDelay returns the extra seconds added when switching to a lower-priority input.

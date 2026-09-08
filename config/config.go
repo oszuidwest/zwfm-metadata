@@ -129,7 +129,7 @@ type HTTPEndpoint struct {
 	PayloadMapping map[string]any `json:"payloadMapping,omitempty"`
 }
 
-// StereoToolOutputConfig holds connection settings for StereoTool RDS RadioText updates.
+// StereoToolOutputConfig holds connection settings for Stereo Tool metadata updates.
 type StereoToolOutputConfig struct {
 	Delay         int    `json:"delay"`
 	FallbackDelay int    `json:"fallbackDelay,omitempty"`
