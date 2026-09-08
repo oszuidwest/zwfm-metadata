@@ -176,7 +176,7 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 		"name", outputCfg.Name,
 		"type", outputCfg.Type,
 		"delay", output.GetDelay(),
-		"fallbackDelay", core.OutputFallbackDelay(output),
+		"fallbackDelay", output.GetFallbackDelay(),
 	)
 
 	return nil

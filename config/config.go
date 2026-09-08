@@ -54,9 +54,6 @@ type DynamicInputConfig struct {
 	Expiration struct {
 		Type    string `json:"type"`              // "dynamic", "fixed", "none"
 		Minutes int    `json:"minutes,omitempty"` // Fallback minutes for dynamic, or fixed duration
-
-		// Deprecated: removed and ignored; only kept so a leftover setting can be warned about.
-		RoundUpMinutes *bool `json:"roundUpMinutes,omitempty"`
 	} `json:"expiration"`
 }
 
