@@ -429,7 +429,7 @@ func (m *MyCustomOutput) handleHTTPRequest(w http.ResponseWriter, r *http.Reques
 Add your configuration struct to `config/config.go`:
 
 The router parses the shared `delay` and `fallbackDelay` settings through
-`config.OutputTiming`, so output-specific config structs only contain settings
+`core.OutputTiming`, so output-specific config structs only contain settings
 used by that output.
 
 ```go

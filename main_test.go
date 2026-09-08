@@ -11,7 +11,7 @@ func TestSetupOutputTiming(t *testing.T) {
 	tests := []struct {
 		name           string
 		settings       map[string]any
-		expectedTiming config.OutputTiming
+		expectedTiming core.OutputTiming
 		wantError      bool
 	}{
 		{
@@ -19,24 +19,22 @@ func TestSetupOutputTiming(t *testing.T) {
 			settings: map[string]any{
 				"delay":         12,
 				"fallbackDelay": 5,
-				"filename":      "unused",
 			},
-			expectedTiming: config.OutputTiming{Delay: 12, FallbackDelay: 5},
+			expectedTiming: core.OutputTiming{Delay: 12, FallbackDelay: 5},
 		},
 		{
-			name: "default fallback delay",
-			settings: map[string]any{
-				"delay":    12,
-				"filename": "unused",
-			},
-			expectedTiming: config.OutputTiming{Delay: 12},
+			name:           "default fallback delay",
+			settings:       map[string]any{"delay": 12},
+			expectedTiming: core.OutputTiming{Delay: 12},
 		},
 		{
-			name: "invalid delay",
-			settings: map[string]any{
-				"delay":    "invalid",
-				"filename": "unused",
-			},
+			name:      "invalid delay",
+			settings:  map[string]any{"delay": "invalid"},
+			wantError: true,
+		},
+		{
+			name:      "negative fallback delay",
+			settings:  map[string]any{"delay": 12, "fallbackDelay": -1},
 			wantError: true,
 		},
 	}

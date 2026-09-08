@@ -39,12 +39,6 @@ type OutputConfig struct {
 	Settings   map[string]any `json:"settings"`
 }
 
-// OutputTiming holds the shared delivery timing settings for an output.
-type OutputTiming struct {
-	Delay         int `json:"delay"`
-	FallbackDelay int `json:"fallbackDelay,omitempty"`
-}
-
 // FilterConfig defines a metadata filter with a type and type-specific settings.
 type FilterConfig struct {
 	Type       string `json:"type"`

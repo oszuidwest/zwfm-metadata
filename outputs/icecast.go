@@ -21,11 +21,7 @@ type IcecastOutput struct {
 
 // NewIcecastOutput creates an IcecastOutput with the given name and settings.
 func NewIcecastOutput(name string, settings *config.IcecastOutputConfig) *IcecastOutput {
-	output := &IcecastOutput{
-		OutputBase: core.NewOutputBase(name),
-		settings:   *settings,
-	}
-	return output
+	return &IcecastOutput{OutputBase: core.NewOutputBase(name), settings: *settings}
 }
 
 // Send updates the Icecast server with new metadata.

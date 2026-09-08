@@ -8,14 +8,19 @@ import (
 	"slices"
 	"sync"
 	"time"
-
-	"zwfm-metadata/config"
 )
 
 // InputPrefixSuffix holds text to prepend and append to an input's metadata.
 type InputPrefixSuffix struct {
 	Prefix string
 	Suffix string
+}
+
+// OutputTiming holds the delivery timing for an output, in seconds. FallbackDelay is
+// added on top of Delay when the output switches to a lower-priority input.
+type OutputTiming struct {
+	Delay         int `json:"delay"`
+	FallbackDelay int `json:"fallbackDelay"`
 }
 
 // CleanMetadata contains only the public-facing metadata fields for API responses.
@@ -61,12 +66,12 @@ type Timeline struct {
 type MetadataRouter struct {
 	inputs               map[string]Input
 	outputs              map[string]Output
-	outputInputs         map[string][]string            // output name -> input names
-	outputFormatters     map[string][]Formatter         // output name -> formatters
-	outputFormatterNames map[string][]string            // output name -> formatter names
-	outputTiming         map[string]config.OutputTiming // output name -> delivery timing
-	inputFilters         map[string][]Filter            // input name -> filters
-	inputFilterNames     map[string][]string            // input name -> filter type names (for dashboard)
+	outputInputs         map[string][]string     // output name -> input names
+	outputFormatters     map[string][]Formatter  // output name -> formatters
+	outputFormatterNames map[string][]string     // output name -> formatter names
+	outputTiming         map[string]OutputTiming // output name -> delivery timing
+	inputFilters         map[string][]Filter     // input name -> filters
+	inputFilterNames     map[string][]string     // input name -> filter type names (for dashboard)
 	inputPrefixSuffix    map[string]InputPrefixSuffix
 	inputTypes           map[string]string // input name -> input type
 	outputTypes          map[string]string // output name -> output type
@@ -85,7 +90,7 @@ func NewMetadataRouter() *MetadataRouter {
 		outputInputs:         make(map[string][]string),
 		outputFormatters:     make(map[string][]Formatter),
 		outputFormatterNames: make(map[string][]string),
-		outputTiming:         make(map[string]config.OutputTiming),
+		outputTiming:         make(map[string]OutputTiming),
 		inputFilters:         make(map[string][]Filter),
 		inputFilterNames:     make(map[string][]string),
 		inputPrefixSuffix:    make(map[string]InputPrefixSuffix),
@@ -142,7 +147,7 @@ func (mr *MetadataRouter) SetOutputInputs(outputName string, inputNames []string
 }
 
 // SetOutputTiming configures the delivery timing for an output.
-func (mr *MetadataRouter) SetOutputTiming(outputName string, timing config.OutputTiming) {
+func (mr *MetadataRouter) SetOutputTiming(outputName string, timing OutputTiming) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.panicIfStarted("SetOutputTiming")
@@ -216,7 +221,7 @@ func (mr *MetadataRouter) GetOutputType(outputName string) string {
 }
 
 // GetOutputTiming retrieves the delivery timing configured for an output.
-func (mr *MetadataRouter) GetOutputTiming(outputName string) config.OutputTiming {
+func (mr *MetadataRouter) GetOutputTiming(outputName string) OutputTiming {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
 	return mr.outputTiming[outputName]
@@ -382,9 +387,9 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 	return nil
 }
 
-// processInitialMetadata takes no lock: mr.inputs is immutable after Start, and
-// scheduleInputChangeUpdates takes its own RLock. A nested RLock would deadlock as
-// soon as a writer (the expiration checker or executeUpdate) is waiting in between.
+// processInitialMetadata schedules inputs that already hold metadata (static text).
+// No lock: mr.inputs is immutable after Start and scheduleInputChangeUpdates takes
+// its own RLock, which would deadlock if a writer were queued in between.
 func (mr *MetadataRouter) processInitialMetadata() {
 	for inputName, input := range mr.inputs {
 		metadata := input.GetMetadata()
@@ -428,30 +433,13 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 		}
 
 		mr.timeline.cancelUpdatesForOutput(outputName)
-
-		delay := mr.updateDelay(outputName, inputName)
-		executeAt := time.Now().Add(delay)
-
-		update := ScheduledUpdate{
-			ExecuteAt:  executeAt,
+		mr.schedule(&ScheduledUpdate{
 			OutputName: outputName,
 			InputName:  inputName,
 			Output:     output,
 			Metadata:   metadata,
 			UpdateType: "input_change",
-		}
-
-		mr.timeline.addUpdate(&update)
-
-		if delay > 0 {
-			slog.Debug("Scheduled update for output",
-				"output", outputName,
-				"time", executeAt.Format("15:04:05"),
-				"delay_seconds", int(delay.Seconds()),
-			)
-		} else {
-			slog.Debug("Scheduled immediate update for output", "output", outputName)
-		}
+		})
 	}
 }
 
@@ -496,7 +484,7 @@ func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	}
 }
 
-// checkForExpirations holds mr.mu across fallback selection and scheduling for consistency.
+// checkForExpirations takes the write lock because it clears currentInputs for outputs left without inputs.
 func (mr *MetadataRouter) checkForExpirations() {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -550,32 +538,37 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 		return
 	}
 
-	formattedText := st.String()
-	if formattedText == mr.lastSentContent[outputName] {
+	if st.String() == mr.lastSentContent[outputName] {
 		return
 	}
 
-	delay := mr.updateDelay(outputName, inputName)
-	executeAt := time.Now().Add(delay)
-
-	update := ScheduledUpdate{
-		ExecuteAt:  executeAt,
+	mr.schedule(&ScheduledUpdate{
 		OutputName: outputName,
 		InputName:  inputName,
 		Output:     output,
 		Metadata:   metadata,
 		UpdateType: "expiration_fallback",
-	}
+	})
+}
 
-	mr.timeline.addUpdate(&update)
-	slog.Debug("Scheduled expiration fallback for output",
-		"output", outputName,
-		"time", executeAt.Format("15:04:05"),
+// schedule stamps the update with its execution time and queues it.
+// Callers must hold at least mr.mu.RLock.
+func (mr *MetadataRouter) schedule(update *ScheduledUpdate) {
+	delay := mr.updateDelay(update.OutputName, update.InputName)
+	update.ExecuteAt = time.Now().Add(delay)
+	mr.timeline.addUpdate(update)
+	slog.Debug("Scheduled update for output",
+		"update_type", update.UpdateType,
+		"output", update.OutputName,
+		"time", update.ExecuteAt.Format("15:04:05"),
 		"delay_seconds", int(delay.Seconds()),
 	)
 }
 
-// updateDelay adds the fallback delay when switching to a lower-priority input.
+// updateDelay returns Delay, plus FallbackDelay when inputName ranks below the input
+// the output currently shows. That covers both the expiration checker's fallback and
+// a lower-priority input changing while the switch is pending. A return to a higher
+// priority, or the first send at startup when nothing is current, gets Delay only.
 // Callers must hold at least mr.mu.RLock.
 func (mr *MetadataRouter) updateDelay(outputName, inputName string) time.Duration {
 	timing := mr.outputTiming[outputName]

@@ -144,9 +144,12 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error
 
 // setupOutput configures an output with its inputs, formatters, and timing on the router.
 func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) error {
-	timing, err := utils.ParseJSONSettings[config.OutputTiming](outputCfg.Settings)
+	timing, err := utils.ParseJSONSettings[core.OutputTiming](outputCfg.Settings)
 	if err != nil {
 		return fmt.Errorf("failed to parse timing for output %q: %w", outputCfg.Name, err)
+	}
+	if timing.Delay < 0 || timing.FallbackDelay < 0 {
+		return fmt.Errorf("output %q: delay and fallbackDelay must not be negative", outputCfg.Name)
 	}
 
 	output, err := createOutput(outputCfg)
@@ -177,13 +180,12 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 		return fmt.Errorf("failed to add output %q: %w", outputCfg.Name, err)
 	}
 	router.SetOutputType(outputCfg.Name, outputCfg.Type)
-	configuredTiming := router.GetOutputTiming(outputCfg.Name)
 
 	slog.Info("Added output",
 		"name", outputCfg.Name,
 		"type", outputCfg.Type,
-		"delay", configuredTiming.Delay,
-		"fallbackDelay", configuredTiming.FallbackDelay,
+		"delay", timing.Delay,
+		"fallbackDelay", timing.FallbackDelay,
 	)
 
 	return nil
