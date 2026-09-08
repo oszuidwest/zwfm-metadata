@@ -28,8 +28,7 @@ func TestStereoToolOutput_FieldIDs(t *testing.T) {
 	}
 
 	// Pins the wire contract: Streaming Output Song, then FM RDS Radio Text, each as
-	// {"<id>":{"forced":"1","new_value":...}} with every reserved character escaped
-	// and spaces as %20, because Stereo Tool decodes the path query-style.
+	// {"<id>":{"forced":"1","new_value":...}} percent-encoded with spaces as %20.
 	requestURI := func(id string) string {
 		return "/json-1/lis%7B%22" + id + "%22%3A%7B%22forced%22%3A%221%22%2C" +
 			"%22new_value%22%3A%22Artist%2FTitle%20%26%20More%20%2B%20100%25%3F%22%7D%7D"

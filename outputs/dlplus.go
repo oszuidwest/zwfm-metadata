@@ -25,11 +25,7 @@ type DLPlusOutput struct {
 
 // NewDLPlusOutput initializes a DL Plus file writer with the given settings.
 func NewDLPlusOutput(name string, settings config.DLPlusOutputConfig) *DLPlusOutput {
-	output := &DLPlusOutput{
-		OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
-		settings:   settings,
-	}
-	return output
+	return &DLPlusOutput{OutputBase: core.NewOutputBase(name), settings: settings}
 }
 
 // Send writes metadata with DL Plus tags to the configured file.

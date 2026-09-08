@@ -29,7 +29,7 @@ type HTTPOutput struct {
 // NewHTTPOutput initializes an HTTP endpoint server with the given settings.
 func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
 	output := &HTTPOutput{
-		OutputBase:      core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
+		OutputBase:      core.NewOutputBase(name),
 		settings:        settings,
 		endpointMappers: make(map[string]*PayloadMapper),
 	}

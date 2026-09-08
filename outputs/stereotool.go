@@ -25,11 +25,7 @@ type StereoToolOutput struct {
 
 // NewStereoToolOutput creates a Stereo Tool metadata output.
 func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *StereoToolOutput {
-	output := &StereoToolOutput{
-		OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
-		settings:   settings,
-	}
-	return output
+	return &StereoToolOutput{OutputBase: core.NewOutputBase(name), settings: settings}
 }
 
 // Send updates Stereo Tool's RDS and streaming metadata fields.
@@ -58,7 +54,8 @@ func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 }
 
 func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error {
-	// Preserve ampersands instead of using JSON's optional \u0026 escape.
+	// json.Marshal would escape & as \u0026; Stereo Tool's undocumented parser gets
+	// the literal character, as it always has.
 	var payload bytes.Buffer
 	encoder := json.NewEncoder(&payload)
 	encoder.SetEscapeHTML(false)
@@ -71,11 +68,9 @@ func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error
 		return fmt.Errorf("failed to encode request for %s: %w", fieldName, err)
 	}
 
-	// Stereo Tool decodes the path query-style, so every reserved character must be
-	// escaped (url.PathEscape would leave & and + literal) and spaces must be %20,
-	// because a literal + would decode as a space.
-	escapedPayload := url.QueryEscape(strings.TrimSuffix(payload.String(), "\n"))
-	escapedPayload = strings.ReplaceAll(escapedPayload, "+", "%20")
+	// Stereo Tool needs every reserved character percent-encoded (url.PathEscape would
+	// leave & and + literal) and spaces as %20 rather than QueryEscape's +.
+	escapedPayload := strings.ReplaceAll(url.QueryEscape(strings.TrimSuffix(payload.String(), "\n")), "+", "%20")
 	requestURL := fmt.Sprintf("http://%s:%d/json-1/lis%s", i.settings.Hostname, i.settings.Port, escapedPayload)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, http.NoBody)

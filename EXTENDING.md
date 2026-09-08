@@ -335,7 +335,7 @@ type MyCustomOutput struct {
 // NewMyCustomOutput creates a new custom output
 func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCustomOutput {
     output := &MyCustomOutput{
-        OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
+        OutputBase: core.NewOutputBase(name),
         settings:   settings,
         httpClient: &http.Client{Timeout: 10 * time.Second},
     }
@@ -428,11 +428,13 @@ func (m *MyCustomOutput) handleHTTPRequest(w http.ResponseWriter, r *http.Reques
 
 Add your configuration struct to `config/config.go`:
 
+The router parses the shared `delay` and `fallbackDelay` settings through
+`core.OutputTiming`, so output-specific config structs only contain settings
+used by that output.
+
 ```go
 // MyCustomOutputConfig represents settings for custom output
 type MyCustomOutputConfig struct {
-    Delay          int                    `json:"delay"`
-    FallbackDelay  int                    `json:"fallbackDelay,omitempty"`
     URL            string                 `json:"url"`
     APIKey         string                 `json:"apiKey"`
     PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
@@ -844,7 +846,7 @@ type DiscordOutput struct {
 
 func NewDiscordOutput(name string, settings config.DiscordOutputConfig) *DiscordOutput {
     output := &DiscordOutput{
-        OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
+        OutputBase: core.NewOutputBase(name),
         settings:   settings,
         httpClient: &http.Client{Timeout: 10 * time.Second},
     }
@@ -1013,8 +1015,6 @@ type Input interface {
 type Output interface {
     Start(ctx context.Context) error    // Start processing
     GetName() string                    // Return output name
-    GetDelay() int                      // Return delay in seconds
-    GetFallbackDelay() int              // Extra delay for lower-priority inputs
     Send(st *StructuredText)            // Process structured metadata
 }
 ```
@@ -1150,7 +1150,7 @@ type MyOutput struct {
 
 func NewMyOutput(name string, settings config.MyOutputConfig) *MyOutput {
     output := &MyOutput{
-        OutputBase:    core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
+        OutputBase:    core.NewOutputBase(name),
         settings:      settings,
         payloadMapper: NewPayloadMapper(settings.PayloadMapping),
     }
