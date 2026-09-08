@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"strings"
 	"sync"
 	"testing"
@@ -9,9 +8,6 @@ import (
 	"time"
 )
 
-// Mock types for testing.
-
-// mockInput implements Input for testing.
 type mockInput struct {
 	*InputBase
 	PassiveComponent
@@ -21,7 +17,6 @@ func newMockInput(name string) *mockInput {
 	return &mockInput{InputBase: NewInputBase(name)}
 }
 
-// mockOutput implements Output for testing with configurable delay.
 type mockOutput struct {
 	*OutputBase
 	PassiveComponent
@@ -68,7 +63,6 @@ func (m *mockOutput) waitForSend(timeout time.Duration) (*StructuredText, bool) 
 	}
 }
 
-// mockFilter implements Filter with configurable behavior.
 type mockFilter struct {
 	action FilterAction
 }
@@ -81,7 +75,6 @@ func (f *mockFilter) Decide(_ *StructuredText) FilterAction {
 	return f.action
 }
 
-// patternFilter rejects or clears based on pattern matching in title.
 type patternFilter struct {
 	pattern string
 	action  FilterAction
@@ -98,7 +91,6 @@ func (f *patternFilter) Decide(st *StructuredText) FilterAction {
 	return FilterPass
 }
 
-// artistDependentFilter clears title when artist is empty.
 type artistDependentFilter struct{}
 
 func (f *artistDependentFilter) Decide(st *StructuredText) FilterAction {
@@ -108,7 +100,6 @@ func (f *artistDependentFilter) Decide(st *StructuredText) FilterAction {
 	return FilterPass
 }
 
-// capturingFilter captures the StructuredText for inspection.
 type capturingFilter struct {
 	captured *StructuredText
 	mu       sync.Mutex
@@ -127,7 +118,6 @@ func (f *capturingFilter) getCaptured() *StructuredText {
 	return f.captured
 }
 
-// contextAwareFilter checks that context fields are set correctly.
 type contextAwareFilter struct {
 	expectedInputName string
 	expectedInputType string
@@ -164,8 +154,6 @@ func (f *contextAwareFilter) wasContextMatched() bool {
 	return f.contextMatched
 }
 
-// Test helpers.
-
 func testMetadata(artist, title string) *Metadata {
 	return &Metadata{
 		Artist:    artist,
@@ -174,18 +162,13 @@ func testMetadata(artist, title string) *Metadata {
 	}
 }
 
-// setupTestRouter creates a router with a single input and output for testing.
-// Returns the router, input, output, and a cancel function.
-func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*MetadataRouter, *mockInput, *mockOutput, context.CancelFunc) { //nolint:unparam // router returned for tests that need it
+func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*mockInput, *mockOutput) {
 	t.Helper()
-
-	ctx, cancel := context.WithCancel(context.Background())
 
 	router := NewMetadataRouter()
 
 	input := newMockInput("test-input")
 	if err := router.AddInput(input); err != nil {
-		cancel()
 		t.Fatalf("AddInput failed: %v", err)
 	}
 
@@ -193,29 +176,21 @@ func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*Metadata
 		router.SetInputFilters("test-input", filters)
 	}
 
-	output := newMockOutput("test-output", 0)
-	output.SetDelay(outputDelay)
+	output := newMockOutput("test-output", outputDelay)
 	if err := router.AddOutput(output); err != nil {
-		cancel()
 		t.Fatalf("AddOutput failed: %v", err)
 	}
 	router.SetOutputInputs("test-output", []string{"test-input"})
 
-	if err := router.Start(ctx); err != nil {
-		cancel()
+	if err := router.Start(t.Context()); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
-	time.Sleep(50 * time.Millisecond)
-
-	return router, input, output, cancel
+	return input, output
 }
 
-// Tests.
-
 func TestFilterRejectsMetadata(t *testing.T) {
-	_, input, output, cancel := setupTestRouter(t, 0, []Filter{newMockFilter(FilterReject)})
-	defer cancel()
+	input, output := setupTestRouter(t, 0, []Filter{newMockFilter(FilterReject)})
 
 	input.SetMetadata(testMetadata("Artist", "Title"))
 	time.Sleep(100 * time.Millisecond)
@@ -228,17 +203,13 @@ func TestFilterRejectsMetadata(t *testing.T) {
 
 func TestDelayedUpdatePreservedWhenNewMetadataRejected(t *testing.T) {
 	rejectFilter := newPatternFilter("REJECT", FilterReject)
-	_, input, output, cancel := setupTestRouter(t, 1, []Filter{rejectFilter})
-	defer cancel()
+	input, output := setupTestRouter(t, 1, []Filter{rejectFilter})
 
-	// Send metadata A (passes filter, scheduled with 1s delay)
 	input.SetMetadata(testMetadata("Artist A", "Title A"))
 
-	// Immediately send metadata B which should be rejected
 	time.Sleep(50 * time.Millisecond)
 	input.SetMetadata(testMetadata("Artist B", "REJECT this"))
 
-	// Wait for A's delayed update to arrive
 	st, ok := output.waitForSend(2 * time.Second)
 	if !ok {
 		t.Fatal("Expected metadata A to be sent after delay - pending update was incorrectly canceled")
@@ -247,8 +218,6 @@ func TestDelayedUpdatePreservedWhenNewMetadataRejected(t *testing.T) {
 		t.Errorf("Expected Title A, got %s", st.Title)
 	}
 
-	// Verify B was actually rejected by waiting for any additional sends
-	// If B was mistakenly scheduled, it would arrive within this window
 	_, gotExtra := output.waitForSend(500 * time.Millisecond)
 	if gotExtra {
 		t.Error("Expected metadata B to be rejected, but received additional update")
@@ -261,22 +230,17 @@ func TestDelayedUpdatePreservedWhenNewMetadataRejected(t *testing.T) {
 }
 
 func TestDelayedUpdatePreservedWhenNewMetadataCumulativelyCleared(t *testing.T) {
-	// Filter chain: clear artist when title contains "CLEAR", then clear title when artist is empty
 	filters := []Filter{
 		newPatternFilter("CLEAR", FilterClearArtist),
 		&artistDependentFilter{},
 	}
-	_, input, output, cancel := setupTestRouter(t, 1, filters)
-	defer cancel()
+	input, output := setupTestRouter(t, 1, filters)
 
-	// Send metadata A (passes filters, scheduled with 1s delay)
 	input.SetMetadata(testMetadata("Artist A", "Title A"))
 
-	// Send metadata B which will be cumulatively cleared
 	time.Sleep(50 * time.Millisecond)
 	input.SetMetadata(testMetadata("Artist B", "CLEAR me"))
 
-	// Wait for A's delayed update
 	st, ok := output.waitForSend(2 * time.Second)
 	if !ok {
 		t.Fatal("Expected metadata A to be sent - pending update was incorrectly canceled")
@@ -285,8 +249,6 @@ func TestDelayedUpdatePreservedWhenNewMetadataCumulativelyCleared(t *testing.T) 
 		t.Errorf("Expected Title A, got %s", st.Title)
 	}
 
-	// Verify B was actually rejected by waiting for any additional sends
-	// If B was mistakenly scheduled, it would arrive within this window
 	_, gotExtra := output.waitForSend(500 * time.Millisecond)
 	if gotExtra {
 		t.Error("Expected metadata B to be rejected (cumulative clearing), but received additional update")
@@ -303,8 +265,7 @@ func TestCumulativeFieldClearingRejectsMetadata(t *testing.T) {
 		newMockFilter(FilterClearArtist),
 		newMockFilter(FilterClearTitle),
 	}
-	_, input, output, cancel := setupTestRouter(t, 0, filters)
-	defer cancel()
+	input, output := setupTestRouter(t, 0, filters)
 
 	input.SetMetadata(testMetadata("Artist", "Title"))
 	time.Sleep(100 * time.Millisecond)
@@ -461,24 +422,19 @@ func TestWouldFiltersRejectContextFields(t *testing.T) {
 	}
 }
 
-// expiringMetadata returns metadata for a track of trackLength that expires when it ends.
-func expiringMetadata(title string) *Metadata {
-	m := testMetadata("Artist", title)
-	m.ExpiresAt = new(time.Now().Add(trackLength))
-	return m
-}
-
-// Timings shared by the fallback tests. The delays are config values in seconds.
 const (
 	trackLength     = 3 * time.Minute
 	delaySeconds    = 5
 	fallbackSeconds = 20
 )
 
-// setupFallbackRouter starts a router with a primary input that can expire and a static
-// fallback input. The output waits delaySeconds for every update and a further
-// fallbackSeconds before switching to the fallback. Call from inside synctest.Test so the
-// router's timers run on fake time.
+func expiringMetadata(title string) *Metadata {
+	m := testMetadata("Artist", title)
+	m.ExpiresAt = new(time.Now().Add(trackLength))
+	return m
+}
+
+// setupFallbackRouter must run inside synctest.Test so router timers use fake time.
 func setupFallbackRouter(t *testing.T) (primary, fallback *mockInput, output *mockOutput) {
 	t.Helper()
 
@@ -506,14 +462,12 @@ func setupFallbackRouter(t *testing.T) (primary, fallback *mockInput, output *mo
 		t.Fatalf("Start failed: %v", err)
 	}
 
-	// The static fallback is sent on start; drain it so tests only see what follows.
+	// Ignore the initial static fallback.
 	expectSent(t, output, "Station Name")
 
 	return primary, fallback, output
 }
 
-// expectSent fails unless the output's next send carries title within the output delay
-// plus one second of expiration checker tick.
 func expectSent(t *testing.T, output *mockOutput, title string) {
 	t.Helper()
 	st, ok := output.waitForSend((delaySeconds + 1) * time.Second)
@@ -529,11 +483,8 @@ func TestFallbackWaitsForDelayPlusFallbackDelay(t *testing.T) {
 		primary.SetMetadata(expiringMetadata("Song"))
 		expectSent(t, output, "Song")
 
-		// Measured from the song's send, the track expires trackLength-delaySeconds later and
-		// the fallback follows delaySeconds+fallbackSeconds after that, so the output delay
-		// cancels out. The expiration checker notices the expiry on its next one-second tick,
-		// so the fallback lands one second past fallbackAt. A fallback that skipped the output
-		// delay would have arrived delaySeconds earlier and trip the first check.
+		// The initial output delay cancels out of the end-to-end wait. The expiration tick
+		// may add one second.
 		fallbackAt := trackLength + fallbackSeconds*time.Second
 		if st, ok := output.waitForSend(fallbackAt - 2*time.Second); ok {
 			t.Fatalf("fallback sent too early: %q", st.String())
@@ -549,7 +500,6 @@ func TestNewTrackWithinFallbackDelayCancelsFallback(t *testing.T) {
 		primary.SetMetadata(expiringMetadata("First Song"))
 		expectSent(t, output, "First Song")
 
-		// The next track arrives inside the fallback window, as a playout system does after a jingle.
 		time.Sleep(trackLength + 5*time.Second)
 		primary.SetMetadata(expiringMetadata("Second Song"))
 		expectSent(t, output, "Second Song")
@@ -567,10 +517,7 @@ func TestFallbackInputChangeWithinFallbackDelayStillWaits(t *testing.T) {
 		primary.SetMetadata(expiringMetadata("Song"))
 		expectSent(t, output, "Song")
 
-		// The fallback input changes while the fallback is pending. It still ranks below the
-		// expired primary, so the change replaces the pending fallback and waits the full
-		// delaySeconds+fallbackSeconds from now. Without that rule the new text would show
-		// after delaySeconds, and the pending fallback would have fired shortly after.
+		// Replacing a pending fallback restarts its full delay.
 		time.Sleep(trackLength + 5*time.Second)
 		fallback.SetMetadata(testMetadata("", "New Station Name"))
 		if st, ok := output.waitForSend((delaySeconds + fallbackSeconds - 1) * time.Second); ok {
@@ -587,8 +534,6 @@ func TestReturningPrimaryIsNotDelayedByFallbackDelay(t *testing.T) {
 		primary.SetMetadata(expiringMetadata("Song"))
 		expectSent(t, output, "Song")
 
-		// Let the fallback take over, then bring the primary back: switching up to a
-		// higher-priority input only waits the regular delay.
 		time.Sleep(trackLength + fallbackSeconds*time.Second)
 		expectSent(t, output, "Station Name")
 

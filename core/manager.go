@@ -364,11 +364,8 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 	return nil
 }
 
-// processInitialMetadata triggers updates for inputs with pre-existing metadata like static text.
+// processInitialMetadata schedules preloaded inputs after configuration becomes immutable.
 func (mr *MetadataRouter) processInitialMetadata() {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
-
 	for inputName, input := range mr.inputs {
 		metadata := input.GetMetadata()
 		if metadata != nil && metadata.IsAvailable() {
@@ -568,12 +565,8 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 	)
 }
 
-// updateDelay returns how long an update from inputName waits before reaching the output.
-// Switching to an input that ranks below the one currently shown adds the fallback delay,
-// whether the switch comes from the expiration checker or from that input changing while
-// a fallback is pending. A higher-priority input arriving in the meantime cancels the
-// pending update (scheduleInputChangeUpdates), so gaps shorter than the fallback delay
-// never reach the output. Callers must hold mr.mu.
+// updateDelay adds the fallback delay when switching to a lower-priority input.
+// Callers must hold mr.mu.
 func (mr *MetadataRouter) updateDelay(outputName string, output Output, inputName string) time.Duration {
 	seconds := output.GetDelay()
 	inputs := mr.outputInputs[outputName]
