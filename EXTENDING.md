@@ -1018,7 +1018,7 @@ type Output interface {
     Start(ctx context.Context) error    // Start processing
     GetName() string                    // Return output name
     GetDelay() int                      // Return delay in seconds
-    GetFallbackDelay() int              // Return extra seconds a fallback waits on top of the delay
+    GetFallbackDelay() int              // Return extra seconds before switching to a lower-priority input
     Send(st *StructuredText)            // Process structured metadata
 }
 ```
