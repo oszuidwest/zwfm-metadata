@@ -125,9 +125,8 @@ func (b *OutputBase) SetFallbackDelay(delay *int) {
 	b.fallbackDelay = delay
 }
 
-// GetFallbackDelay returns the delay in seconds before a fallback replaces expired
-// metadata. A new track arriving within this window cancels the fallback, which
-// keeps short gaps between tracks (crossfades, jingles) from flapping to fallback text.
+// GetFallbackDelay returns the seconds to wait before a fallback replaces expired
+// metadata, defaulting to the output delay.
 func (b *OutputBase) GetFallbackDelay() int {
 	if b.fallbackDelay != nil {
 		return *b.fallbackDelay

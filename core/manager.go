@@ -70,7 +70,8 @@ type MetadataRouter struct {
 	lastSentContent      map[string]string // output name -> last sent content
 	currentInputs        map[string]string // output name -> current input name
 	timeline             *Timeline
-	started              bool // true after Start() is called; config maps become immutable
+	expiryCheckInterval  time.Duration // how often inputs are checked for expiration; tests lower it
+	started              bool          // true after Start() is called; config maps become immutable
 	mu                   sync.RWMutex
 }
 
@@ -90,6 +91,7 @@ func NewMetadataRouter() *MetadataRouter {
 		lastSentContent:      make(map[string]string),
 		currentInputs:        make(map[string]string),
 		timeline:             &Timeline{updates: make([]ScheduledUpdate, 0), signal: make(chan struct{}, 1)},
+		expiryCheckInterval:  time.Second,
 	}
 }
 
@@ -467,16 +469,12 @@ func (mr *MetadataRouter) findHighestPriorityInput(outputName string) (string, *
 	return "", nil
 }
 
-// expirationCheckInterval is how often inputs are checked for expiration. Tests lower it
-// so fallback behavior can be verified without waiting for whole seconds.
-var expirationCheckInterval = 1 * time.Second
-
 // startExpirationChecker monitors inputs for expiration and triggers fallback to lower-priority sources.
 func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
-	ticker := time.NewTicker(expirationCheckInterval)
+	ticker := time.NewTicker(mr.expiryCheckInterval)
 	defer ticker.Stop()
 
-	slog.Info("Started expiration checker", "interval", expirationCheckInterval)
+	slog.Info("Started expiration checker", "interval", mr.expiryCheckInterval)
 
 	for {
 		select {

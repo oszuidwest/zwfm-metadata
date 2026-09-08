@@ -18,6 +18,13 @@ type DynamicInput struct {
 
 // NewDynamicInput initializes an HTTP API-driven input with the given settings.
 func NewDynamicInput(name string, settings config.DynamicInputConfig) *DynamicInput {
+	if settings.Expiration.RoundUpMinutes != nil {
+		slog.Warn("expiration.roundUpMinutes has been removed and is ignored; dynamic expiration is now exact. "+
+			"Set fallbackDelay on outputs with a short delay to bridge gaps between tracks",
+			"input", name,
+		)
+	}
+
 	return &DynamicInput{
 		InputBase: core.NewInputBase(name),
 		settings:  settings,
@@ -61,8 +68,6 @@ func (d *DynamicInput) UpdateMetadata(update *core.MetadataRequest) error {
 }
 
 // calculateDynamicExpiration parses duration and returns the exact expiration time.
-// Gaps between tracks are covered by the per-output fallback delay, not by padding
-// the expiration, so downstream consumers receive the real end of the track.
 func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 	totalSeconds, ok := utils.ParseDurationToSeconds(duration)
 	if !ok {
