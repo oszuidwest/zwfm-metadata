@@ -61,7 +61,6 @@ func (d *DynamicInput) UpdateMetadata(update *core.MetadataRequest) error {
 	return nil
 }
 
-// calculateDynamicExpiration parses duration and returns the expiration time.
 func (d *DynamicInput) calculateDynamicExpiration(duration string) time.Time {
 	totalSeconds, ok := utils.ParseDurationToSeconds(duration)
 	if !ok {
