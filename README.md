@@ -814,6 +814,7 @@ Updates Stereo Tool's RDS RadioText and streaming song metadata.
 
 - Uses Stereo Tool 11's undocumented JSON API: `9985` for RadioText and `6751` for Song. Both IDs were verified against 11.05 and 10.75; v3 only supports Stereo Tool 11.
 - Requires the `rds` formatter to enforce the 64-character RadioText limit and clean the input.
+- The formatter transliterates extended Latin characters to ASCII because Stereo Tool's RDS encoder corrupts them; verified in 10.71, 10.75, and 11.05.
 
 ### Custom Payload Mapping
 
