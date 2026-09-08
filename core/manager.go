@@ -118,9 +118,6 @@ func (mr *MetadataRouter) AddOutput(output Output) error {
 	if _, exists := mr.outputs[name]; exists {
 		return fmt.Errorf("output with name %s already exists", name)
 	}
-	if output.GetDelay() < 0 || output.GetFallbackDelay() < 0 {
-		return fmt.Errorf("output %q: delay and fallbackDelay must not be negative", name)
-	}
 
 	mr.outputs[name] = output
 	return nil
