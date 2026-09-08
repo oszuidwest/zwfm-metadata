@@ -454,7 +454,7 @@ Updates streaming server metadata
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
+- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
 - `server` (required) - Icecast server hostname/IP
 - `port` (required) - Icecast server port
 - `username` (required) - Icecast username (usually "source")
@@ -480,7 +480,7 @@ Writes metadata to the filesystem.
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
+- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
 - `filename` (required) - Full path to output file
 
 **Note**: File output writes the formatted text as-is. To transform text, use formatters like `uppercase`, `lowercase`, `ucwords`, or `rds`. Template functions are not available for file outputs.
@@ -535,7 +535,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
+- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
 - `url` (required) - Target URL (supports Go templates for GET requests)
 - `method` (required) - HTTP method: "GET" or "POST"
 - `bearerToken` (optional) - Authorization bearer token
@@ -683,7 +683,7 @@ Serves metadata via GET endpoints with multiple response formats
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
+- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
 - `endpoints` (required) - Array of HTTP endpoints to serve
 
 ##### Endpoint Configuration
@@ -716,7 +716,7 @@ Broadcasts metadata to connected clients with real-time updates.
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
+- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
 - `path` (required) - URL path for WebSocket connections (e.g., "/metadata", "/ws")
 - `payloadMapping` (optional) - Custom JSON message structure (see [Custom Payload Mapping](#custom-payload-mapping))
 
@@ -759,7 +759,7 @@ Generates DL Plus format for DAB/DAB+ transmission
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
+- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
 - `filename` (required) - Full path to output file
 
 ##### Output Format
@@ -796,6 +796,7 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
   "formatters": ["rds"],
   "settings": {
     "delay": 2,
+    "fallbackDelay": 20,
     "hostname": "localhost",
     "port": 8080
   }
@@ -804,7 +805,7 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 
 ##### Settings
 - `delay` (required) - Number of seconds to delay metadata updates
-- `fallbackDelay` (optional, default: same as `delay`) - Number of seconds to wait before a fallback input replaces expired metadata
+- `fallbackDelay` (optional, default: same as `delay`) - See [Delays and fallback](#delays-and-fallback)
 - `hostname` (required) - StereoTool server hostname/IP
 - `port` (required) - StereoTool HTTP server port (typically 8080)
 

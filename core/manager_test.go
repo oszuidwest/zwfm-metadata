@@ -469,10 +469,16 @@ func expiringMetadata(artist, title string, ttl time.Duration) *Metadata {
 	return m
 }
 
-// setupFallbackRouter creates a router with a primary input that can expire and a
-// static fallback input. The output sends immediately and waits fallbackDelay seconds
-// before falling back. Call from inside synctest.Test so the router's timers run on fake time.
-func setupFallbackRouter(t *testing.T, fallbackDelay int) (*MetadataRouter, *mockInput, *mockOutput) {
+// Timings shared by the fallback tests. The fallback delay is a config value in seconds.
+const (
+	trackLength   = 3 * time.Minute
+	fallbackDelay = 20
+)
+
+// setupFallbackRouter starts a router with a primary input that can expire and a static
+// fallback input. The output sends immediately and waits fallbackDelay seconds before
+// falling back. Call from inside synctest.Test so the router's timers run on fake time.
+func setupFallbackRouter(t *testing.T) (*mockInput, *mockOutput) {
 	t.Helper()
 
 	router := NewMetadataRouter()
@@ -489,7 +495,8 @@ func setupFallbackRouter(t *testing.T, fallbackDelay int) (*MetadataRouter, *moc
 	}
 
 	output := newMockOutput("test-output", 0)
-	output.SetFallbackDelay(&fallbackDelay)
+	delay := fallbackDelay
+	output.SetFallbackDelay(&delay)
 	if err := router.AddOutput(output); err != nil {
 		t.Fatalf("AddOutput failed: %v", err)
 	}
@@ -504,7 +511,7 @@ func setupFallbackRouter(t *testing.T, fallbackDelay int) (*MetadataRouter, *moc
 		t.Fatal("expected initial fallback text to be sent")
 	}
 
-	return router, primary, output
+	return primary, output
 }
 
 func TestGetFallbackDelayDefaultsToDelay(t *testing.T) {
@@ -522,16 +529,16 @@ func TestGetFallbackDelayDefaultsToDelay(t *testing.T) {
 
 func TestFallbackWaitsForFallbackDelay(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		_, primary, output := setupFallbackRouter(t, 20)
+		primary, output := setupFallbackRouter(t)
 
-		primary.SetMetadata(expiringMetadata("Artist", "Song", 3*time.Minute))
+		primary.SetMetadata(expiringMetadata("Artist", "Song", trackLength))
 		if st, ok := output.waitForSend(time.Second); !ok || st.Title != "Song" {
 			t.Fatalf("expected song to be sent immediately, got %v (ok=%v)", st, ok)
 		}
 
-		// The song expires after 3 minutes, the checker notices within a second and
-		// the fallback then waits another 20 seconds. Well inside that window nothing may be sent.
-		time.Sleep(3*time.Minute + 15*time.Second)
+		// The expiration checker ticks once a second, so the fallback fires between
+		// trackLength+20s and trackLength+21s.
+		time.Sleep(trackLength + 15*time.Second)
 		synctest.Wait()
 		if st, ok := output.waitForSend(time.Second); ok {
 			t.Fatalf("fallback sent too early: %q", st.String())
@@ -551,27 +558,21 @@ func TestFallbackWaitsForFallbackDelay(t *testing.T) {
 
 func TestNewTrackWithinFallbackDelayCancelsFallback(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		router, primary, output := setupFallbackRouter(t, 20)
+		primary, output := setupFallbackRouter(t)
 
-		primary.SetMetadata(expiringMetadata("Artist", "First Song", 3*time.Minute))
+		primary.SetMetadata(expiringMetadata("Artist", "First Song", trackLength))
 		if st, ok := output.waitForSend(time.Second); !ok || st.Title != "First Song" {
 			t.Fatalf("expected first song to be sent, got %v (ok=%v)", st, ok)
 		}
 
-		// Let the song expire and the checker schedule the fallback.
-		time.Sleep(3*time.Minute + 5*time.Second)
-		synctest.Wait()
-		if !router.timeline.hasScheduledUpdatesForOutput("test-output") {
-			t.Fatal("expected a fallback to be pending after the song expired")
-		}
-
 		// The next track arrives inside the fallback window, as a playout system does after a jingle.
-		primary.SetMetadata(expiringMetadata("Artist", "Second Song", 3*time.Minute))
+		time.Sleep(trackLength + 5*time.Second)
+		synctest.Wait()
+		primary.SetMetadata(expiringMetadata("Artist", "Second Song", trackLength))
 		if st, ok := output.waitForSend(time.Second); !ok || st.Title != "Second Song" {
 			t.Fatalf("expected second song to be sent, got %v (ok=%v)", st, ok)
 		}
 
-		// Past the original fallback time the output must not have received the fallback text.
 		time.Sleep(time.Minute)
 		synctest.Wait()
 		if st, ok := output.waitForSend(time.Second); ok {

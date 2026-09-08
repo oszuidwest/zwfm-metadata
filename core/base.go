@@ -119,14 +119,12 @@ func (b *OutputBase) GetDelay() int {
 	return b.delay
 }
 
-// SetFallbackDelay configures how many seconds a fallback waits after the current
-// input expires. A nil value means the fallback uses the regular output delay.
+// SetFallbackDelay sets the fallback delay in seconds; nil means use the output delay.
 func (b *OutputBase) SetFallbackDelay(delay *int) {
 	b.fallbackDelay = delay
 }
 
-// GetFallbackDelay returns the seconds to wait before a fallback replaces expired
-// metadata, defaulting to the output delay.
+// GetFallbackDelay returns the fallback delay in seconds, or the output delay when none was set.
 func (b *OutputBase) GetFallbackDelay() int {
 	if b.fallbackDelay != nil {
 		return *b.fallbackDelay

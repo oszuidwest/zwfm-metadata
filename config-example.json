@@ -79,6 +79,7 @@
       "formatters": ["ucwords", "rds"],
       "settings": {
         "delay": 2,
+        "fallbackDelay": 20,
         "server": "localhost",
         "port": 8000,
         "username": "source",
@@ -93,6 +94,7 @@
       "formatters": ["rds", "uppercase"],
       "settings": {
         "delay": 2,
+        "fallbackDelay": 20,
         "server": "localhost",
         "port": 8000,
         "username": "source",
@@ -118,6 +120,7 @@
       "formatters": ["ucwords"],
       "settings": {
         "delay": 1,
+        "fallbackDelay": 20,
         "url": "https://api.example.com/metadata",
         "method": "POST",
         "bearerToken": "your-bearer-token-here"
@@ -157,6 +160,7 @@
       "formatters": ["ucwords"],
       "settings": {
         "delay": 1,
+        "fallbackDelay": 20,
         "url": "https://api.example.com/update?title={{.title}}&artist={{.artist}}&updated={{.updated_at}}",
         "method": "GET",
         "bearerToken": "your-bearer-token-here"
@@ -246,6 +250,7 @@
       "formatters": [],
       "settings": {
         "delay": 2,
+        "fallbackDelay": 20,
         "hostname": "localhost",
         "port": 8080
       }
