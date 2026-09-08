@@ -135,6 +135,7 @@ type StereoToolOutputConfig struct {
 	FallbackDelay int    `json:"fallbackDelay,omitempty"`
 	Hostname      string `json:"hostname"`
 	Port          int    `json:"port"`
+	RDSFieldID    int    `json:"rdsFieldID,omitempty"`
 }
 
 // LoadConfig reads a configuration from the specified file.

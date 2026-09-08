@@ -13,6 +13,11 @@ import (
 	"zwfm-metadata/utils"
 )
 
+const (
+	streamingOutputSongFieldID = 6751
+	defaultRDSRadioTextFieldID = 25046
+)
+
 // StereoToolOutput sends metadata to StereoTool for RDS RadioText display.
 type StereoToolOutput struct {
 	*core.OutputBase
@@ -22,6 +27,10 @@ type StereoToolOutput struct {
 
 // NewStereoToolOutput creates a StereoToolOutput with the given name and settings.
 func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *StereoToolOutput {
+	if settings.RDSFieldID == 0 {
+		settings.RDSFieldID = defaultRDSRadioTextFieldID
+	}
+
 	output := &StereoToolOutput{
 		OutputBase: core.NewOutputBase(name),
 		settings:   settings,
@@ -38,17 +47,18 @@ func (i *StereoToolOutput) Send(st *core.StructuredText) {
 	}
 }
 
-// stereoToolFields are the StereoTool parameter IDs updated with new metadata.
-var stereoToolFields = []struct {
+type stereoToolField struct {
 	id   int
 	name string
-}{
-	{6751, "Streaming Output Song"},
-	{15046, "FM RDS Radio Text"},
 }
 
 func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
-	for _, field := range stereoToolFields {
+	fields := [...]stereoToolField{
+		{streamingOutputSongFieldID, "Streaming Output Song"},
+		{i.settings.RDSFieldID, "FM RDS Radio Text"},
+	}
+
+	for _, field := range fields {
 		if err := i.updateField(field.id, field.name, metadata); err != nil {
 			return err
 		}

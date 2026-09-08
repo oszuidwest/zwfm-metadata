@@ -798,7 +798,8 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
     "delay": 2,
     "fallbackDelay": 20,
     "hostname": "localhost",
-    "port": 8080
+    "port": 8080,
+    "rdsFieldID": 25046
   }
 }
 ```
@@ -808,11 +809,11 @@ Updates StereoTool's RDS RadioText and Streaming Output Metadata
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `hostname` (required) - StereoTool server hostname/IP
 - `port` (required) - StereoTool HTTP server port (typically 8080)
+- `rdsFieldID` (optional, default: 25046) - JSON parameter ID for FM RDS RadioText. Stereo Tool 10.71-10.75 uses `15046`
 
 ##### Notes
 - Updates both FM RDS RadioText and Streaming Output Song
-- Uses StereoTool's undocumented JSON API. Field ID's might be different in other versions
-- Currently validated with StereoTool version 10.71
+- Uses StereoTool's undocumented JSON API. The default RadioText field ID targets Stereo Tool 11; override `rdsFieldID` when using an older version
 - **REQUIRED:** Must be used with the RDS formatter for proper character encoding
 - **StereoTool Bug Workaround:** The RDS formatter converts all extended Latin characters (é, ø, ß, etc.) to pure ASCII as a temporary workaround for a bug in StereoTool's RDS implementation. While the EBU Latin character set (0x80-0xFF) should be valid for RDS, StereoTool doesn't handle these characters correctly. The formatter transliterates them (é→e, ø→o, ß→ss) to ensure compatibility until this bug is fixed
 
