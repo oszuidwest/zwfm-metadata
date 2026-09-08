@@ -61,7 +61,7 @@ Dashboard: http://localhost:9000
 
 ## Migrating from v2
 
-Version 3 changes dynamic expiration and output fallback timing. Review [MIGRATING.md](MIGRATING.md) before upgrading an existing configuration or custom output.
+Version 3 changes dynamic expiration, output timing, and Stereo Tool support. Read [MIGRATING.md](MIGRATING.md) before upgrading an existing installation or custom output.
 
 ## Configuration
 

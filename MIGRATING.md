@@ -1,10 +1,12 @@
-# Migrating from v2 to v3
+# Migrating from v2.6.5 to v3
 
-Version 3 replaces rounded dynamic expiration with an explicit fallback delay on each output. It also extends the `core.Output` interface for custom output implementations.
+Version 3 changes how dynamic inputs expire, how output delays are stored, and which Stereo Tool version is supported. This guide assumes you are upgrading from v2.6.5. For older installations, read the [release notes](https://github.com/oszuidwest/zwfm-metadata/releases) for the versions in between as well.
 
-## Update dynamic expiration
+## Configuration
 
-Remove `roundUpMinutes` from every dynamic input:
+### Dynamic expiration
+
+Remove `roundUpMinutes` from dynamic inputs:
 
 ```json
 {
@@ -14,17 +16,20 @@ Remove `roundUpMinutes` from every dynamic input:
 }
 ```
 
-Track metadata now expires at its exact reported duration. The removed `roundUpMinutes` setting is ignored if it remains in the configuration, but it no longer changes expiration.
+In v2, a missing or enabled `roundUpMinutes` rounded a track's duration up to the next full minute. In v3, a track expires at its reported duration. Nothing changes for inputs that already had `roundUpMinutes` set to `false`.
 
-## Configure output fallback timing
+The old setting may remain in the file and is ignored. `expiration.minutes` still provides a fallback when the duration is missing or invalid. Without that fallback, the update expires immediately.
 
-Add `fallbackDelay` to outputs that should bridge short gaps between tracks:
+### Output delays
+
+`delay` still applies to every update. The new `fallbackDelay` is added when an output moves to an input lower in its priority list:
 
 ```json
 {
   "type": "stereotool",
   "name": "rds",
   "inputs": ["radio-live", "default-text"],
+  "formatters": ["rds"],
   "settings": {
     "delay": 0,
     "fallbackDelay": 20,
@@ -34,31 +39,75 @@ Add `fallbackDelay` to outputs that should bridge short gaps between tracks:
 }
 ```
 
-`fallbackDelay` is an extra number of seconds added to the normal `delay` when an output switches to a lower-priority input. It defaults to `0`. Returning to the current or a higher-priority input uses only the normal delay.
+For example, if this output is showing `radio-live` and that input expires, `default-text` is sent after 20 seconds. A new `radio-live` update during those 20 seconds cancels the fallback. If `default-text` changes while it is waiting, the timer starts again. The first update after startup uses only `delay`, as does a move to a higher-priority input.
 
-Outputs with little or no regular delay, such as RDS RadioText, typically need 15 to 30 seconds. Outputs already delayed by 10 seconds or more often need no additional fallback delay.
+`fallbackDelay` defaults to `0`. Values are whole seconds and cannot be negative. For outputs with little or no normal delay, 15 to 30 seconds is usually enough to hide short gaps. Outputs that already have about 10 seconds of delay often need no extra fallback delay.
 
-## Update custom outputs
+### Stereo Tool
 
-The `core.Output` interface now requires:
+V3 targets Stereo Tool 11. It writes Streaming Output Song to field `6751` and FM RDS RadioText to field `9985`.
+
+Upgrade Stereo Tool before deploying v3 and add the `rds` formatter to every Stereo Tool output. The formatter keeps RadioText within 64 characters and transliterates characters that Stereo Tool's RDS encoder does not handle correctly.
+
+V3 fixes request encoding for metadata containing `/`, `&`, `+`, `%`, or `?`. Check both Song and Current RadioText after the upgrade.
+
+## Custom outputs
+
+Timing has moved out of output implementations and into `MetadataRouter`. The JSON stays the same: `delay` and `fallbackDelay` still belong in the output's `settings` object.
+
+The v3 `core.Output` interface is:
 
 ```go
-GetFallbackDelay() int
+type Output interface {
+    Start(ctx context.Context) error
+    GetName() string
+    Send(st *StructuredText)
+}
 ```
 
-Custom outputs that embed `core.OutputBase` receive the implementation automatically. Add `FallbackDelay` to the output settings and pass it to the base during construction:
+Remove calls to `SetDelay` and `SetFallbackDelay`; those methods no longer exist. `GetDelay` and `GetFallbackDelay` are no longer part of the interface either. If nothing else calls them, they can be removed too.
+
+`OutputBase` now only stores the name:
 
 ```go
-output.SetDelay(settings.Delay)
-output.SetFallbackDelay(settings.FallbackDelay)
+type MyOutputConfig struct {
+    URL string `json:"url"`
+}
+
+func NewMyOutput(name string, settings MyOutputConfig) *MyOutput {
+    return &MyOutput{
+        OutputBase: core.NewOutputBase(name),
+        settings:   settings,
+    }
+}
 ```
 
-Custom outputs that do not embed `core.OutputBase` must implement `GetFallbackDelay` directly.
+Do not add `Delay` or `FallbackDelay` to an output-specific config struct. `setupOutput` reads them separately through `core.OutputTiming`, so a type added to the `createOutput` switch needs no timing code of its own.
 
-## Verify the upgrade
+Code that builds a router directly, without `setupOutput`, has to set the timing before `Start`:
 
-1. Back up the production configuration.
-2. Remove every `roundUpMinutes` setting.
-3. Add `fallbackDelay` to outputs that should suppress short fallback flashes.
-4. Start v3 with the updated configuration and check the logged delay values.
-5. Let a dynamic input expire and confirm that each output switches at `delay + fallbackDelay` seconds.
+```go
+router := core.NewMetadataRouter()
+output := NewMyOutput("custom", settings)
+
+if err := router.AddOutput(output); err != nil {
+    return err
+}
+router.SetOutputInputs(output.GetName(), []string{"radio-live", "fallback"})
+router.SetOutputTiming(output.GetName(), core.OutputTiming{
+    Delay:         2,
+    FallbackDelay: 20,
+})
+```
+
+Without `SetOutputTiming`, both delays are `0`. Like the other router settings, timing cannot be changed after `Start`. `setupOutput` rejects negative values, but direct users of `SetOutputTiming` must check that themselves.
+
+The built-in output config structs no longer contain `Delay`. Code that creates values such as `config.FileOutputConfig` directly must configure the router with `core.OutputTiming`.
+
+The dashboard JSON is unchanged: `delay` and `fallbackDelay` are still top-level properties for each output. The Go type `web.OutputStatus` now embeds `core.OutputTiming`, which matters only to code that constructs that struct directly.
+
+## Test the upgrade
+
+Keep a copy of the old config and binary until the new version has run successfully. On startup, check the logged delay values and the output cards in the dashboard. A normal update should arrive after `delay`; a fallback should arrive after `delay + fallbackDelay`. The expiration check runs once per second, so a fallback can be almost one second later.
+
+While a fallback is waiting, send another update from the current input. The fallback should be cancelled. For Stereo Tool, use a test value such as `BLØF / Test & More + 100%?` and inspect Current RadioText as well as the stored Song value.
