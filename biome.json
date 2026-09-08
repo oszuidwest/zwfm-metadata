@@ -1,44 +1,11 @@
 {
-    "$schema": "https://biomejs.dev/schemas/2.5.12/schema.json",
-    "linter": {
-        "enabled": true,
-        "rules": {
-            "preset": "recommended",
-            "a11y": {
-                "preset": "recommended"
-            },
-            "complexity": {
-                "preset": "recommended"
-            },
-            "correctness": {
-                "preset": "recommended"
-            },
-            "performance": {
-                "preset": "recommended"
-            },
-            "security": {
-                "preset": "recommended"
-            },
-            "style": {
-                "preset": "recommended"
-            },
-            "suspicious": {
-                "preset": "recommended"
-            }
-        }
+    "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+    "files": {
+        "includes": ["web/assets/**"]
     },
     "formatter": {
-        "enabled": true,
         "indentStyle": "space",
         "indentWidth": 4
-    },
-    "css": {
-        "linter": {
-            "enabled": true
-        },
-        "formatter": {
-            "enabled": true
-        }
     },
     "javascript": {
         "formatter": {

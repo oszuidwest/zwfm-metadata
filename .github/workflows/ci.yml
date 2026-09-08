@@ -4,7 +4,7 @@ name: CI
 on:
   push:
     branches: ['main']
-    paths:
+    paths: &ci_paths
       - '**.go'
       - 'go.mod'
       - 'go.sum'
@@ -17,17 +17,7 @@ on:
       - '.github/workflows/ci.yml'
   pull_request:
     branches: ['main']
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - '.golangci.yml'
-      - '.golangci.yaml'
-      - 'web/assets/**'
-      - 'package.json'
-      - 'bun.lock'
-      - 'biome.json'
-      - '.github/workflows/ci.yml'
+    paths: *ci_paths
 
 permissions:
   contents: read
