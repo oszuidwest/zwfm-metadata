@@ -48,6 +48,9 @@ func TestStereoToolOutput_FieldIDs(t *testing.T) {
 		if strings.Contains(uri, "Artist/Title") {
 			t.Errorf("URI contains an unescaped slash: %q", uri)
 		}
+		if !strings.Contains(uri, "%26") {
+			t.Errorf("URI does not preserve the ampersand: %q", uri)
+		}
 	}
 }
 

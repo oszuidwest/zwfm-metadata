@@ -366,9 +366,8 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 	return nil
 }
 
-// processInitialMetadata runs after Start makes mr.inputs immutable, so the map needs no lock.
-// scheduleInputChangeUpdates takes mr.mu itself; nesting an RLock around it could deadlock
-// against the expiration checker's Lock.
+// processInitialMetadata reads immutable inputs without locking. A surrounding RLock
+// could deadlock when scheduleInputChangeUpdates reacquires it behind a writer.
 func (mr *MetadataRouter) processInitialMetadata() {
 	for inputName, input := range mr.inputs {
 		metadata := input.GetMetadata()
@@ -560,7 +559,7 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 }
 
 // updateDelay adds the fallback delay when switching to a lower-priority input.
-// Callers must hold mr.mu (a read lock suffices; only currentInputs is read).
+// Callers must hold at least mr.mu.RLock.
 func (mr *MetadataRouter) updateDelay(outputName string, output Output, inputName string) time.Duration {
 	seconds := output.GetDelay()
 	inputs := mr.outputInputs[outputName]

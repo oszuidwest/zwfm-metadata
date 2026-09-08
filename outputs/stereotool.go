@@ -16,14 +16,14 @@ import (
 	"zwfm-metadata/utils"
 )
 
-// StereoToolOutput sends metadata to StereoTool for RDS RadioText display.
+// StereoToolOutput sends RDS and streaming metadata to Stereo Tool.
 type StereoToolOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
 	settings config.StereoToolOutputConfig
 }
 
-// NewStereoToolOutput creates a StereoToolOutput with the given name and settings.
+// NewStereoToolOutput creates a Stereo Tool metadata output.
 func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *StereoToolOutput {
 	output := &StereoToolOutput{
 		OutputBase: core.NewOutputBase(name),
@@ -34,15 +34,14 @@ func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *S
 	return output
 }
 
-// Send updates StereoTool's RadioText fields.
+// Send updates Stereo Tool's RDS and streaming metadata fields.
 func (i *StereoToolOutput) Send(st *core.StructuredText) {
 	if err := i.sendToStereoTool(st.String()); err != nil {
-		slog.Error("Failed to update StereoTool's RadioText", "output", i.GetName(), "error", err)
+		slog.Error("Failed to update Stereo Tool metadata", "output", i.GetName(), "error", err)
 	}
 }
 
-// stereoToolFields are the StereoTool parameter IDs updated with new metadata,
-// verified against Stereo Tool 10.75 and 11.05.
+// Stereo Tool 10.75 and 11.05 use these metadata field IDs.
 var stereoToolFields = []struct {
 	id   int
 	name string
@@ -61,7 +60,7 @@ func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 }
 
 func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error {
-	// Encoder instead of Marshal so "&" reaches StereoTool literally rather than as \u0026.
+	// Preserve ampersands instead of using JSON's optional \u0026 escape.
 	var payload bytes.Buffer
 	encoder := json.NewEncoder(&payload)
 	encoder.SetEscapeHTML(false)
@@ -74,8 +73,7 @@ func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error
 		return fmt.Errorf("failed to encode request for %s: %w", fieldName, err)
 	}
 
-	// QueryEscape plus "+" -> "%20" percent-encodes ":" and sub-delims; these are the bytes
-	// verified against StereoTool, so url.PathEscape is deliberately not used.
+	// Stereo Tool expects query-style escaping with spaces encoded as %20.
 	escapedPayload := url.QueryEscape(strings.TrimSuffix(payload.String(), "\n"))
 	escapedPayload = strings.ReplaceAll(escapedPayload, "+", "%20")
 	requestURL := fmt.Sprintf(
@@ -94,6 +92,6 @@ func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error
 		return fmt.Errorf("failed to update %s: %w", fieldName, err)
 	}
 
-	slog.Debug("Updated StereoTool field", "output", i.GetName(), "field", fieldName, "metadata", metadata)
+	slog.Debug("Updated Stereo Tool field", "output", i.GetName(), "field", fieldName, "metadata", metadata)
 	return nil
 }

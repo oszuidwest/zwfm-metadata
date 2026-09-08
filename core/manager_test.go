@@ -491,9 +491,8 @@ func TestFallbackWaitsForDelayPlusFallbackDelay(t *testing.T) {
 		primary.SetMetadata(expiringMetadata("Song"))
 		expectSent(t, output, "Song")
 
-		// Measured from the "Song" send: expiry lands trackLength later (the output delay applies
-		// to both sends and cancels out), the checker notices within 1s, then delay + fallbackDelay
-		// is added. Stop 2s short so the 1s tick cannot make this flaky.
+		// Output delays cancel from the "Song" send; check 2s before the
+		// track-plus-fallback boundary to avoid racing the 1s expiration check.
 		tooEarly := trackLength + fallbackSeconds*time.Second - 2*time.Second
 		if st, ok := output.waitForSend(tooEarly); ok {
 			t.Fatalf("fallback sent too early: %q", st.String())
