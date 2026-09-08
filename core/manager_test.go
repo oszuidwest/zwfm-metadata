@@ -1,26 +1,22 @@
 package core
 
 import (
-	"context"
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
-// Mock types for testing.
-
-// mockInput implements Input for testing.
 type mockInput struct {
 	*InputBase
 	PassiveComponent
 }
 
-func newMockInput(name string) *mockInput { //nolint:unparam // test helper uses consistent name
+func newMockInput(name string) *mockInput {
 	return &mockInput{InputBase: NewInputBase(name)}
 }
 
-// mockOutput implements Output for testing with configurable delay.
 type mockOutput struct {
 	*OutputBase
 	PassiveComponent
@@ -29,14 +25,12 @@ type mockOutput struct {
 	sendChan chan *StructuredText
 }
 
-func newMockOutput(name string, delay int) *mockOutput { //nolint:unparam // test helper uses consistent values
-	o := &mockOutput{
-		OutputBase: NewOutputBase(name),
+func newMockOutput(name string, delay, fallbackDelay int) *mockOutput {
+	return &mockOutput{
+		OutputBase: NewOutputBase(name, delay, fallbackDelay),
 		sent:       make([]*StructuredText, 0),
 		sendChan:   make(chan *StructuredText, 10),
 	}
-	o.SetDelay(delay)
-	return o
 }
 
 func (m *mockOutput) Send(st *StructuredText) {
@@ -67,7 +61,6 @@ func (m *mockOutput) waitForSend(timeout time.Duration) (*StructuredText, bool) 
 	}
 }
 
-// mockFilter implements Filter with configurable behavior.
 type mockFilter struct {
 	action FilterAction
 }
@@ -80,7 +73,6 @@ func (f *mockFilter) Decide(_ *StructuredText) FilterAction {
 	return f.action
 }
 
-// patternFilter rejects or clears based on pattern matching in title.
 type patternFilter struct {
 	pattern string
 	action  FilterAction
@@ -97,7 +89,6 @@ func (f *patternFilter) Decide(st *StructuredText) FilterAction {
 	return FilterPass
 }
 
-// artistDependentFilter clears title when artist is empty.
 type artistDependentFilter struct{}
 
 func (f *artistDependentFilter) Decide(st *StructuredText) FilterAction {
@@ -107,7 +98,6 @@ func (f *artistDependentFilter) Decide(st *StructuredText) FilterAction {
 	return FilterPass
 }
 
-// capturingFilter captures the StructuredText for inspection.
 type capturingFilter struct {
 	captured *StructuredText
 	mu       sync.Mutex
@@ -126,7 +116,6 @@ func (f *capturingFilter) getCaptured() *StructuredText {
 	return f.captured
 }
 
-// contextAwareFilter checks that context fields are set correctly.
 type contextAwareFilter struct {
 	expectedInputName string
 	expectedInputType string
@@ -163,8 +152,6 @@ func (f *contextAwareFilter) wasContextMatched() bool {
 	return f.contextMatched
 }
 
-// Test helpers.
-
 func testMetadata(artist, title string) *Metadata {
 	return &Metadata{
 		Artist:    artist,
@@ -173,145 +160,135 @@ func testMetadata(artist, title string) *Metadata {
 	}
 }
 
-// setupTestRouter creates a router with a single input and output for testing.
-// Returns the router, input, output, and a cancel function.
-func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*MetadataRouter, *mockInput, *mockOutput, context.CancelFunc) { //nolint:unparam // router returned for tests that need it
+// startRouter registers the inputs in priority order and starts the router.
+// Callers run inside synctest.Test so router timers use fake time.
+func startRouter(t *testing.T, router *MetadataRouter, output *mockOutput, inputs ...*mockInput) {
 	t.Helper()
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	router := NewMetadataRouter()
-
-	input := newMockInput("test-input")
-	if err := router.AddInput(input); err != nil {
-		cancel()
-		t.Fatalf("AddInput failed: %v", err)
+	inputNames := make([]string, 0, len(inputs))
+	for _, input := range inputs {
+		if err := router.AddInput(input); err != nil {
+			t.Fatalf("AddInput failed: %v", err)
+		}
+		inputNames = append(inputNames, input.GetName())
 	}
 
-	if len(filters) > 0 {
-		router.SetInputFilters("test-input", filters)
-	}
-
-	output := newMockOutput("test-output", 0)
-	output.SetDelay(outputDelay)
 	if err := router.AddOutput(output); err != nil {
-		cancel()
 		t.Fatalf("AddOutput failed: %v", err)
 	}
-	router.SetOutputInputs("test-output", []string{"test-input"})
+	router.SetOutputInputs(output.GetName(), inputNames)
 
-	if err := router.Start(ctx); err != nil {
-		cancel()
+	if err := router.Start(t.Context()); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-
-	time.Sleep(50 * time.Millisecond)
-
-	return router, input, output, cancel
 }
 
-// Tests.
+func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*mockInput, *mockOutput) {
+	t.Helper()
+
+	router := NewMetadataRouter()
+	router.SetInputFilters("test-input", filters)
+
+	input := newMockInput("test-input")
+	output := newMockOutput("test-output", outputDelay, 0)
+	startRouter(t, router, output, input)
+
+	return input, output
+}
 
 func TestFilterRejectsMetadata(t *testing.T) {
-	_, input, output, cancel := setupTestRouter(t, 0, []Filter{newMockFilter(FilterReject)})
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		input, output := setupTestRouter(t, 0, []Filter{newMockFilter(FilterReject)})
 
-	input.SetMetadata(testMetadata("Artist", "Title"))
-	time.Sleep(100 * time.Millisecond)
+		input.SetMetadata(testMetadata("Artist", "Title"))
+		time.Sleep(100 * time.Millisecond)
 
-	sent := output.getSent()
-	if len(sent) != 0 {
-		t.Errorf("Expected no updates (filter should reject), got %d", len(sent))
-	}
+		sent := output.getSent()
+		if len(sent) != 0 {
+			t.Errorf("Expected no updates (filter should reject), got %d", len(sent))
+		}
+	})
 }
 
 func TestDelayedUpdatePreservedWhenNewMetadataRejected(t *testing.T) {
-	rejectFilter := newPatternFilter("REJECT", FilterReject)
-	_, input, output, cancel := setupTestRouter(t, 1, []Filter{rejectFilter})
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		rejectFilter := newPatternFilter("REJECT", FilterReject)
+		input, output := setupTestRouter(t, 1, []Filter{rejectFilter})
 
-	// Send metadata A (passes filter, scheduled with 1s delay)
-	input.SetMetadata(testMetadata("Artist A", "Title A"))
+		input.SetMetadata(testMetadata("Artist A", "Title A"))
 
-	// Immediately send metadata B which should be rejected
-	time.Sleep(50 * time.Millisecond)
-	input.SetMetadata(testMetadata("Artist B", "REJECT this"))
+		time.Sleep(50 * time.Millisecond)
+		input.SetMetadata(testMetadata("Artist B", "REJECT this"))
 
-	// Wait for A's delayed update to arrive
-	st, ok := output.waitForSend(2 * time.Second)
-	if !ok {
-		t.Fatal("Expected metadata A to be sent after delay - pending update was incorrectly canceled")
-	}
-	if st.Title != "Title A" {
-		t.Errorf("Expected Title A, got %s", st.Title)
-	}
+		st, ok := output.waitForSend(2 * time.Second)
+		if !ok {
+			t.Fatal("Expected metadata A to be sent after delay - pending update was incorrectly canceled")
+		}
+		if st.Title != "Title A" {
+			t.Errorf("Expected Title A, got %s", st.Title)
+		}
 
-	// Verify B was actually rejected by waiting for any additional sends
-	// If B was mistakenly scheduled, it would arrive within this window
-	_, gotExtra := output.waitForSend(500 * time.Millisecond)
-	if gotExtra {
-		t.Error("Expected metadata B to be rejected, but received additional update")
-	}
+		_, gotExtra := output.waitForSend(500 * time.Millisecond)
+		if gotExtra {
+			t.Error("Expected metadata B to be rejected, but received additional update")
+		}
 
-	sent := output.getSent()
-	if len(sent) != 1 {
-		t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
-	}
+		sent := output.getSent()
+		if len(sent) != 1 {
+			t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
+		}
+	})
 }
 
 func TestDelayedUpdatePreservedWhenNewMetadataCumulativelyCleared(t *testing.T) {
-	// Filter chain: clear artist when title contains "CLEAR", then clear title when artist is empty
-	filters := []Filter{
-		newPatternFilter("CLEAR", FilterClearArtist),
-		&artistDependentFilter{},
-	}
-	_, input, output, cancel := setupTestRouter(t, 1, filters)
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		filters := []Filter{
+			newPatternFilter("CLEAR", FilterClearArtist),
+			&artistDependentFilter{},
+		}
+		input, output := setupTestRouter(t, 1, filters)
 
-	// Send metadata A (passes filters, scheduled with 1s delay)
-	input.SetMetadata(testMetadata("Artist A", "Title A"))
+		input.SetMetadata(testMetadata("Artist A", "Title A"))
 
-	// Send metadata B which will be cumulatively cleared
-	time.Sleep(50 * time.Millisecond)
-	input.SetMetadata(testMetadata("Artist B", "CLEAR me"))
+		time.Sleep(50 * time.Millisecond)
+		input.SetMetadata(testMetadata("Artist B", "CLEAR me"))
 
-	// Wait for A's delayed update
-	st, ok := output.waitForSend(2 * time.Second)
-	if !ok {
-		t.Fatal("Expected metadata A to be sent - pending update was incorrectly canceled")
-	}
-	if st.Title != "Title A" {
-		t.Errorf("Expected Title A, got %s", st.Title)
-	}
+		st, ok := output.waitForSend(2 * time.Second)
+		if !ok {
+			t.Fatal("Expected metadata A to be sent - pending update was incorrectly canceled")
+		}
+		if st.Title != "Title A" {
+			t.Errorf("Expected Title A, got %s", st.Title)
+		}
 
-	// Verify B was actually rejected by waiting for any additional sends
-	// If B was mistakenly scheduled, it would arrive within this window
-	_, gotExtra := output.waitForSend(500 * time.Millisecond)
-	if gotExtra {
-		t.Error("Expected metadata B to be rejected (cumulative clearing), but received additional update")
-	}
+		_, gotExtra := output.waitForSend(500 * time.Millisecond)
+		if gotExtra {
+			t.Error("Expected metadata B to be rejected (cumulative clearing), but received additional update")
+		}
 
-	sent := output.getSent()
-	if len(sent) != 1 {
-		t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
-	}
+		sent := output.getSent()
+		if len(sent) != 1 {
+			t.Errorf("Expected exactly 1 update (A), got %d", len(sent))
+		}
+	})
 }
 
 func TestCumulativeFieldClearingRejectsMetadata(t *testing.T) {
-	filters := []Filter{
-		newMockFilter(FilterClearArtist),
-		newMockFilter(FilterClearTitle),
-	}
-	_, input, output, cancel := setupTestRouter(t, 0, filters)
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		filters := []Filter{
+			newMockFilter(FilterClearArtist),
+			newMockFilter(FilterClearTitle),
+		}
+		input, output := setupTestRouter(t, 0, filters)
 
-	input.SetMetadata(testMetadata("Artist", "Title"))
-	time.Sleep(100 * time.Millisecond)
+		input.SetMetadata(testMetadata("Artist", "Title"))
+		time.Sleep(100 * time.Millisecond)
 
-	sent := output.getSent()
-	if len(sent) != 0 {
-		t.Errorf("Expected no updates (cumulative clearing should reject), got %d", len(sent))
-	}
+		sent := output.getSent()
+		if len(sent) != 0 {
+			t.Errorf("Expected no updates (cumulative clearing should reject), got %d", len(sent))
+		}
+	})
 }
 
 func TestWouldFiltersReject(t *testing.T) {
@@ -390,38 +367,24 @@ func TestWouldFiltersReject(t *testing.T) {
 }
 
 func TestFilterContextMatchesExecution(t *testing.T) {
-	ctx := t.Context()
+	synctest.Test(t, func(t *testing.T) {
+		router := NewMetadataRouter()
+		contextFilter := newContextAwareFilter("test-input", "url", "PREFIX:", ":SUFFIX")
+		router.SetInputType("test-input", "url")
+		router.SetInputPrefixSuffix("test-input", "PREFIX:", ":SUFFIX")
+		router.SetInputFilters("test-input", []Filter{contextFilter})
 
-	router := NewMetadataRouter()
+		input := newMockInput("test-input")
+		output := newMockOutput("test-output", 0, 0)
+		startRouter(t, router, output, input)
 
-	contextFilter := newContextAwareFilter("test-input", "url", "PREFIX:", ":SUFFIX")
+		input.SetMetadata(testMetadata("Artist", "Title"))
+		time.Sleep(100 * time.Millisecond)
 
-	input := newMockInput("test-input")
-	if err := router.AddInput(input); err != nil {
-		t.Fatalf("AddInput failed: %v", err)
-	}
-	router.SetInputType("test-input", "url")
-	router.SetInputPrefixSuffix("test-input", "PREFIX:", ":SUFFIX")
-	router.SetInputFilters("test-input", []Filter{contextFilter})
-
-	output := newMockOutput("test-output", 0)
-	if err := router.AddOutput(output); err != nil {
-		t.Fatalf("AddOutput failed: %v", err)
-	}
-	router.SetOutputInputs("test-output", []string{"test-input"})
-
-	if err := router.Start(ctx); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	time.Sleep(50 * time.Millisecond)
-
-	input.SetMetadata(testMetadata("Artist", "Title"))
-	time.Sleep(100 * time.Millisecond)
-
-	if !contextFilter.wasContextMatched() {
-		t.Error("Filter context did not match expected values during pre-check")
-	}
+		if !contextFilter.wasContextMatched() {
+			t.Error("Filter context did not match expected values during pre-check")
+		}
+	})
 }
 
 func TestWouldFiltersRejectContextFields(t *testing.T) {
@@ -458,4 +421,105 @@ func TestWouldFiltersRejectContextFields(t *testing.T) {
 			t.Errorf("Expected %s %q, got %q", check.field, check.expected, check.got)
 		}
 	}
+}
+
+const (
+	trackLength     = 3 * time.Minute
+	delaySeconds    = 5
+	fallbackSeconds = 20
+)
+
+func expiringMetadata(title string) *Metadata {
+	m := testMetadata("Artist", title)
+	m.ExpiresAt = new(time.Now().Add(trackLength))
+	return m
+}
+
+func setupFallbackRouter(t *testing.T) (primary, fallback *mockInput, output *mockOutput) {
+	t.Helper()
+
+	primary = newMockInput("primary")
+	fallback = newMockInput("fallback")
+	fallback.SetMetadata(testMetadata("", "Station Name"))
+	output = newMockOutput("test-output", delaySeconds, fallbackSeconds)
+	startRouter(t, NewMetadataRouter(), output, primary, fallback)
+
+	// Drain the initial static fallback.
+	expectSent(t, output, "Station Name")
+
+	return primary, fallback, output
+}
+
+func expectSent(t *testing.T, output *mockOutput, title string) {
+	t.Helper()
+	st, ok := output.waitForSend((delaySeconds + 1) * time.Second)
+	if !ok || st.Title != title {
+		t.Fatalf("expected %q to be sent, got %v", title, st)
+	}
+}
+
+func expectNoSend(t *testing.T, output *mockOutput, within time.Duration) {
+	t.Helper()
+	if st, ok := output.waitForSend(within); ok {
+		t.Fatalf("expected nothing within %v, got %q", within, st.String())
+	}
+}
+
+func TestFallbackWaitsForDelayPlusFallbackDelay(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		primary, _, output := setupFallbackRouter(t)
+
+		primary.SetMetadata(expiringMetadata("Song"))
+		expectSent(t, output, "Song")
+
+		// Measured from the "Song" send, so the output delay has already elapsed.
+		// The expiration checker ticks once a second, hence the 1s margin.
+		expectNoSend(t, output, trackLength+fallbackSeconds*time.Second-time.Second)
+		expectSent(t, output, "Station Name")
+	})
+}
+
+func TestNewTrackWithinFallbackDelayCancelsFallback(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		primary, _, output := setupFallbackRouter(t)
+
+		primary.SetMetadata(expiringMetadata("First Song"))
+		expectSent(t, output, "First Song")
+
+		time.Sleep(trackLength + 5*time.Second)
+		primary.SetMetadata(expiringMetadata("Second Song"))
+		expectSent(t, output, "Second Song")
+
+		expectNoSend(t, output, time.Minute)
+	})
+}
+
+func TestFallbackInputChangeWithinFallbackDelayStillWaits(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		primary, fallback, output := setupFallbackRouter(t)
+
+		primary.SetMetadata(expiringMetadata("Song"))
+		expectSent(t, output, "Song")
+
+		// Replacing a pending fallback restarts its full delay.
+		time.Sleep(trackLength + 5*time.Second)
+		fallback.SetMetadata(testMetadata("", "New Station Name"))
+		expectNoSend(t, output, (delaySeconds+fallbackSeconds)*time.Second-time.Second)
+		expectSent(t, output, "New Station Name")
+	})
+}
+
+func TestReturningPrimaryIsNotDelayedByFallbackDelay(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		primary, _, output := setupFallbackRouter(t)
+
+		primary.SetMetadata(expiringMetadata("Song"))
+		expectSent(t, output, "Song")
+
+		time.Sleep(trackLength + fallbackSeconds*time.Second)
+		expectSent(t, output, "Station Name")
+
+		primary.SetMetadata(expiringMetadata("Next Song"))
+		expectSent(t, output, "Next Song")
+	})
 }

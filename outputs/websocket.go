@@ -29,12 +29,11 @@ func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *Web
 	}
 
 	output := &WebSocketOutput{
-		OutputBase:    core.NewOutputBase(name),
+		OutputBase:    core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
 		settings:      settings,
 		hub:           utils.NewWebSocketHub(name),
 		payloadMapper: mapper,
 	}
-	output.SetDelay(settings.Delay)
 
 	output.hub.SetOnConnect(func() any {
 		output.metadataMu.RLock()

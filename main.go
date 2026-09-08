@@ -148,6 +148,9 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 	if err != nil {
 		return fmt.Errorf("failed to create output %q: %w", outputCfg.Name, err)
 	}
+	if output.GetDelay() < 0 || output.GetFallbackDelay() < 0 {
+		return fmt.Errorf("output %q: delay and fallbackDelay must not be negative", outputCfg.Name)
+	}
 
 	for _, inputName := range outputCfg.Inputs {
 		if _, exists := router.GetInput(inputName); !exists {
@@ -172,7 +175,12 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 	}
 	router.SetOutputType(outputCfg.Name, outputCfg.Type)
 
-	slog.Info("Added output", "name", outputCfg.Name, "type", outputCfg.Type, "delay", output.GetDelay())
+	slog.Info("Added output",
+		"name", outputCfg.Name,
+		"type", outputCfg.Type,
+		"delay", output.GetDelay(),
+		"fallbackDelay", output.GetFallbackDelay(),
+	)
 
 	return nil
 }

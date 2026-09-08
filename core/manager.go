@@ -123,7 +123,6 @@ func (mr *MetadataRouter) AddOutput(output Output) error {
 	return nil
 }
 
-// panicIfStarted panics if configuration is attempted after Start() was called.
 func (mr *MetadataRouter) panicIfStarted(method string) {
 	if mr.started {
 		panic("MetadataRouter." + method + " called after Start() - configuration must happen before Start()")
@@ -364,11 +363,10 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 	return nil
 }
 
-// processInitialMetadata triggers updates for inputs with pre-existing metadata like static text.
+// processInitialMetadata takes no lock: mr.inputs is immutable after Start, and
+// scheduleInputChangeUpdates takes its own RLock. A nested RLock would deadlock as
+// soon as a writer (the expiration checker or executeUpdate) is waiting in between.
 func (mr *MetadataRouter) processInitialMetadata() {
-	mr.mu.RLock()
-	defer mr.mu.RUnlock()
-
 	for inputName, input := range mr.inputs {
 		metadata := input.GetMetadata()
 		if metadata != nil && metadata.IsAvailable() {
@@ -378,7 +376,6 @@ func (mr *MetadataRouter) processInitialMetadata() {
 	}
 }
 
-// handleInputMetadata processes incoming metadata changes from an input's subscription channel.
 func (mr *MetadataRouter) handleInputMetadata(ctx context.Context, inputName string, metadataChannel chan *Metadata) {
 	for {
 		select {
@@ -405,8 +402,7 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 			continue
 		}
 
-		// Check if filters would reject this metadata BEFORE canceling pending updates.
-		// This preserves valid pending updates when new metadata is filtered out.
+		// Check first so rejected metadata preserves pending updates.
 		if mr.wouldFiltersReject(inputName, metadata) {
 			slog.Debug("Skipping update due to filter rejection", "input", inputName, "output", outputName)
 			continue
@@ -414,7 +410,7 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 
 		mr.timeline.cancelUpdatesForOutput(outputName)
 
-		delay := time.Duration(output.GetDelay()) * time.Second
+		delay := mr.updateDelay(outputName, output, inputName)
 		executeAt := time.Now().Add(delay)
 
 		update := ScheduledUpdate{
@@ -440,14 +436,12 @@ func (mr *MetadataRouter) scheduleInputChangeUpdates(inputName string, metadata 
 	}
 }
 
-// outputUsesInput reports whether the given output has the specified input in its priority list.
 func (mr *MetadataRouter) outputUsesInput(outputName, inputName string) bool {
 	inputNames, exists := mr.outputInputs[outputName]
 	return exists && slices.Contains(inputNames, inputName)
 }
 
-// findHighestPriorityInput returns the name and metadata of the highest priority available input for an output.
-// Returns empty string and nil if no available input is found.
+// findHighestPriorityInput returns empty values when no configured input is available.
 func (mr *MetadataRouter) findHighestPriorityInput(outputName string) (string, *Metadata) {
 	inputNames, exists := mr.outputInputs[outputName]
 	if !exists {
@@ -467,7 +461,6 @@ func (mr *MetadataRouter) findHighestPriorityInput(outputName string) (string, *
 	return "", nil
 }
 
-// startExpirationChecker monitors inputs for expiration and triggers fallback to lower-priority sources.
 func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -484,10 +477,7 @@ func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	}
 }
 
-// checkForExpirations scans for expired inputs and schedules fallback updates when needed.
-// Uses a single write lock for the entire operation to ensure consistency between reading
-// lastSentContent and scheduling updates. This is acceptable because the function runs
-// only once per second and the operations are fast.
+// checkForExpirations holds mr.mu across fallback selection and scheduling for consistency.
 func (mr *MetadataRouter) checkForExpirations() {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -518,7 +508,6 @@ func (mr *MetadataRouter) checkForExpirations() {
 	}
 }
 
-// currentInputNeedsFallback reports whether an output's current input has expired or is unavailable.
 func (mr *MetadataRouter) currentInputNeedsFallback(outputName string) bool {
 	currentInputName, hasCurrentInput := mr.currentInputs[outputName]
 	if !hasCurrentInput || currentInputName == "" {
@@ -534,7 +523,6 @@ func (mr *MetadataRouter) currentInputNeedsFallback(outputName string) bool {
 	return currentMetadata == nil || !currentMetadata.IsAvailable()
 }
 
-// scheduleFallbackUpdate schedules an expiration fallback update if the content differs from last sent.
 func (mr *MetadataRouter) scheduleFallbackUpdate(
 	outputName string, output Output, inputName string, metadata *Metadata,
 ) {
@@ -548,7 +536,7 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 		return
 	}
 
-	delay := time.Duration(output.GetDelay()) * time.Second
+	delay := mr.updateDelay(outputName, output, inputName)
 	executeAt := time.Now().Add(delay)
 
 	update := ScheduledUpdate{
@@ -568,8 +556,18 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 	)
 }
 
-// applyFilterAction applies the action specified by a filter to a StructuredText.
-// Returns true if processing should continue, false if metadata was rejected.
+// updateDelay adds the fallback delay when switching to a lower-priority input.
+// Callers must hold at least mr.mu.RLock.
+func (mr *MetadataRouter) updateDelay(outputName string, output Output, inputName string) time.Duration {
+	seconds := output.GetDelay()
+	inputs := mr.outputInputs[outputName]
+	current := slices.Index(inputs, mr.currentInputs[outputName])
+	if current >= 0 && slices.Index(inputs, inputName) > current {
+		seconds += output.GetFallbackDelay()
+	}
+	return time.Duration(seconds) * time.Second
+}
+
 func applyFilterAction(st *StructuredText, action FilterAction) bool {
 	switch action {
 	case FilterPass:
@@ -591,11 +589,8 @@ func applyFilterAction(st *StructuredText, action FilterAction) bool {
 	}
 }
 
-// applyInputStage builds a StructuredText from metadata with prefix/suffix, input context,
-// and input filters applied. The returned bool reports whether processing should continue
-// to the output formatters: false when the metadata has no content or a filter rejected it.
-// NOTE: This method reads inputPrefixSuffix, inputTypes, and inputFilters without locks.
-// These maps are immutable after Start() - enforced by panicIfStarted in Set* methods.
+// applyInputStage applies prefix/suffix and the input filters. The bool is false when
+// nothing sendable remains. It reads only config maps, which are immutable after Start.
 func (mr *MetadataRouter) applyInputStage(inputName string, metadata *Metadata) (*StructuredText, bool) {
 	st := NewStructuredText(metadata)
 	if !st.HasContent() {
@@ -610,10 +605,8 @@ func (mr *MetadataRouter) applyInputStage(inputName string, metadata *Metadata) 
 	st.InputName = inputName
 	st.InputType = mr.inputTypes[inputName]
 
-	// Apply input filters - filters can reject metadata entirely
 	for _, filter := range mr.inputFilters[inputName] {
 		if !applyFilterAction(st, filter.Decide(st)) {
-			// Filter rejected the metadata - StructuredText fields are cleared
 			return st, false
 		}
 	}
@@ -621,10 +614,7 @@ func (mr *MetadataRouter) applyInputStage(inputName string, metadata *Metadata) 
 	return st, true
 }
 
-// wouldFiltersReject checks if filters would reject metadata or clear all content.
-// Used to avoid canceling valid pending updates when new metadata would be rejected.
-// Catches both explicit rejections and cumulative field clearing (e.g., one filter
-// clears artist, another title).
+// wouldFiltersReject accounts for cumulative field clearing across filters.
 func (mr *MetadataRouter) wouldFiltersReject(inputName string, metadata *Metadata) bool {
 	if metadata == nil {
 		return true
@@ -634,7 +624,6 @@ func (mr *MetadataRouter) wouldFiltersReject(inputName string, metadata *Metadat
 	return !ok || !st.HasContent()
 }
 
-// transformMetadataForOutput builds a StructuredText from metadata with prefix/suffix and formatters applied.
 func (mr *MetadataRouter) transformMetadataForOutput(
 	outputName string, metadata *Metadata, inputName string,
 ) *StructuredText {
@@ -647,7 +636,6 @@ func (mr *MetadataRouter) transformMetadataForOutput(
 		return st
 	}
 
-	// Apply output formatters
 	for _, formatter := range mr.outputFormatters[outputName] {
 		formatter.Format(st)
 	}
@@ -655,7 +643,6 @@ func (mr *MetadataRouter) transformMetadataForOutput(
 	return st
 }
 
-// startTimelineProcessor waits for scheduled updates and executes them when their time arrives.
 func (mr *MetadataRouter) startTimelineProcessor(ctx context.Context) {
 	slog.Info("Started timeline processor (event-based)")
 
@@ -663,7 +650,6 @@ func (mr *MetadataRouter) startTimelineProcessor(ctx context.Context) {
 		nextTime := mr.timeline.nextExecutionTime()
 
 		if nextTime.IsZero() {
-			// No updates scheduled, wait for signal
 			select {
 			case <-ctx.Done():
 				return
@@ -674,7 +660,6 @@ func (mr *MetadataRouter) startTimelineProcessor(ctx context.Context) {
 
 		waitDuration := time.Until(nextTime)
 		if waitDuration <= 0 {
-			// Update is ready now
 			mr.processReadyUpdates()
 			continue
 		}
@@ -693,7 +678,6 @@ func (mr *MetadataRouter) startTimelineProcessor(ctx context.Context) {
 	}
 }
 
-// processReadyUpdates dequeues and executes all updates scheduled for the current time.
 func (mr *MetadataRouter) processReadyUpdates() {
 	now := time.Now()
 	readyUpdates := mr.timeline.getReadyUpdates(now)
@@ -744,7 +728,6 @@ func (t *Timeline) addUpdate(update *ScheduledUpdate) {
 	t.updates = slices.Insert(t.updates, insertIndex, *update)
 	t.mu.Unlock()
 
-	// Non-blocking signal to wake up the processor
 	select {
 	case t.signal <- struct{}{}:
 	default:

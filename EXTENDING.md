@@ -335,11 +335,10 @@ type MyCustomOutput struct {
 // NewMyCustomOutput creates a new custom output
 func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCustomOutput {
     output := &MyCustomOutput{
-        OutputBase: core.NewOutputBase(name),
+        OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
         settings:   settings,
         httpClient: &http.Client{Timeout: 10 * time.Second},
     }
-    output.SetDelay(settings.Delay)
     return output
 }
 ```
@@ -433,6 +432,7 @@ Add your configuration struct to `config/config.go`:
 // MyCustomOutputConfig represents settings for custom output
 type MyCustomOutputConfig struct {
     Delay          int                    `json:"delay"`
+    FallbackDelay  int                    `json:"fallbackDelay,omitempty"`
     URL            string                 `json:"url"`
     APIKey         string                 `json:"apiKey"`
     PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
@@ -657,7 +657,7 @@ The `core.FilterAction` enum controls what happens:
 - **http** - Creates HTTP endpoints with multiple response formats
 - **websocket** - Real-time metadata streaming via WebSocket
 - **dlplus** - DAB/DAB+ radio text format (ODR-PadEnc)
-- **stereotool** - StereoTool RDS RadioText integration
+- **stereotool** - Stereo Tool RDS RadioText and streaming song integration
 
 ### Formatters
 
@@ -844,11 +844,10 @@ type DiscordOutput struct {
 
 func NewDiscordOutput(name string, settings config.DiscordOutputConfig) *DiscordOutput {
     output := &DiscordOutput{
-        OutputBase: core.NewOutputBase(name),
+        OutputBase: core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
         settings:   settings,
         httpClient: &http.Client{Timeout: 10 * time.Second},
     }
-    output.SetDelay(settings.Delay)
     return output
 }
 
@@ -1015,6 +1014,7 @@ type Output interface {
     Start(ctx context.Context) error    // Start processing
     GetName() string                    // Return output name
     GetDelay() int                      // Return delay in seconds
+    GetFallbackDelay() int              // Extra delay for lower-priority inputs
     Send(st *StructuredText)            // Process structured metadata
 }
 ```
@@ -1150,7 +1150,7 @@ type MyOutput struct {
 
 func NewMyOutput(name string, settings config.MyOutputConfig) *MyOutput {
     output := &MyOutput{
-        OutputBase:    core.NewOutputBase(name),
+        OutputBase:    core.NewOutputBase(name, settings.Delay, settings.FallbackDelay),
         settings:      settings,
         payloadMapper: NewPayloadMapper(settings.PayloadMapping),
     }

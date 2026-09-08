@@ -391,11 +391,11 @@ function buildOutputCard(output) {
         return card;
     }
 
-    // Stats box with delay and current input
-    const statsBox = el('div', 'content-box grid-2-col mb-4');
+    const statsBox = el('div', 'content-box output-stats mb-4');
     const inputValueClass = output.currentInput ? 'text-success' : 'text-faint';
     statsBox.append(
         buildStatColumn('Delay', `${output.delay}s`),
+        buildStatColumn('Fallback', `+${output.fallbackDelay}s`),
         buildStatColumn(
             'Current Input',
             output.currentInput || 'None',
@@ -404,7 +404,6 @@ function buildOutputCard(output) {
     );
     body.appendChild(statsBox);
 
-    // Tags container
     const tagsContainer = el('div', 'space-y-4');
 
     const inputsSection = buildBadgeSection(
