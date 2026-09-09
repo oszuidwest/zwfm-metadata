@@ -33,6 +33,11 @@ func TestSetupOutputTiming(t *testing.T) {
 			wantError: true,
 		},
 		{
+			name:      "negative delay",
+			settings:  map[string]any{"delay": -1},
+			wantError: true,
+		},
+		{
 			name:      "negative fallback delay",
 			settings:  map[string]any{"delay": 12, "fallbackDelay": -1},
 			wantError: true,
