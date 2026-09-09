@@ -53,7 +53,7 @@ V3 fixes request encoding for metadata containing `/`, `&`, `+`, `%`, or `?`. Ch
 
 ## Custom outputs
 
-Timing has moved out of output implementations and into `MetadataRouter`. The JSON stays the same: `delay` and `fallbackDelay` still belong in the output's `settings` object.
+Timing has moved out of output implementations and into `MetadataRouter`. The JSON location for `delay` is unchanged, and the new `fallbackDelay` belongs alongside it in the output's `settings` object.
 
 The v3 `core.Output` interface is:
 
@@ -65,7 +65,7 @@ type Output interface {
 }
 ```
 
-Remove calls to `SetDelay` and `SetFallbackDelay`; those methods no longer exist. `GetDelay` and `GetFallbackDelay` are no longer part of the interface either. If nothing else calls them, they can be removed too.
+Remove calls to `SetDelay`; that method no longer exists on `OutputBase`. `GetDelay` is no longer part of the `Output` interface either. If nothing else calls it, it can be removed too.
 
 `OutputBase` now only stores the name:
 
@@ -82,7 +82,7 @@ func NewMyOutput(name string, settings MyOutputConfig) *MyOutput {
 }
 ```
 
-Do not add `Delay` or `FallbackDelay` to an output-specific config struct. `setupOutput` reads them separately through `core.OutputTiming`, so a type added to the `createOutput` switch needs no timing code of its own.
+Remove `Delay` from an output-specific config struct, and do not add `FallbackDelay` there. `setupOutput` reads both values separately through `core.OutputTiming`, so a type added to the `createOutput` switch needs no timing code of its own.
 
 Code that builds a router directly, without `setupOutput`, has to set the timing before `Start`:
 
@@ -104,7 +104,7 @@ Without `SetOutputTiming`, both delays are `0`. Like the other router settings, 
 
 The built-in output config structs no longer contain `Delay`. Code that creates values such as `config.FileOutputConfig` directly must configure the router with `core.OutputTiming`.
 
-The dashboard JSON is unchanged: `delay` and `fallbackDelay` are still top-level properties for each output. The Go type `web.OutputStatus` now embeds `core.OutputTiming`, which matters only to code that constructs that struct directly.
+Compared with v2.6.5, the dashboard JSON adds `fallbackDelay` as a top-level property next to `delay` for each output. The Go type `web.OutputStatus` now embeds `core.OutputTiming`, which matters only to code that constructs that struct directly.
 
 ## Test the upgrade
 
