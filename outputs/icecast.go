@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
@@ -27,16 +28,14 @@ func NewIcecastOutput(name string, settings config.IcecastOutputConfig) *Icecast
 }
 
 // Send updates the Icecast server with new metadata.
-func (i *IcecastOutput) Send(st *core.StructuredText) {
-	if err := i.sendToIcecast(st.String()); err != nil {
-		slog.Error("Failed to update Icecast server", "output", i.GetName(), "error", err)
-	}
+func (i *IcecastOutput) Send(st *core.StructuredText) error {
+	return i.sendToIcecast(st.String())
 }
 
 func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	reqURL := &url.URL{
 		Scheme: "http",
-		Host:   net.JoinHostPort(i.settings.Server, strconv.Itoa(i.settings.Port)),
+		Host:   joinHostPort(i.settings.Server, i.settings.Port),
 		Path:   "/admin/metadata",
 	}
 
@@ -62,4 +61,8 @@ func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	slog.Debug("Successfully updated Icecast", "output", i.GetName(), "metadata", metadata)
 
 	return nil
+}
+
+func joinHostPort(host string, port int) string {
+	return net.JoinHostPort(strings.Trim(host, "[]"), strconv.Itoa(port))
 }

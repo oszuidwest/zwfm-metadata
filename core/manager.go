@@ -90,6 +90,7 @@ type MetadataRouter struct {
 	inputs  map[string]*inputEntry
 	outputs map[string]*outputEntry
 	started bool // true after Start() is called; inputs and outputs become immutable
+	stopped bool // true after context cancellation; no more updates may be scheduled
 	mu      sync.RWMutex
 }
 
@@ -111,13 +112,20 @@ func (mr *MetadataRouter) AddInput(input Input, spec *InputSpec) error {
 	if _, exists := mr.inputs[name]; exists {
 		return fmt.Errorf("input with name %s already exists", name)
 	}
+	if spec == nil {
+		return fmt.Errorf("input %q: spec is required", name)
+	}
 
-	mr.inputs[name] = &inputEntry{input: input, spec: *spec}
+	storedSpec := *spec
+	storedSpec.Filters = slices.Clone(spec.Filters)
+	storedSpec.FilterNames = slices.Clone(spec.FilterNames)
+	mr.inputs[name] = &inputEntry{input: input, spec: storedSpec}
 	return nil
 }
 
 // AddOutput registers an output with its spec. It fails when the name is already
-// taken, when the timing is negative, or when a listed input is not registered.
+// taken, when there are no inputs, when an input is repeated or unknown, or when
+// the timing is negative.
 func (mr *MetadataRouter) AddOutput(output Output, spec *OutputSpec) error {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -127,16 +135,29 @@ func (mr *MetadataRouter) AddOutput(output Output, spec *OutputSpec) error {
 	if _, exists := mr.outputs[name]; exists {
 		return fmt.Errorf("output with name %s already exists", name)
 	}
+	if spec == nil {
+		return fmt.Errorf("output %q: spec is required", name)
+	}
 	if spec.Timing.Delay < 0 || spec.Timing.FallbackDelay < 0 {
 		return fmt.Errorf("output %q: delay and fallbackDelay must not be negative", name)
 	}
-	for _, inputName := range spec.Inputs {
+	if len(spec.Inputs) == 0 {
+		return fmt.Errorf("output %q: at least one input is required", name)
+	}
+	for i, inputName := range spec.Inputs {
+		if slices.Contains(spec.Inputs[:i], inputName) {
+			return fmt.Errorf("input %q is listed more than once for output %q", inputName, name)
+		}
 		if _, exists := mr.inputs[inputName]; !exists {
 			return fmt.Errorf("input %q not found for output %q", inputName, name)
 		}
 	}
 
-	mr.outputs[name] = &outputEntry{output: output, spec: *spec}
+	storedSpec := *spec
+	storedSpec.Inputs = slices.Clone(spec.Inputs)
+	storedSpec.Formatters = slices.Clone(spec.Formatters)
+	storedSpec.FormatterNames = slices.Clone(spec.FormatterNames)
+	mr.outputs[name] = &outputEntry{output: output, spec: storedSpec}
 	return nil
 }
 
@@ -189,7 +210,7 @@ func (mr *MetadataRouter) GetInputStatus() []InputStatus {
 			Type:    entry.spec.Type,
 			Prefix:  entry.spec.Prefix,
 			Suffix:  entry.spec.Suffix,
-			Filters: entry.spec.FilterNames,
+			Filters: slices.Clone(entry.spec.FilterNames),
 		}
 
 		switch {
@@ -235,8 +256,8 @@ func (mr *MetadataRouter) GetOutputStatus() []OutputStatus {
 			Name:         name,
 			Type:         entry.spec.Type,
 			OutputTiming: entry.spec.Timing,
-			Inputs:       entry.spec.Inputs,
-			Formatters:   entry.spec.FormatterNames,
+			Inputs:       slices.Clone(entry.spec.Inputs),
+			Formatters:   slices.Clone(entry.spec.FormatterNames),
 			CurrentInput: entry.currentInput,
 		})
 	}
@@ -371,15 +392,17 @@ func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 	}
 }
 
-// cancelPendingUpdates drops every scheduled update so nothing is sent after shutdown.
+// cancelPendingUpdates stops new scheduling and drops every pending update.
 func (mr *MetadataRouter) cancelPendingUpdates() {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
-	for _, entry := range mr.outputs {
+	mr.stopped = true
+	for outputName, entry := range mr.outputs {
 		if entry.pending != nil {
 			entry.pending.Stop()
 			entry.pending = nil
+			slog.Debug("Cancelled pending output update", "output", outputName)
 		}
 	}
 }
@@ -421,7 +444,7 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 	outputName string, entry *outputEntry, inputName string, metadata *Metadata,
 ) {
 	st := mr.transformMetadataForOutput(entry, metadata, inputName)
-	if !st.HasContent() || st.String() == entry.lastSent {
+	if !st.HasContent() {
 		return
 	}
 
@@ -434,6 +457,9 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 func (mr *MetadataRouter) schedule(
 	outputName string, entry *outputEntry, inputName string, metadata *Metadata, reason string,
 ) {
+	if mr.stopped {
+		return
+	}
 	if entry.pending != nil {
 		entry.pending.Stop()
 	}
@@ -551,11 +577,10 @@ func (mr *MetadataRouter) executeUpdate(
 
 	mr.mu.Lock()
 	if formattedText == entry.lastSent {
+		entry.currentInput = inputName
 		mr.mu.Unlock()
 		return
 	}
-	entry.lastSent = formattedText
-	entry.currentInput = inputName
 	mr.mu.Unlock()
 
 	slog.Debug("Executing update for output",
@@ -564,5 +589,13 @@ func (mr *MetadataRouter) executeUpdate(
 		"text", formattedText,
 	)
 
-	entry.output.Send(st)
+	if err := entry.output.Send(st); err != nil {
+		slog.Error("Failed to send output update", "output", outputName, "error", err)
+		return
+	}
+
+	mr.mu.Lock()
+	entry.lastSent = formattedText
+	entry.currentInput = inputName
+	mr.mu.Unlock()
 }

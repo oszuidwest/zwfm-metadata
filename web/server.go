@@ -79,8 +79,6 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 
-	go s.startPeriodicDashboardUpdates(ctx)
-
 	s.server = &http.Server{
 		Addr:              ":" + strconv.Itoa(s.port),
 		Handler:           noIndexMiddleware(mux),
@@ -92,16 +90,31 @@ func (s *Server) Start(ctx context.Context) error {
 
 	slog.Info("Starting web server", "port", s.port)
 
+	serverCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go s.startPeriodicDashboardUpdates(serverCtx)
+
+	serveErr := make(chan error, 1)
 	go func() {
-		if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			slog.Error("HTTP server encountered an error", "error", err)
-		}
+		serveErr <- s.server.ListenAndServe()
 	}()
 
-	<-ctx.Done()
-
-	slog.Info("Shutting down web server")
-	return s.server.Shutdown(context.Background())
+	select {
+	case err := <-serveErr:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		slog.Info("Shutting down web server")
+		if err := s.server.Shutdown(context.Background()); err != nil {
+			return err
+		}
+		if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	}
 }
 
 // noIndexMiddleware adds headers to prevent search engine indexing.
@@ -198,7 +211,7 @@ func (s *Server) startPeriodicDashboardUpdates(ctx context.Context) {
 
 			msg, err := json.Marshal(s.getDashboardData())
 			if err != nil {
-				slog.Warn("Failed to marshal dashboard data", "error", err)
+				slog.Error("Failed to marshal dashboard data", "error", err)
 				continue
 			}
 			if bytes.Equal(msg, lastSent) {

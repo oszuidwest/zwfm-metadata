@@ -68,6 +68,7 @@ func TestPayloadMapper_ArrayPrimitiveValuesPassThrough(t *testing.T) {
 	mapping := map[string]any{
 		"items": []any{
 			"static text",
+			"{{.title}}",
 			float64(123),
 			true,
 			nil,
@@ -77,26 +78,29 @@ func TestPayloadMapper_ArrayPrimitiveValuesPassThrough(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPayloadMapper() error = %v", err)
 	}
-	got := pm.MapPayload(map[string]any{})
+	got := pm.MapPayload(map[string]any{"title": "Test Song"})
 
 	items, ok := got["items"].([]any)
 	if !ok {
 		t.Fatalf("items: got %T", got["items"])
 	}
-	if len(items) != 4 {
+	if len(items) != 5 {
 		t.Fatalf("len(items) = %d", len(items))
 	}
 	if items[0] != "static text" {
 		t.Errorf("items[0] = %q", items[0])
 	}
-	if items[1] != float64(123) {
-		t.Errorf("items[1] = %v", items[1])
+	if items[1] != "{{.title}}" {
+		t.Errorf("items[1] = %q", items[1])
 	}
-	if items[2] != true {
+	if items[2] != float64(123) {
 		t.Errorf("items[2] = %v", items[2])
 	}
-	if items[3] != nil {
+	if items[3] != true {
 		t.Errorf("items[3] = %v", items[3])
+	}
+	if items[4] != nil {
+		t.Errorf("items[4] = %v", items[4])
 	}
 }
 

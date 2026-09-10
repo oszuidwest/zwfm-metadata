@@ -15,6 +15,7 @@ linters:
     - gosec
     - modernize
     - nilerr
+    - nolintlint
     - unparam
     - unconvert
     - bodyclose

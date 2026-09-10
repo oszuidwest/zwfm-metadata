@@ -51,10 +51,11 @@ func (w *WebSocketOutput) RegisterRoutes(mux *http.ServeMux) {
 }
 
 // Send broadcasts metadata to all connected WebSocket clients.
-func (w *WebSocketOutput) Send(st *core.StructuredText) {
+func (w *WebSocketOutput) Send(st *core.StructuredText) error {
 	msg := ConvertStructuredText(st)
 	msg.Type = "metadata_update"
 
 	w.current.Store(msg)
 	w.hub.Broadcast(w.payloadMapper.Apply(msg))
+	return nil
 }

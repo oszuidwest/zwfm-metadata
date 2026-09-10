@@ -92,20 +92,20 @@ func (h *HTTPOutput) RegisterRoutes(mux *http.ServeMux) {
 }
 
 // Send renders every endpoint's response for subsequent requests.
-func (h *HTTPOutput) Send(st *core.StructuredText) {
+func (h *HTTPOutput) Send(st *core.StructuredText) error {
 	metadata := ConvertStructuredText(st)
 
 	responses := make(map[string]httpResponse, len(h.endpoints))
 	for _, endpoint := range h.endpoints {
 		response, err := endpoint.render(metadata)
 		if err != nil {
-			slog.Error("Failed to render HTTP response", "output", h.GetName(), "path", endpoint.path, "error", err)
-			continue
+			return fmt.Errorf("render endpoint %q: %w", endpoint.path, err)
 		}
 		responses[endpoint.path] = response
 	}
 
 	h.responses.Store(&responses)
+	return nil
 }
 
 func (h *HTTPOutput) serve(w http.ResponseWriter, path string) {

@@ -49,7 +49,11 @@ func (u *URLInput) Start(ctx context.Context) error {
 		if metadata := u.GetMetadata(); metadata != nil && metadata.ExpiresAt != nil {
 			if until := time.Until(*metadata.ExpiresAt); until > 0 {
 				expiry.Reset(until)
+			} else {
+				expiry.Stop()
 			}
+		} else {
+			expiry.Stop()
 		}
 
 		select {
@@ -72,6 +76,10 @@ func (u *URLInput) poll() {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		slog.Error("Failed to read response from URL input", "input", u.GetName(), "error", err)
+		return
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		slog.Error("URL input returned unsuccessful status", "input", u.GetName(), "status", resp.Status)
 		return
 	}
 
@@ -118,6 +126,7 @@ func (u *URLInput) parseJSON(body []byte) (title string, expiresAt *time.Time, o
 	}
 	expStr, isString := expVal.(string)
 	if !isString {
+		slog.Error("Expiry value is not a string", "input", u.GetName(), "value", expVal)
 		return title, nil, true
 	}
 

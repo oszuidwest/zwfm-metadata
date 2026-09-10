@@ -82,7 +82,7 @@ All components communicate through the central `MetadataRouter` which handles:
 
 The codebase provides several utilities you can use:
 
-- **Logging**: Use `log/slog` package (NOT utils.LogError/LogDebug)
+- **Logging**: Use the standard `log/slog` package
   ```go
   import "log/slog"
   
@@ -110,23 +110,23 @@ The codebase provides several utilities you can use:
   ```go
   // Returns (nil, nil) when no mapping is configured; Apply then passes the metadata through.
   mapper, err := NewPayloadMapper(settings.PayloadMapping)
+  if err != nil {
+      return fmt.Errorf("create payload mapper: %w", err)
+  }
   payload := mapper.Apply(universal)
   ```
 
 ### Common Gotchas
 
-1. **Logging**: Use `slog` package directly, not `utils.LogError()` or `utils.LogDebug()`
-2. **Error Handling**: Outputs should log errors but never return them from Send methods
-3. **Formatter/Filter Registration**: Add a case to `New` in `formatters/registry.go` or `filters/registry.go`
-4. **Imports**: Use full import paths like `zwfm-metadata/config`, not just `config`
-5. **Build and Test**: Remember to `go build` before testing your extensions
-6. **HTTP Requests**: Always use `http.NewRequestWithContext` with proper timeout context
-7. **HTTP Body Closing**: Always use `defer resp.Body.Close() //nolint:errcheck`
-8. **Error Response Reading**: For HTTP errors, read response body for debugging information
-9. **Deduplication**: The router only calls `Send` when the formatted text changed — no output-side change detection needed
-10. **Logging Fields**: Include "output" or "input" field in all log messages for easy filtering
-11. **Context Timeouts**: Use context with timeout for all HTTP requests and external operations
-12. **StructuredText**: All outputs receive `*core.StructuredText` which provides Artist, Title, and position calculations
+1. **Error Handling**: Return delivery errors from `Send`; the router logs them without advancing its deduplication state
+2. **Formatter/Filter Registration**: Add a case to `New` in `formatters/registry.go` or `filters/registry.go`
+3. **Imports**: Use full import paths like `zwfm-metadata/config`, not just `config`
+4. **Build and Test**: Remember to `go build` before testing your extensions
+5. **HTTP Requests**: Use `http.NewRequestWithContext` and `utils.DoOK`
+6. **Deduplication**: The router only records successfully sent formatted text — no output-side change detection needed
+7. **Logging Fields**: Include "output" or "input" field in all log messages for easy filtering
+8. **Context Timeouts**: Use context with timeout for all HTTP requests and external operations
+9. **StructuredText**: All outputs receive `*core.StructuredText` which provides Artist, Title, and position calculations
 
 ## Adding a New Input
 
@@ -180,7 +180,6 @@ func NewMyCustomInput(name string, settings config.MyCustomInputConfig) *MyCusto
 // UpdateMetadata updates metadata from external source (called by your API endpoint)
 func (m *MyCustomInput) UpdateMetadata(title, artist string) error {
     metadata := &core.Metadata{
-        Name:      m.GetName(),
         Title:     title,
         Artist:    artist,
         UpdatedAt: time.Now(),
@@ -222,7 +221,6 @@ func (m *MyCustomInput) fetchAndUpdate() error {
     title, artist := m.fetchFromSource()
     
     metadata := &core.Metadata{
-        Name:      m.GetName(),
         Title:     title,
         Artist:    artist,
         UpdatedAt: time.Now(),
@@ -313,11 +311,10 @@ package outputs
 import (
     "context"
     "fmt"
-    "io"
-    "log/slog"
     "net/http"
     "strings"
     "time"
+
     "zwfm-metadata/config"
     "zwfm-metadata/core"
     "zwfm-metadata/utils"
@@ -327,18 +324,15 @@ import (
 type MyCustomOutput struct {
     *core.OutputBase
     core.PassiveComponent  // Most outputs are passive
-    settings   config.MyCustomOutputConfig
-    httpClient *http.Client
+    settings config.MyCustomOutputConfig
 }
 
 // NewMyCustomOutput creates a new custom output
 func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCustomOutput {
-    output := &MyCustomOutput{
+    return &MyCustomOutput{
         OutputBase: core.NewOutputBase(name),
         settings:   settings,
-        httpClient: &http.Client{Timeout: 10 * time.Second},
     }
-    return output
 }
 ```
 
@@ -346,7 +340,7 @@ func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCus
 
 ```go
 // Send implements the Output interface
-func (m *MyCustomOutput) Send(st *core.StructuredText) {
+func (m *MyCustomOutput) Send(st *core.StructuredText) error {
     // The router already skips unchanged metadata, so Send only runs on real updates
     text := st.String()
 
@@ -362,11 +356,7 @@ func (m *MyCustomOutput) Send(st *core.StructuredText) {
         _ = duration // use as needed
     }
 
-    // Send to your custom destination
-    if err := m.sendToDestination(text); err != nil {
-        // IMPORTANT: Log error but don't return it
-        slog.Error("Failed to send to custom output", "output", m.GetName(), "error", err)
-    }
+    return m.sendToDestination(text)
 }
 
 func (m *MyCustomOutput) sendToDestination(metadata string) error {
@@ -381,22 +371,7 @@ func (m *MyCustomOutput) sendToDestination(metadata string) error {
     }
 
     req.Header.Set("Content-Type", "text/plain")
-    req.Header.Set("User-Agent", utils.UserAgent())
-
-    resp, err := m.httpClient.Do(req)
-    if err != nil {
-        return fmt.Errorf("request failed: %w", err)
-    }
-    defer resp.Body.Close() //nolint:errcheck
-
-    if resp.StatusCode >= 400 {
-        // Read error response for debugging
-        bodyBytes, _ := io.ReadAll(resp.Body)
-        return fmt.Errorf("server error: status %d, response: %s", resp.StatusCode, string(bodyBytes))
-    }
-
-    slog.Debug("Sent to custom output", "output", m.GetName(), "metadata", metadata)
-    return nil
+    return utils.DoOK(req)
 }
 ```
 
@@ -436,7 +411,7 @@ used by that output.
 type MyCustomOutputConfig struct {
     URL            string                 `json:"url"`
     APIKey         string                 `json:"apiKey"`
-    PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
+    PayloadMapping map[string]any `json:"payloadMapping,omitempty"`
 }
 ```
 
@@ -758,7 +733,6 @@ func (r *RedisInput) fetchFromRedis() error {
     }
     
     metadata := &core.Metadata{
-        Name:      r.GetName(),
         Title:     title,
         Artist:    artist,
         UpdatedAt: time.Now(),
@@ -819,9 +793,6 @@ import (
     "bytes"
     "context"
     "encoding/json"
-    "fmt"
-    "io"
-    "log/slog"
     "net/http"
     "time"
 
@@ -833,27 +804,24 @@ import (
 type DiscordOutput struct {
     *core.OutputBase
     core.PassiveComponent
-    settings   config.DiscordOutputConfig
-    httpClient *http.Client
+    settings config.DiscordOutputConfig
 }
 
 func NewDiscordOutput(name string, settings config.DiscordOutputConfig) *DiscordOutput {
-    output := &DiscordOutput{
+    return &DiscordOutput{
         OutputBase: core.NewOutputBase(name),
         settings:   settings,
-        httpClient: &http.Client{Timeout: 10 * time.Second},
     }
-    return output
 }
 
-func (d *DiscordOutput) Send(st *core.StructuredText) {
+func (d *DiscordOutput) Send(st *core.StructuredText) error {
     text := st.String()
 
     // Build Discord embed fields from StructuredText
-    fields := []map[string]interface{}{}
+    fields := []map[string]any{}
 
     if st.Artist != "" {
-        fields = append(fields, map[string]interface{}{
+        fields = append(fields, map[string]any{
             "name":   "Artist",
             "value":  st.Artist,
             "inline": true,
@@ -861,7 +829,7 @@ func (d *DiscordOutput) Send(st *core.StructuredText) {
     }
 
     if st.Title != "" {
-        fields = append(fields, map[string]interface{}{
+        fields = append(fields, map[string]any{
             "name":   "Title",
             "value":  st.Title,
             "inline": true,
@@ -870,7 +838,7 @@ func (d *DiscordOutput) Send(st *core.StructuredText) {
 
     // Access original metadata for additional fields
     if st.Original != nil && st.Original.Duration != "" {
-        fields = append(fields, map[string]interface{}{
+        fields = append(fields, map[string]any{
             "name":   "Duration",
             "value":  st.Original.Duration,
             "inline": true,
@@ -878,14 +846,14 @@ func (d *DiscordOutput) Send(st *core.StructuredText) {
     }
 
     if st.InputName != "" {
-        fields = append(fields, map[string]interface{}{
+        fields = append(fields, map[string]any{
             "name":   "Source",
             "value":  st.InputName,
             "inline": true,
         })
     }
 
-    embed := map[string]interface{}{
+    embed := map[string]any{
         "title":       "Now Playing",
         "description": text,
         "color":       0x00ff00,
@@ -893,14 +861,12 @@ func (d *DiscordOutput) Send(st *core.StructuredText) {
         "timestamp":   time.Now().Format(time.RFC3339),
     }
 
-    if err := d.sendWebhook(embed); err != nil {
-        slog.Error("Failed to send to Discord", "output", d.GetName(), "error", err)
-    }
+    return d.sendWebhook(embed)
 }
 
-func (d *DiscordOutput) sendWebhook(embed map[string]interface{}) error {
-    payload := map[string]interface{}{
-        "embeds": []map[string]interface{}{embed},
+func (d *DiscordOutput) sendWebhook(embed map[string]any) error {
+    payload := map[string]any{
+        "embeds": []map[string]any{embed},
     }
 
     jsonData, err := json.Marshal(payload)
@@ -918,21 +884,7 @@ func (d *DiscordOutput) sendWebhook(embed map[string]interface{}) error {
     }
 
     req.Header.Set("Content-Type", "application/json")
-    req.Header.Set("User-Agent", utils.UserAgent())
-
-    resp, err := d.httpClient.Do(req)
-    if err != nil {
-        return err
-    }
-    defer resp.Body.Close() //nolint:errcheck
-
-    if resp.StatusCode >= 400 {
-        // Read error response for debugging
-        bodyBytes, _ := io.ReadAll(resp.Body)
-        return fmt.Errorf("discord webhook returned status %d, response: %s", resp.StatusCode, string(bodyBytes))
-    }
-
-    return nil
+    return utils.DoOK(req)
 }
 ```
 
@@ -991,7 +943,7 @@ Then add `case "sanitize": return NewSanitizeFormatter(), nil` to `New` in `form
 
 ```go
 type Input interface {
-    Start(ctx context.Context) error          // Start processing
+    Start(ctx context.Context) error          // Runs in its own router-managed goroutine
     GetName() string                          // Return input name
     GetMetadata() *Metadata                   // Get current metadata
     Subscribe(ch chan<- *Metadata)            // Subscribe to updates
@@ -1002,9 +954,9 @@ type Input interface {
 
 ```go
 type Output interface {
-    Start(ctx context.Context) error    // Start processing
+    Start(ctx context.Context) error    // Runs in its own router-managed goroutine
     GetName() string                    // Return output name
-    Send(st *StructuredText)            // Process structured metadata
+    Send(st *StructuredText) error      // Deliver metadata; Original is shared and read-only
 }
 ```
 
@@ -1020,7 +972,7 @@ type RouteRegistrar interface {
 
 ```go
 type Formatter interface {
-    Format(st *StructuredText)          // Transform fields in place
+    Format(st *StructuredText)          // Transform fields in place; Original is read-only
 }
 ```
 
@@ -1067,7 +1019,6 @@ func (st *StructuredText) ArtistRange() (start, length int, ok bool)  // Positio
 func (st *StructuredText) TitleRange() (start, length int, ok bool)   // Position for DL Plus
 func (st *StructuredText) HasContent() bool                      // Has artist or title
 func (st *StructuredText) IsRunning() bool                       // Has both artist and title
-func (st *StructuredText) Clone() *StructuredText                // Deep copy
 ```
 
 ## Design Patterns
@@ -1107,13 +1058,13 @@ Deduplication is handled centrally by the router: it tracks the last sent conten
 Use `ConvertStructuredText` instead of manually mapping fields. This ensures consistency across all outputs and makes maintenance easier:
 
 ```go
-func (o *MyOutput) Send(st *core.StructuredText) {
+func (o *MyOutput) Send(st *core.StructuredText) error {
     // Convert to universal format for JSON APIs, webhooks, etc.
     universal := ConvertStructuredText(st)
     universal.Type = "myoutput" // optional
 
     // Send the universal metadata
-    o.sendMetadata(*universal)
+    return o.sendMetadata(*universal)
 }
 ```
 
@@ -1147,7 +1098,7 @@ func NewMyOutput(name string, settings config.MyOutputConfig) (*MyOutput, error)
     }, nil
 }
 
-func (o *MyOutput) Send(st *core.StructuredText) {
+func (o *MyOutput) Send(st *core.StructuredText) error {
     // Convert to universal format
     universal := ConvertStructuredText(st)
 
@@ -1155,7 +1106,7 @@ func (o *MyOutput) Send(st *core.StructuredText) {
     mappedPayload := o.payloadMapper.Apply(universal)
 
     // Send mapped payload
-    o.sendPayload(mappedPayload)
+    return o.sendPayload(mappedPayload)
 }
 ```
 
@@ -1177,34 +1128,23 @@ Configuration example with payload mapping:
 
 ### Error Handling
 
-1. **Inputs**: Can return errors from Start(), should log errors during operation
-2. **Outputs**: Should NEVER return errors from Send methods, only log them
+1. **Inputs**: Return startup errors from `Start`; log errors from background operations
+2. **Outputs**: Return delivery errors from `Send`; the router logs them once
 3. **Formatters**: Should handle errors gracefully and transform fields safely
 4. **Metadata Conversion**: Use `ConvertStructuredText` instead of manual field mapping
 
 ```go
-// Good - Output error handling
-func (o *MyOutput) Send(st *core.StructuredText) {
-    if err := o.send(st.String()); err != nil {
-        slog.Error("Send failed", "output", o.GetName(), "error", err)  // Log but don't return
-    }
-}
-
-// Bad - Don't do this in outputs
 func (o *MyOutput) Send(st *core.StructuredText) error {
-    return o.send(st.String())  // DON'T return errors!
+    return o.send(st.String())
 }
 ```
 
 ### HTTP Requests and User-Agent
 
-When making HTTP requests in inputs or outputs, always set a proper User-Agent header:
+Use the shared HTTP helper so requests get the standard User-Agent, timeout, and non-2xx handling:
 
 ```go
 import "zwfm-metadata/utils"
-
-// Create HTTP client with timeout
-httpClient := &http.Client{Timeout: 10 * time.Second}
 
 // Create request with context timeout
 ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -1215,22 +1155,10 @@ if err != nil {
     return err
 }
 
-// Set headers
+// Set request-specific headers
 req.Header.Set("Content-Type", "application/json")
-req.Header.Set("User-Agent", utils.UserAgent())  // Returns "zwfm-metadata/{version}"
 
-// Send request
-resp, err := httpClient.Do(req)
-if err != nil {
-    return err
-}
-defer resp.Body.Close() //nolint:errcheck
-
-// Check for error responses and read body for debugging
-if resp.StatusCode >= 400 {
-    bodyBytes, _ := io.ReadAll(resp.Body)
-    return fmt.Errorf("HTTP error: status %d, response: %s", resp.StatusCode, string(bodyBytes))
-}
+return utils.DoOK(req)
 ```
 
 This ensures:
@@ -1244,6 +1172,8 @@ The base classes handle thread safety for:
 - Metadata storage and retrieval
 - Subscription management
 - Change detection
+
+`GetMetadata` returns the stored `*Metadata`, not a copy. Treat that pointer as read-only. Likewise, do not modify metadata after passing it to `SetMetadata`; readers and subscribers share the same value.
 
 Your code should:
 - Use the provided SetMetadata/GetMetadata methods

@@ -76,14 +76,14 @@ func (d *DynamicInput) fixedExpiration() time.Time {
 // minutes are configured.
 func (d *DynamicInput) dynamicExpiration(duration string) time.Time {
 	seconds, ok := utils.ParseDurationToSeconds(duration)
-	if ok && seconds > 0 {
+	if ok {
 		return time.Now().Add(time.Duration(seconds) * time.Second)
 	}
 
 	slog.Error("Invalid duration - using fixed expiration",
 		"input", d.GetName(),
 		"duration", duration,
-		"expected", "positive seconds, MM:SS, or HH:MM:SS",
+		"expected", "seconds, MM:SS, or HH:MM:SS",
 		"fallback_minutes", d.settings.Expiration.Minutes,
 	)
 	return d.fixedExpiration()

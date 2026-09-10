@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -40,6 +41,9 @@ func NewURLOutput(name string, settings config.URLOutputConfig) (*URLOutput, err
 	if err := utils.ValidateHTTPURL(settings.URL); err != nil {
 		return nil, err
 	}
+	if settings.BearerToken != "" && !strings.HasPrefix(settings.URL, "https:") {
+		return nil, errors.New("bearer token requires an HTTPS URL")
+	}
 
 	var tmpl *template.Template
 	if isTemplate(settings.URL) {
@@ -58,13 +62,12 @@ func NewURLOutput(name string, settings config.URLOutputConfig) (*URLOutput, err
 }
 
 // Send sends metadata via the configured HTTP method.
-func (u *URLOutput) Send(st *core.StructuredText) {
+func (u *URLOutput) Send(st *core.StructuredText) error {
 	payload := ConvertStructuredText(st)
 	if u.settings.Method == http.MethodGet {
-		u.sendGETRequest(payload)
-		return
+		return u.sendGETRequest(payload)
 	}
-	u.sendPOSTRequest(payload)
+	return u.sendPOSTRequest(payload)
 }
 
 // urlEncodeTemplateData query-escapes every string so templates can splice values into a URL.
@@ -80,45 +83,38 @@ func urlEncodeTemplateData(data map[string]any) map[string]any {
 	return encoded
 }
 
-func (u *URLOutput) sendGETRequest(payload *UniversalMetadata) {
+func (u *URLOutput) sendGETRequest(payload *UniversalMetadata) error {
 	requestURL := u.settings.URL
 
 	if u.urlTemplate != nil {
 		var b strings.Builder
 		if err := u.urlTemplate.Execute(&b, urlEncodeTemplateData(payload.ToTemplateData())); err != nil {
-			slog.Error("Failed to execute URL template",
-				"output", u.GetName(),
-				"template", u.settings.URL,
-				"error", err,
-			)
-			return
+			return fmt.Errorf("execute URL template: %w", err)
 		}
 		requestURL = b.String()
 	}
 
-	slog.Debug("Sending GET request", //nolint:gosec // Logging URL for diagnostics
+	slog.Debug("Sending GET request",
 		"output", u.GetName(),
 		"url", requestURL,
 	)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, http.NoBody)
 	if err != nil {
-		slog.Error("Failed to create GET request", "output", u.GetName(), "error", err)
-		return
+		return fmt.Errorf("create GET request: %w", err)
 	}
 
-	u.doRequest(req)
+	return u.doRequest(req)
 }
 
-func (u *URLOutput) sendPOSTRequest(payload *UniversalMetadata) {
+func (u *URLOutput) sendPOSTRequest(payload *UniversalMetadata) error {
 	if u.payloadMapper != nil {
 		payload.Type = "url"
 	}
 
 	jsonData, err := json.Marshal(u.payloadMapper.Apply(payload))
 	if err != nil {
-		slog.Error("Failed to marshal payload", "output", u.GetName(), "error", err)
-		return
+		return fmt.Errorf("marshal payload: %w", err)
 	}
 
 	slog.Debug("Sending POST request",
@@ -131,39 +127,30 @@ func (u *URLOutput) sendPOSTRequest(payload *UniversalMetadata) {
 		context.Background(), http.MethodPost, u.settings.URL, bytes.NewReader(jsonData),
 	)
 	if err != nil {
-		slog.Error("Failed to create POST request", "output", u.GetName(), "error", err)
-		return
+		return fmt.Errorf("create POST request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	u.doRequest(req)
+	return u.doRequest(req)
 }
 
 // doRequest sets the configured auth header, executes the request, and logs the outcome.
-func (u *URLOutput) doRequest(req *http.Request) {
+func (u *URLOutput) doRequest(req *http.Request) error {
 	if u.settings.BearerToken != "" {
 		if req.URL.Scheme != "https" {
-			slog.Error("Refusing bearer-token request over non-HTTPS URL",
-				"output", u.GetName(),
-				"method", req.Method,
-			)
-			return
+			return errors.New("refusing bearer-token request over non-HTTPS URL")
 		}
 		req.Header.Set("Authorization", "Bearer "+u.settings.BearerToken)
 	}
 
 	if err := utils.DoOK(req); err != nil {
-		slog.Error("Request failed", //nolint:gosec // Logging response for diagnostics
-			"output", u.GetName(),
-			"method", req.Method,
-			"error", err,
-		)
-		return
+		return fmt.Errorf("send %s request: %w", req.Method, err)
 	}
 
-	slog.Debug("Successfully sent request", //nolint:gosec // Logging URL for diagnostics
+	slog.Debug("Successfully sent request",
 		"output", u.GetName(),
 		"method", req.Method,
 		"url", req.URL.String(),
 	)
+	return nil
 }

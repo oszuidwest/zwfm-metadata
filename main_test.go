@@ -6,6 +6,7 @@ import (
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
+	"zwfm-metadata/inputs"
 )
 
 func TestSetupOutputTiming(t *testing.T) {
@@ -45,9 +46,14 @@ func TestSetupOutputTiming(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := core.NewMetadataRouter()
+			input := inputs.NewTextInput("input", config.TextInputConfig{Text: "test"})
+			if err := router.AddInput(input, &core.InputSpec{}); err != nil {
+				t.Fatalf("AddInput() error = %v", err)
+			}
 			outputCfg := config.OutputConfig{
 				Type:     "file",
 				Name:     "test-output",
+				Inputs:   []string{"input"},
 				Settings: tt.settings,
 			}
 
@@ -66,5 +72,23 @@ func TestSetupOutputTiming(t *testing.T) {
 				t.Errorf("output timing = %+v, want %+v", got, tt.expectedTiming)
 			}
 		})
+	}
+}
+
+func TestExampleConfigComponents(t *testing.T) {
+	appConfig, err := config.LoadConfig("config-example.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := core.NewMetadataRouter()
+	for i := range appConfig.Inputs {
+		if err := setupInput(router, &appConfig.Inputs[i]); err != nil {
+			t.Fatalf("setup input %q: %v", appConfig.Inputs[i].Name, err)
+		}
+	}
+	for i := range appConfig.Outputs {
+		if err := setupOutput(router, &appConfig.Outputs[i]); err != nil {
+			t.Fatalf("setup output %q: %v", appConfig.Outputs[i].Name, err)
+		}
 	}
 }

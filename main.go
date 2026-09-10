@@ -81,20 +81,25 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
+	serverDone := make(chan error, 1)
 	go func() {
-		if err := server.Start(ctx); err != nil {
-			slog.Error("Web server encountered an error", "error", err)
-		}
+		serverDone <- server.Start(ctx)
+		stop()
 	}()
 
 	if err := router.Start(ctx); err != nil {
 		slog.Error("Failed to start metadata router", "error", err)
 		stop()
+		<-serverDone
 		os.Exit(1)
 	}
 
 	<-ctx.Done()
 	stop()
+	if err := <-serverDone; err != nil {
+		slog.Error("Web server encountered an error", "error", err)
+		os.Exit(1)
+	}
 	slog.Info("Shutting down...")
 }
 

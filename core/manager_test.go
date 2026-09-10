@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +23,7 @@ type mockOutput struct {
 	PassiveComponent
 	sendChan   chan *StructuredText
 	beforeSend func(*StructuredText)
+	sendErr    error
 }
 
 func newMockOutput(name string) *mockOutput {
@@ -31,14 +33,18 @@ func newMockOutput(name string) *mockOutput {
 	}
 }
 
-func (m *mockOutput) Send(st *StructuredText) {
+func (m *mockOutput) Send(st *StructuredText) error {
 	if m.beforeSend != nil {
 		m.beforeSend(st)
+	}
+	if m.sendErr != nil {
+		return m.sendErr
 	}
 	select {
 	case m.sendChan <- st:
 	default:
 	}
+	return nil
 }
 
 func (m *mockOutput) waitForSend(timeout time.Duration) (*StructuredText, bool) {
@@ -84,6 +90,12 @@ func newMockFilter(action FilterAction) *mockFilter {
 func (f *mockFilter) Decide(_ *StructuredText) FilterAction {
 	return f.action
 }
+
+type mockFormatter struct {
+	name string
+}
+
+func (*mockFormatter) Format(_ *StructuredText) {}
 
 type patternFilter struct {
 	pattern string
@@ -212,6 +224,103 @@ func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*mockInpu
 	return input, output
 }
 
+func TestAddOutputRejectsInvalidInputs(t *testing.T) {
+	tests := []struct {
+		name    string
+		inputs  []string
+		wantErr string
+	}{
+		{name: "no inputs", wantErr: "at least one input is required"},
+		{name: "duplicate input", inputs: []string{"input", "input"}, wantErr: "listed more than once"},
+		{name: "unknown input", inputs: []string{"missing"}, wantErr: "not found"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := NewMetadataRouter()
+			addInput(t, router, newMockInput("input"), &InputSpec{})
+
+			err := router.AddOutput(newMockOutput("output"), &OutputSpec{Inputs: tt.inputs})
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("AddOutput() error = %v, want error containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestRouterSpecsAndStatusesDoNotAliasCallerSlices(t *testing.T) {
+	router := NewMetadataRouter()
+	input := newMockInput("input")
+	filter := newMockFilter(FilterPass)
+	inputSpec := InputSpec{
+		Filters:     []Filter{filter},
+		FilterNames: []string{"filter"},
+	}
+	addInput(t, router, input, &inputSpec)
+
+	output := newMockOutput("output")
+	formatter := &mockFormatter{name: "original"}
+	outputSpec := OutputSpec{
+		Inputs:         []string{"input"},
+		Formatters:     []Formatter{formatter},
+		FormatterNames: []string{"formatter"},
+	}
+	if err := router.AddOutput(output, &outputSpec); err != nil {
+		t.Fatalf("AddOutput failed: %v", err)
+	}
+
+	inputSpec.Filters[0] = newMockFilter(FilterReject)
+	inputSpec.FilterNames[0] = "changed"
+	outputSpec.Inputs[0] = "changed"
+	outputSpec.Formatters[0] = &mockFormatter{name: "changed"}
+	outputSpec.FormatterNames[0] = "changed"
+
+	if got := router.inputs["input"].spec.Filters[0]; got != filter {
+		t.Fatal("registered input filters changed with the caller's slice")
+	}
+	if got := router.outputs["output"].spec.Formatters[0]; got != formatter {
+		t.Fatal("registered output formatters changed with the caller's slice")
+	}
+
+	inputStatus := router.GetInputStatus()[0]
+	outputStatus := router.GetOutputStatus()[0]
+	inputStatus.Filters[0] = "changed"
+	outputStatus.Inputs[0] = "changed"
+	outputStatus.Formatters[0] = "changed"
+
+	if got := router.GetInputStatus()[0].Filters[0]; got != "filter" {
+		t.Errorf("input status filter = %q, want %q", got, "filter")
+	}
+	nextOutputStatus := router.GetOutputStatus()[0]
+	if got := nextOutputStatus.Inputs[0]; got != "input" {
+		t.Errorf("output status input = %q, want %q", got, "input")
+	}
+	if got := nextOutputStatus.Formatters[0]; got != "formatter" {
+		t.Errorf("output status formatter = %q, want %q", got, "formatter")
+	}
+}
+
+func TestStoppedRouterDoesNotScheduleUpdates(t *testing.T) {
+	router := NewMetadataRouter()
+	input := newMockInput("input")
+	metadata := testMetadata("", "After stop")
+	input.SetMetadata(metadata)
+	addInput(t, router, input, &InputSpec{})
+
+	output := newMockOutput("output")
+	if err := router.AddOutput(output, &OutputSpec{Inputs: []string{"input"}}); err != nil {
+		t.Fatalf("AddOutput failed: %v", err)
+	}
+
+	router.cancelPendingUpdates()
+	router.scheduleInputChangeUpdates("input", metadata)
+
+	if router.outputs["output"].pending != nil {
+		t.Fatal("stopped router scheduled an update")
+	}
+	expectNoSend(t, output, 10*time.Millisecond)
+}
+
 func TestFilterRejectsMetadata(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		input, output := setupTestRouter(t, 0, []Filter{newMockFilter(FilterReject)})
@@ -269,14 +378,32 @@ func TestOutputUpdatesStayOrdered(t *testing.T) {
 	input.SetMetadata(testMetadata("", "old"))
 	<-oldStarted
 	input.SetMetadata(testMetadata("", "current"))
+	startedOutOfOrder := false
 	select {
 	case <-currentStarted:
-	case <-time.After(time.Second):
+		startedOutOfOrder = true
+	case <-time.After(100 * time.Millisecond):
 	}
 	close(releaseOld)
+	if startedOutOfOrder {
+		t.Fatal("current update started before the old update completed")
+	}
 
 	expectSent(t, output, "old")
 	expectSent(t, output, "current")
+}
+
+func TestFailedOutputUpdateDoesNotAdvanceDeduplicationState(t *testing.T) {
+	router := NewMetadataRouter()
+	output := newMockOutput("output")
+	entry := &outputEntry{output: output}
+	metadata := testMetadata("", "retry me")
+
+	output.sendErr = errors.New("destination unavailable")
+	router.executeUpdate(output.GetName(), entry, "input", metadata, "test")
+	if entry.lastSent != "" || entry.currentInput != "" {
+		t.Fatalf("failed send updated router state: lastSent=%q currentInput=%q", entry.lastSent, entry.currentInput)
+	}
 }
 
 func TestCumulativeFieldClearingRejectsMetadata(t *testing.T) {
@@ -489,6 +616,36 @@ func TestFallbackInputChangeWithinFallbackDelayStillWaits(t *testing.T) {
 		fallback.SetMetadata(testMetadata("", "New Station Name"))
 		expectNoSend(t, output, (delaySeconds+fallbackSeconds)*time.Second-time.Second)
 		expectSent(t, output, "New Station Name")
+	})
+}
+
+func TestFallbackWithDuplicateContentUpdatesCurrentInputWithoutSending(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		router := NewMetadataRouter()
+		primary := newMockInput("primary")
+		addInput(t, router, primary, &InputSpec{})
+		fallback := newMockInput("fallback")
+		fallbackMetadata := testMetadata("", "Station Name")
+		fallback.SetMetadata(fallbackMetadata)
+		addInput(t, router, fallback, &InputSpec{})
+
+		output := newMockOutput("output")
+		if err := router.AddOutput(output, &OutputSpec{Inputs: []string{"primary", "fallback"}}); err != nil {
+			t.Fatalf("AddOutput failed: %v", err)
+		}
+		entry := router.outputs["output"]
+		entry.currentInput = "primary"
+		entry.lastSent = "Station Name"
+
+		router.mu.Lock()
+		router.scheduleFallbackUpdate("output", entry, "fallback", fallbackMetadata)
+		router.mu.Unlock()
+		synctest.Wait()
+
+		if got := router.GetOutputStatus()[0].CurrentInput; got != "fallback" {
+			t.Errorf("current input = %q, want %q", got, "fallback")
+		}
+		expectNoSend(t, output, time.Second)
 	})
 }
 

@@ -74,7 +74,7 @@ func (pm *PayloadMapper) compileTemplates(value any) error {
 
 // isTemplate reports whether a mapping string contains template syntax.
 func isTemplate(s string) bool {
-	return strings.Contains(s, "{{") && strings.Contains(s, "}}")
+	return strings.Contains(s, "{{")
 }
 
 // Apply returns the mapped payload for um, or um itself when there is no mapping.

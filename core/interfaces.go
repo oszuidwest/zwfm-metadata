@@ -31,6 +31,7 @@ type MetadataRequest struct {
 
 // Input provides metadata from a source and notifies subscribers of changes.
 type Input interface {
+	// Start runs in its own router-managed goroutine until ctx is cancelled.
 	Start(ctx context.Context) error
 	GetName() string
 	GetMetadata() *Metadata
@@ -39,9 +40,11 @@ type Input interface {
 
 // Output receives formatted metadata and delivers it to a destination.
 type Output interface {
+	// Start runs in its own router-managed goroutine until ctx is cancelled.
 	Start(ctx context.Context) error
 	GetName() string
-	Send(st *StructuredText)
+	// Send must treat st.Original as shared, immutable metadata.
+	Send(st *StructuredText) error
 }
 
 // RouteRegistrar allows outputs to register HTTP handlers on the web server.
@@ -51,6 +54,7 @@ type RouteRegistrar interface {
 
 // Formatter modifies StructuredText fields before output delivery.
 type Formatter interface {
+	// Format may modify st, but must treat st.Original as shared, immutable metadata.
 	Format(st *StructuredText)
 }
 

@@ -1,0 +1,69 @@
+package inputs
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"zwfm-metadata/config"
+	"zwfm-metadata/core"
+)
+
+func TestURLInputParseJSON(t *testing.T) {
+	wantExpiry := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name       string
+		body       string
+		jsonKey    string
+		expiryKey  string
+		wantTitle  string
+		wantExpiry *time.Time
+		wantOK     bool
+	}{
+		{name: "nested title", body: `{"now":{"title":"Song"}}`, jsonKey: "now.title", wantTitle: "Song", wantOK: true},
+		{name: "numeric title", body: `{"title":42}`, jsonKey: "title", wantTitle: "42", wantOK: true},
+		{name: "valid expiry", body: `{"title":"Song","expiry":"2026-09-11T12:00:00Z"}`, jsonKey: "title", expiryKey: "expiry", wantTitle: "Song", wantExpiry: &wantExpiry, wantOK: true},
+		{name: "missing expiry", body: `{"title":"Song"}`, jsonKey: "title", expiryKey: "expiry", wantTitle: "Song", wantOK: true},
+		{name: "non-string expiry", body: `{"title":"Song","expiry":42}`, jsonKey: "title", expiryKey: "expiry", wantTitle: "Song", wantOK: true},
+		{name: "invalid expiry", body: `{"title":"Song","expiry":"later"}`, jsonKey: "title", expiryKey: "expiry", wantTitle: "Song", wantOK: true},
+		{name: "missing title", body: `{}`, jsonKey: "title"},
+		{name: "invalid JSON", body: `{`, jsonKey: "title"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := &URLInput{
+				InputBase: core.NewInputBase("test"),
+				settings:  config.URLInputConfig{JSONKey: tt.jsonKey, ExpiryKey: tt.expiryKey},
+			}
+			title, expiresAt, ok := input.parseJSON([]byte(tt.body))
+			if title != tt.wantTitle || ok != tt.wantOK {
+				t.Fatalf("parseJSON() = (%q, %v, %v), want title %q and ok %v", title, expiresAt, ok, tt.wantTitle, tt.wantOK)
+			}
+			if tt.wantExpiry == nil {
+				if expiresAt != nil {
+					t.Fatalf("expiresAt = %v, want nil", expiresAt)
+				}
+			} else if expiresAt == nil || !expiresAt.Equal(*tt.wantExpiry) {
+				t.Fatalf("expiresAt = %v, want %v", expiresAt, tt.wantExpiry)
+			}
+		})
+	}
+}
+
+func TestURLInputPollRejectsUnsuccessfulStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "bad gateway", http.StatusBadGateway)
+	}))
+	t.Cleanup(server.Close)
+
+	input, err := NewURLInput("test", &config.URLInputConfig{URL: server.URL, PollingInterval: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.poll()
+	if input.GetMetadata() != nil {
+		t.Fatal("unsuccessful response replaced metadata")
+	}
+}

@@ -390,7 +390,7 @@ func startMessageReader(conn *websocket.Conn) <-chan map[string]any {
 	return messages
 }
 
-func waitForClientCount(t *testing.T, hub *WebSocketHub, want int, timeout time.Duration) { //nolint:unparam // Timeout varies by caller intent
+func waitForClientCount(t *testing.T, hub *WebSocketHub, want int, timeout time.Duration) {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)

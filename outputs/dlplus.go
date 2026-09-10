@@ -29,15 +29,16 @@ func NewDLPlusOutput(name string, settings config.DLPlusOutputConfig) *DLPlusOut
 }
 
 // Send writes metadata with DL Plus tags to the configured file.
-func (o *DLPlusOutput) Send(st *core.StructuredText) {
+func (o *DLPlusOutput) Send(st *core.StructuredText) error {
 	content := o.buildDLPlusContent(st)
 
 	if err := utils.WriteFile(o.settings.Filename, []byte(content)); err != nil {
-		slog.Error("Failed to write DL Plus file", "output", o.GetName(), "filename", o.settings.Filename, "error", err)
-		return
+		o.toggleValue = !o.toggleValue
+		return fmt.Errorf("write DL Plus file: %w", err)
 	}
 
 	slog.Debug("Wrote DL Plus", "output", o.GetName(), "filename", o.settings.Filename)
+	return nil
 }
 
 func (o *DLPlusOutput) buildDLPlusContent(st *core.StructuredText) string {

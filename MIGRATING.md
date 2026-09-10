@@ -43,6 +43,10 @@ For example, if this output is showing `radio-live` and that input expires, `def
 
 `fallbackDelay` defaults to `0`. Values are whole seconds and cannot be negative. For outputs with little or no normal delay, 15 to 30 seconds is usually enough to hide short gaps. Outputs that already have about 10 seconds of delay often need no extra fallback delay.
 
+### Startup validation
+
+V3 rejects invalid configuration at startup instead of continuing with partial or ambiguous behavior. Check custom configurations for unknown dynamic `expiration.type` values, unknown HTTP `responseType` values, and invalid payload templates.
+
 ### Stereo Tool
 
 V3 targets Stereo Tool 11. It writes Streaming Output Song to field `6751` and FM RDS RadioText to field `9985`.
@@ -50,6 +54,10 @@ V3 targets Stereo Tool 11. It writes Streaming Output Song to field `6751` and F
 Upgrade Stereo Tool before deploying v3 and add the `rds` formatter to every Stereo Tool output. The formatter keeps RadioText within 64 characters and transliterates characters that Stereo Tool's RDS encoder does not handle correctly.
 
 V3 fixes request encoding for metadata containing `/`, `&`, `+`, `%`, or `?`. Check both Song and Current RadioText after the upgrade.
+
+## Dashboard WebSocket
+
+The dashboard WebSocket payload no longer includes the redundant top-level `activeFlows` field or `available` on each input. Consumers can count outputs with a non-empty `currentInput` and use `status == "available"`, respectively.
 
 ## Custom outputs
 
@@ -61,9 +69,11 @@ The v3 `core.Output` interface is:
 type Output interface {
     Start(ctx context.Context) error
     GetName() string
-    Send(st *StructuredText)
+    Send(st *StructuredText) error
 }
 ```
+
+`Send` errors are logged by the router and do not update its deduplication state. The router does not automatically retry failed deliveries.
 
 Remove calls to `SetDelay`; that method no longer exists on `OutputBase`. `GetDelay` is no longer part of the `Output` interface either. If nothing else calls it, it can be removed too.
 
@@ -84,27 +94,29 @@ func NewMyOutput(name string, settings MyOutputConfig) *MyOutput {
 
 Remove `Delay` from an output-specific config struct, and do not add `FallbackDelay` there. `setupOutput` reads both values separately through `core.OutputTiming`, so a type added to the `createOutput` switch needs no timing code of its own.
 
-Code that builds a router directly, without `setupOutput`, has to set the timing before `Start`:
+Code that builds a router directly, without `setupOutput`, supplies the inputs and timing when it registers the output:
 
 ```go
 router := core.NewMetadataRouter()
 output := NewMyOutput("custom", settings)
 
-if err := router.AddOutput(output); err != nil {
+if err := router.AddOutput(output, &core.OutputSpec{
+    Type:   "custom",
+    Inputs: []string{"radio-live", "fallback"},
+    Timing: core.OutputTiming{
+        Delay:         2,
+        FallbackDelay: 20,
+    },
+}); err != nil {
     return err
 }
-router.SetOutputInputs(output.GetName(), []string{"radio-live", "fallback"})
-router.SetOutputTiming(output.GetName(), core.OutputTiming{
-    Delay:         2,
-    FallbackDelay: 20,
-})
 ```
 
-Without `SetOutputTiming`, both delays are `0`. Like the other router settings, timing cannot be changed after `Start`. `setupOutput` rejects negative values, but direct users of `SetOutputTiming` must check that themselves.
+With a zero-value `OutputTiming`, both delays are `0`. `AddOutput` requires at least one unique, registered input and rejects negative timing. Inputs and outputs cannot be added after `Start`.
 
 The built-in output config structs no longer contain `Delay`. Code that creates values such as `config.FileOutputConfig` directly must configure the router with `core.OutputTiming`.
 
-Compared with v2.6.5, the dashboard JSON adds `fallbackDelay` as a top-level property next to `delay` for each output. The Go type `web.OutputStatus` now embeds `core.OutputTiming`, which matters only to code that constructs that struct directly.
+Compared with v2.6.5, the dashboard JSON adds `fallbackDelay` as a top-level property next to `delay` for each output. The Go type `core.OutputStatus` embeds `core.OutputTiming`, which matters only to code that constructs that struct directly.
 
 ## Test the upgrade
 
