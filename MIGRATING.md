@@ -116,7 +116,7 @@ An absent or empty `Settings` value now decodes to the zero value of the target 
 ```go
 router := core.NewMetadataRouter()
 
-if err := router.AddInput(input, &core.InputSpec{
+if err := router.AddInput(input, core.InputSpec{
     Type:        "custom",
     Prefix:      "Now playing: ",
     Suffix:      " on ZuidWest FM",
@@ -126,7 +126,7 @@ if err := router.AddInput(input, &core.InputSpec{
     return err
 }
 
-if err := router.AddOutput(output, &core.OutputSpec{
+if err := router.AddOutput(output, core.OutputSpec{
     Type:           "custom",
     Inputs:         []string{input.GetName()},
     Formatters:     outputFormatters,

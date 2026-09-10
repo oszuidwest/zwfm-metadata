@@ -189,7 +189,7 @@ func startRouter(t *testing.T, router *MetadataRouter, output *mockOutput, timin
 		inputNames = append(inputNames, input.GetName())
 	}
 
-	if err := router.AddOutput(output, &OutputSpec{Inputs: inputNames, Timing: timing}); err != nil {
+	if err := router.AddOutput(output, OutputSpec{Inputs: inputNames, Timing: timing}); err != nil {
 		t.Fatalf("AddOutput failed: %v", err)
 	}
 
@@ -198,7 +198,7 @@ func startRouter(t *testing.T, router *MetadataRouter, output *mockOutput, timin
 	}
 }
 
-func addInput(t *testing.T, router *MetadataRouter, input *mockInput, spec *InputSpec) {
+func addInput(t *testing.T, router *MetadataRouter, input *mockInput, spec InputSpec) {
 	t.Helper()
 	if err := router.AddInput(input, spec); err != nil {
 		t.Fatalf("AddInput failed: %v", err)
@@ -210,7 +210,7 @@ func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*mockInpu
 
 	router := NewMetadataRouter()
 	input := newMockInput("test-input")
-	addInput(t, router, input, &InputSpec{Filters: filters})
+	addInput(t, router, input, InputSpec{Filters: filters})
 
 	output := newMockOutput("test-output")
 	startRouter(t, router, output, OutputTiming{Delay: outputDelay}, input)
@@ -220,9 +220,9 @@ func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*mockInpu
 
 func TestAddOutputRejectsUnknownInput(t *testing.T) {
 	router := NewMetadataRouter()
-	addInput(t, router, newMockInput("input"), &InputSpec{})
+	addInput(t, router, newMockInput("input"), InputSpec{})
 
-	err := router.AddOutput(newMockOutput("output"), &OutputSpec{Inputs: []string{"missing"}})
+	err := router.AddOutput(newMockOutput("output"), OutputSpec{Inputs: []string{"missing"}})
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("AddOutput() error = %v, want unknown input error", err)
 	}
@@ -402,7 +402,7 @@ func TestWouldFiltersReject(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := NewMetadataRouter()
-			addInput(t, router, newMockInput("test-input"), &InputSpec{Filters: tt.filters})
+			addInput(t, router, newMockInput("test-input"), InputSpec{Filters: tt.filters})
 
 			result := router.wouldFiltersReject("test-input", tt.metadata)
 			if result != tt.expectedReject {
@@ -417,7 +417,7 @@ func TestFilterContextMatchesExecution(t *testing.T) {
 		router := NewMetadataRouter()
 		contextFilter := newContextAwareFilter("test-input", "url", "PREFIX:", ":SUFFIX")
 		input := newMockInput("test-input")
-		addInput(t, router, input, &InputSpec{
+		addInput(t, router, input, InputSpec{
 			Type:    "url",
 			Prefix:  "PREFIX:",
 			Suffix:  ":SUFFIX",
@@ -440,7 +440,7 @@ func TestWouldFiltersRejectContextFields(t *testing.T) {
 	router := NewMetadataRouter()
 
 	captureFilter := &capturingFilter{}
-	addInput(t, router, newMockInput("test-input"), &InputSpec{
+	addInput(t, router, newMockInput("test-input"), InputSpec{
 		Type:    "dynamic",
 		Prefix:  "Hello ",
 		Suffix:  " World",
@@ -483,10 +483,10 @@ func setupFallbackRouter(t *testing.T) (primary, fallback *mockInput, output *mo
 
 	router := NewMetadataRouter()
 	primary = newMockInput("primary")
-	addInput(t, router, primary, &InputSpec{})
+	addInput(t, router, primary, InputSpec{})
 	fallback = newMockInput("fallback")
 	fallback.SetMetadata(testMetadata("", "Station Name"))
-	addInput(t, router, fallback, &InputSpec{})
+	addInput(t, router, fallback, InputSpec{})
 
 	output = newMockOutput("test-output")
 	timing := OutputTiming{Delay: delaySeconds, FallbackDelay: fallbackSeconds}
@@ -549,10 +549,10 @@ func TestFallbackWithDuplicateContentUpdatesCurrentInputWithoutSending(t *testin
 		primaryMetadata := testMetadata("", "Station Name")
 		primaryMetadata.ExpiresAt = new(time.Now().Add(trackLength))
 		primary.SetMetadata(primaryMetadata)
-		addInput(t, router, primary, &InputSpec{})
+		addInput(t, router, primary, InputSpec{})
 		fallback := newMockInput("fallback")
 		fallback.SetMetadata(testMetadata("", "Station Name"))
-		addInput(t, router, fallback, &InputSpec{})
+		addInput(t, router, fallback, InputSpec{})
 
 		output := newMockOutput("output")
 		startRouter(t, router, output, OutputTiming{}, primary, fallback)

@@ -101,7 +101,7 @@ func NewMetadataRouter() *MetadataRouter {
 }
 
 // AddInput registers an input with its spec, returning an error if the name is already taken.
-func (mr *MetadataRouter) AddInput(input Input, spec *InputSpec) error {
+func (mr *MetadataRouter) AddInput(input Input, spec InputSpec) error {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.panicIfStarted("AddInput")
@@ -110,11 +110,7 @@ func (mr *MetadataRouter) AddInput(input Input, spec *InputSpec) error {
 	if _, exists := mr.inputs[name]; exists {
 		return fmt.Errorf("input with name %s already exists", name)
 	}
-	if spec == nil {
-		return fmt.Errorf("input %q: spec is required", name)
-	}
-
-	storedSpec := *spec
+	storedSpec := spec
 	storedSpec.Filters = slices.Clone(spec.Filters)
 	storedSpec.FilterNames = slices.Clone(spec.FilterNames)
 	mr.inputs[name] = &inputEntry{input: input, spec: storedSpec}
@@ -124,7 +120,7 @@ func (mr *MetadataRouter) AddInput(input Input, spec *InputSpec) error {
 // AddOutput registers an output with its spec. It fails when the name is already
 // taken, when there are no inputs, when an input is repeated or unknown, or when
 // the timing is negative.
-func (mr *MetadataRouter) AddOutput(output Output, spec *OutputSpec) error {
+func (mr *MetadataRouter) AddOutput(output Output, spec OutputSpec) error {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	mr.panicIfStarted("AddOutput")
@@ -132,9 +128,6 @@ func (mr *MetadataRouter) AddOutput(output Output, spec *OutputSpec) error {
 	name := output.GetName()
 	if _, exists := mr.outputs[name]; exists {
 		return fmt.Errorf("output with name %s already exists", name)
-	}
-	if spec == nil {
-		return fmt.Errorf("output %q: spec is required", name)
 	}
 	if spec.Timing.Delay < 0 || spec.Timing.FallbackDelay < 0 {
 		return fmt.Errorf("output %q: delay and fallbackDelay must not be negative", name)
@@ -151,7 +144,7 @@ func (mr *MetadataRouter) AddOutput(output Output, spec *OutputSpec) error {
 		}
 	}
 
-	storedSpec := *spec
+	storedSpec := spec
 	storedSpec.Inputs = slices.Clone(spec.Inputs)
 	storedSpec.Formatters = slices.Clone(spec.Formatters)
 	storedSpec.FormatterNames = slices.Clone(spec.FormatterNames)

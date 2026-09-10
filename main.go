@@ -123,7 +123,7 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error
 		spec.FilterNames = append(spec.FilterNames, filterCfg.Type)
 	}
 
-	if err := router.AddInput(input, &spec); err != nil {
+	if err := router.AddInput(input, spec); err != nil {
 		return fmt.Errorf("failed to add input %q: %w", inputCfg.Name, err)
 	}
 
@@ -158,7 +158,7 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 		spec.Formatters = append(spec.Formatters, formatter)
 	}
 
-	if err := router.AddOutput(output, &spec); err != nil {
+	if err := router.AddOutput(output, spec); err != nil {
 		return fmt.Errorf("failed to add output %q: %w", outputCfg.Name, err)
 	}
 

@@ -383,14 +383,14 @@ Most extensions only need a constructor switch entry because `setupInput` and `s
 ```go
 router := core.NewMetadataRouter()
 
-if err := router.AddInput(input, &core.InputSpec{
+if err := router.AddInput(input, core.InputSpec{
     Type:   "manual",
     Prefix: "Now playing: ",
 }); err != nil {
     return err
 }
 
-if err := router.AddOutput(output, &core.OutputSpec{
+if err := router.AddOutput(output, core.OutputSpec{
     Type:           "webhook",
     Inputs:         []string{input.GetName()},
     Formatters:     []core.Formatter{&formatters.UcwordsFormatter{}},

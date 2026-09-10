@@ -47,7 +47,7 @@ func TestSetupOutputTiming(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			router := core.NewMetadataRouter()
 			input := inputs.NewTextInput("input", config.TextInputConfig{Text: "test"})
-			if err := router.AddInput(input, &core.InputSpec{}); err != nil {
+			if err := router.AddInput(input, core.InputSpec{}); err != nil {
 				t.Fatalf("AddInput() error = %v", err)
 			}
 			outputCfg := config.OutputConfig{
