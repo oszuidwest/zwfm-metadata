@@ -101,6 +101,8 @@ func NewMetadataRouter() *MetadataRouter {
 }
 
 // AddInput registers an input with its spec, returning an error if the name is already taken.
+//
+//nolint:gocritic // Value semantics make the required registration spec non-nil by construction.
 func (mr *MetadataRouter) AddInput(input Input, spec InputSpec) error {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -120,6 +122,8 @@ func (mr *MetadataRouter) AddInput(input Input, spec InputSpec) error {
 // AddOutput registers an output with its spec. It fails when the name is already
 // taken, when there are no inputs, when an input is repeated or unknown, or when
 // the timing is negative.
+//
+//nolint:gocritic // Value semantics make the required registration spec non-nil by construction.
 func (mr *MetadataRouter) AddOutput(output Output, spec OutputSpec) error {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()

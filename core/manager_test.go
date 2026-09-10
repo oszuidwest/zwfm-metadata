@@ -198,6 +198,7 @@ func startRouter(t *testing.T, router *MetadataRouter, output *mockOutput, timin
 	}
 }
 
+//nolint:gocritic // The helper mirrors AddInput's intentional value semantics.
 func addInput(t *testing.T, router *MetadataRouter, input *mockInput, spec InputSpec) {
 	t.Helper()
 	if err := router.AddInput(input, spec); err != nil {
