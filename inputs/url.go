@@ -39,12 +39,10 @@ func NewURLInput(name string, settings *config.URLInputConfig) (*URLInput, error
 // Start polls on the configured interval, and additionally as soon as the current
 // metadata expires, until context cancellation.
 func (u *URLInput) Start(ctx context.Context) error {
-	ticker := time.NewTicker(time.Duration(u.settings.PollingInterval) * time.Second)
-	defer ticker.Stop()
+	polls := time.Tick(time.Duration(u.settings.PollingInterval) * time.Second)
 
 	expiry := time.NewTimer(0)
 	expiry.Stop()
-	defer expiry.Stop()
 
 	for {
 		u.poll()
@@ -57,7 +55,7 @@ func (u *URLInput) Start(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
+		case <-polls:
 		case <-expiry.C:
 		}
 	}

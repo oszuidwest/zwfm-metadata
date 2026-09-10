@@ -145,11 +145,8 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 // It is the only goroutine that writes to the connection, guaranteeing single-writer
 // safety by construction. Pings and close frames are also handled here.
 func (h *WebSocketHub) writePump(client *hubClient) {
-	ticker := time.NewTicker(h.pingInterval)
-	defer func() {
-		ticker.Stop()
-		h.disconnectClient(client)
-	}()
+	pings := time.Tick(h.pingInterval)
+	defer h.disconnectClient(client)
 
 	for {
 		select {
@@ -171,7 +168,7 @@ func (h *WebSocketHub) writePump(client *hubClient) {
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			return
 
-		case <-ticker.C:
+		case <-pings:
 			if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
 				slog.Debug("WebSocket ping deadline failed", "hub", h.name, "error", err)
 				return

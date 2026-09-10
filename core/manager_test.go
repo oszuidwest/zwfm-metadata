@@ -438,7 +438,7 @@ func TestNewTrackWithinFallbackDelayCancelsFallback(t *testing.T) {
 		primary.SetMetadata(expiringMetadata("First Song"))
 		expectSent(t, output, "First Song")
 
-		time.Sleep(trackLength + 5*time.Second)
+		synctest.Sleep(trackLength + 5*time.Second)
 		primary.SetMetadata(expiringMetadata("Second Song"))
 		expectSent(t, output, "Second Song")
 
@@ -454,7 +454,7 @@ func TestFallbackInputChangeWithinFallbackDelayStillWaits(t *testing.T) {
 		expectSent(t, output, "Song")
 
 		// Replacing a pending fallback restarts its full delay.
-		time.Sleep(trackLength + 5*time.Second)
+		synctest.Sleep(trackLength + 5*time.Second)
 		fallback.SetMetadata(testMetadata("", "New Station Name"))
 		expectNoSend(t, output, (delaySeconds+fallbackSeconds)*time.Second-time.Second)
 		expectSent(t, output, "New Station Name")
@@ -468,7 +468,7 @@ func TestReturningPrimaryIsNotDelayedByFallbackDelay(t *testing.T) {
 		primary.SetMetadata(expiringMetadata("Song"))
 		expectSent(t, output, "Song")
 
-		time.Sleep(trackLength + fallbackSeconds*time.Second)
+		synctest.Sleep(trackLength + fallbackSeconds*time.Second)
 		expectSent(t, output, "Station Name")
 
 		primary.SetMetadata(expiringMetadata("Next Song"))

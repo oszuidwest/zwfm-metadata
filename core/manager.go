@@ -355,8 +355,7 @@ func (mr *MetadataRouter) findHighestPriorityInput(entry *outputEntry) (string, 
 }
 
 func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+	ticks := time.Tick(1 * time.Second)
 
 	slog.Info("Started expiration checker (1 second interval)")
 
@@ -365,7 +364,7 @@ func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 		case <-ctx.Done():
 			mr.cancelPendingUpdates()
 			return
-		case <-ticker.C:
+		case <-ticks:
 			mr.checkForExpirations()
 		}
 	}

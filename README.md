@@ -1141,6 +1141,8 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&artist=Art
 
 ## Development
 
+Development requires Go 1.27.1 or newer.
+
 ```bash
 go fmt ./...
 go vet ./...

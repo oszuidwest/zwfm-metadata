@@ -13,6 +13,7 @@ linters:
     # Code quality
     - errorlint
     - gosec
+    - modernize
     - nilerr
     - unparam
     - unconvert

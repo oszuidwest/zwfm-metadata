@@ -184,15 +184,14 @@ func (s *Server) getDashboardData() any {
 // startPeriodicDashboardUpdates checks the status every second and broadcasts it to
 // connected dashboard clients when it differs from the last broadcast.
 func (s *Server) startPeriodicDashboardUpdates(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+	ticks := time.Tick(1 * time.Second)
 
 	var lastSent []byte
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-ticks:
 			if s.dashboardHub.ClientCount() == 0 {
 				continue
 			}
