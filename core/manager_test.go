@@ -297,7 +297,11 @@ func TestOutputUpdatesStayOrdered(t *testing.T) {
 	}
 
 	input.SetMetadata(testMetadata("", "old"))
-	<-oldStarted
+	select {
+	case <-oldStarted:
+	case <-time.After(time.Second):
+		t.Fatal("old update did not start")
+	}
 	input.SetMetadata(testMetadata("", "current"))
 	startedOutOfOrder := false
 	select {
