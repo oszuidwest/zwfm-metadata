@@ -142,6 +142,13 @@ func (u *URLOutput) sendPOSTRequest(payload *UniversalMetadata) {
 // doRequest sets the configured auth header, executes the request, and logs the outcome.
 func (u *URLOutput) doRequest(req *http.Request) {
 	if u.settings.BearerToken != "" {
+		if req.URL.Scheme != "https" {
+			slog.Error("Refusing bearer-token request over non-HTTPS URL",
+				"output", u.GetName(),
+				"method", req.Method,
+			)
+			return
+		}
 		req.Header.Set("Authorization", "Bearer "+u.settings.BearerToken)
 	}
 

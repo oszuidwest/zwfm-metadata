@@ -442,9 +442,11 @@ func (mr *MetadataRouter) schedule(
 	var timer *time.Timer
 	timer = time.AfterFunc(delay, func() {
 		mr.mu.Lock()
-		if entry.pending == timer {
-			entry.pending = nil
+		if entry.pending != timer {
+			mr.mu.Unlock()
+			return
 		}
+		entry.pending = nil
 		mr.mu.Unlock()
 
 		mr.executeUpdate(outputName, entry, inputName, metadata, reason)

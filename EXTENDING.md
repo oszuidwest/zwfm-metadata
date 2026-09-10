@@ -1151,9 +1151,8 @@ func (o *MyOutput) Send(st *core.StructuredText) {
     // Convert to universal format
     universal := ConvertStructuredText(st)
 
-    // Convert to template data and apply mapping
-    templateData := universal.ToTemplateData()
-    mappedPayload := o.payloadMapper.MapPayload(templateData)
+    // Apply the optional mapping
+    mappedPayload := o.payloadMapper.Apply(universal)
 
     // Send mapped payload
     o.sendPayload(mappedPayload)

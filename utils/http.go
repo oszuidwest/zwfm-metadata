@@ -2,15 +2,29 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
 // httpClient is the shared HTTP client for all requests.
-var httpClient = &http.Client{Timeout: 10 * time.Second}
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		if len(via) > 0 && strings.HasPrefix(via[0].Header.Get("Authorization"), "Bearer ") &&
+			req.URL.Scheme != "https" {
+			return errors.New("refusing to redirect bearer token to non-HTTPS URL")
+		}
+		return nil
+	},
+}
 
 // Get performs an HTTP GET request with standard headers.
 func Get(ctx context.Context, rawURL string) (*http.Response, error) {

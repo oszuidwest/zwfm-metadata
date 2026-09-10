@@ -22,6 +22,10 @@ type UniversalMetadata struct {
 
 // ConvertStructuredText converts a StructuredText to UniversalMetadata.
 func ConvertStructuredText(st *core.StructuredText) *UniversalMetadata {
+	if st == nil {
+		return &UniversalMetadata{UpdatedAt: time.Now()}
+	}
+
 	um := &UniversalMetadata{
 		FormattedMetadata: st.String(),
 		Title:             st.Title,
