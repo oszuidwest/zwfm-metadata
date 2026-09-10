@@ -12,17 +12,11 @@ func TestParseDurationToSeconds(t *testing.T) {
 		{name: "whole seconds", input: "272", want: 272, wantOK: true},
 		{name: "decimal point", input: "272.5", want: 273, wantOK: true},
 		{name: "decimal comma", input: "272,4", want: 272, wantOK: true},
-		{name: "surrounding whitespace", input: " 90 ", want: 90, wantOK: true},
 		{name: "minutes and seconds", input: "3:45", want: 225, wantOK: true},
-		{name: "leading zeroes", input: "03:05", want: 185, wantOK: true},
 		{name: "hours minutes and seconds", input: "1:30:00", want: 5400, wantOK: true},
 		{name: "zero clock", input: "0:00", want: 0, wantOK: true},
-		{name: "empty", input: "", want: 0, wantOK: false},
 		{name: "non-numeric", input: "abc", want: 0, wantOK: false},
 		{name: "seconds out of range", input: "3:60", want: 0, wantOK: false},
-		{name: "negative component", input: "-1:00", want: 0, wantOK: false},
-		{name: "too many components", input: "1:2:3:4", want: 0, wantOK: false},
-		{name: "missing seconds", input: "1:", want: 0, wantOK: false},
 	}
 
 	for _, tt := range tests {

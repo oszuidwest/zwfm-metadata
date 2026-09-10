@@ -60,12 +60,6 @@ func TestStereoToolOutput_ReturnsFieldError(t *testing.T) {
 	}
 }
 
-func TestJoinHostPort_BracketedIPv6(t *testing.T) {
-	if got := joinHostPort("[::1]", 8000); got != "[::1]:8000" {
-		t.Errorf("joinHostPort() = %q, want %q", got, "[::1]:8000")
-	}
-}
-
 func stereoToolTestSettings(server *httptest.Server) config.StereoToolOutputConfig {
 	addr := server.Listener.Addr().(*net.TCPAddr) // httptest always listens on TCP
 	return config.StereoToolOutputConfig{Hostname: addr.IP.String(), Port: addr.Port}

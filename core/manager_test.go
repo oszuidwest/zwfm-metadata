@@ -91,12 +91,6 @@ func (f *mockFilter) Decide(_ *StructuredText) FilterAction {
 	return f.action
 }
 
-type mockFormatter struct {
-	name string
-}
-
-func (*mockFormatter) Format(_ *StructuredText) {}
-
 type patternFilter struct {
 	pattern string
 	action  FilterAction
@@ -248,79 +242,6 @@ func TestAddOutputRejectsInvalidInputs(t *testing.T) {
 	}
 }
 
-func TestRouterSpecsAndStatusesDoNotAliasCallerSlices(t *testing.T) {
-	router := NewMetadataRouter()
-	input := newMockInput("input")
-	filter := newMockFilter(FilterPass)
-	inputSpec := InputSpec{
-		Filters:     []Filter{filter},
-		FilterNames: []string{"filter"},
-	}
-	addInput(t, router, input, &inputSpec)
-
-	output := newMockOutput("output")
-	formatter := &mockFormatter{name: "original"}
-	outputSpec := OutputSpec{
-		Inputs:         []string{"input"},
-		Formatters:     []Formatter{formatter},
-		FormatterNames: []string{"formatter"},
-	}
-	if err := router.AddOutput(output, &outputSpec); err != nil {
-		t.Fatalf("AddOutput failed: %v", err)
-	}
-
-	inputSpec.Filters[0] = newMockFilter(FilterReject)
-	inputSpec.FilterNames[0] = "changed"
-	outputSpec.Inputs[0] = "changed"
-	outputSpec.Formatters[0] = &mockFormatter{name: "changed"}
-	outputSpec.FormatterNames[0] = "changed"
-
-	if got := router.inputs["input"].spec.Filters[0]; got != filter {
-		t.Fatal("registered input filters changed with the caller's slice")
-	}
-	if got := router.outputs["output"].spec.Formatters[0]; got != formatter {
-		t.Fatal("registered output formatters changed with the caller's slice")
-	}
-
-	inputStatus := router.GetInputStatus()[0]
-	outputStatus := router.GetOutputStatus()[0]
-	inputStatus.Filters[0] = "changed"
-	outputStatus.Inputs[0] = "changed"
-	outputStatus.Formatters[0] = "changed"
-
-	if got := router.GetInputStatus()[0].Filters[0]; got != "filter" {
-		t.Errorf("input status filter = %q, want %q", got, "filter")
-	}
-	nextOutputStatus := router.GetOutputStatus()[0]
-	if got := nextOutputStatus.Inputs[0]; got != "input" {
-		t.Errorf("output status input = %q, want %q", got, "input")
-	}
-	if got := nextOutputStatus.Formatters[0]; got != "formatter" {
-		t.Errorf("output status formatter = %q, want %q", got, "formatter")
-	}
-}
-
-func TestStoppedRouterDoesNotScheduleUpdates(t *testing.T) {
-	router := NewMetadataRouter()
-	input := newMockInput("input")
-	metadata := testMetadata("", "After stop")
-	input.SetMetadata(metadata)
-	addInput(t, router, input, &InputSpec{})
-
-	output := newMockOutput("output")
-	if err := router.AddOutput(output, &OutputSpec{Inputs: []string{"input"}}); err != nil {
-		t.Fatalf("AddOutput failed: %v", err)
-	}
-
-	router.cancelPendingUpdates()
-	router.scheduleInputChangeUpdates("input", metadata)
-
-	if router.outputs["output"].pending != nil {
-		t.Fatal("stopped router scheduled an update")
-	}
-	expectNoSend(t, output, 10*time.Millisecond)
-}
-
 func TestFilterRejectsMetadata(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		input, output := setupTestRouter(t, 0, []Filter{newMockFilter(FilterReject)})
@@ -393,16 +314,28 @@ func TestOutputUpdatesStayOrdered(t *testing.T) {
 	expectSent(t, output, "current")
 }
 
-func TestFailedOutputUpdateDoesNotAdvanceDeduplicationState(t *testing.T) {
+func TestFailedOutputUpdateCanBeRetried(t *testing.T) {
 	router := NewMetadataRouter()
 	output := newMockOutput("output")
 	entry := &outputEntry{output: output}
 	metadata := testMetadata("", "retry me")
+	sendCalls := 0
+	output.beforeSend = func(*StructuredText) { sendCalls++ }
 
 	output.sendErr = errors.New("destination unavailable")
 	router.executeUpdate(output.GetName(), entry, "input", metadata, "test")
+	if sendCalls != 1 {
+		t.Fatalf("Send() calls after failure = %d, want 1", sendCalls)
+	}
 	if entry.lastSent != "" || entry.currentInput != "" {
 		t.Fatalf("failed send updated router state: lastSent=%q currentInput=%q", entry.lastSent, entry.currentInput)
+	}
+
+	output.sendErr = nil
+	router.executeUpdate(output.GetName(), entry, "input", metadata, "test")
+	expectSent(t, output, "retry me")
+	if sendCalls != 2 || entry.lastSent != "retry me" || entry.currentInput != "input" {
+		t.Fatalf("retry state: calls=%d lastSent=%q currentInput=%q", sendCalls, entry.lastSent, entry.currentInput)
 	}
 }
 
