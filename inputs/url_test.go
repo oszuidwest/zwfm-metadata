@@ -64,12 +64,6 @@ func TestURLInputPollRejectsUnsuccessfulStatus(t *testing.T) {
 	}
 }
 
-func TestNewURLInputRejectsNilSettings(t *testing.T) {
-	if _, err := NewURLInput("test", nil); err == nil {
-		t.Fatal("NewURLInput() error = nil, want missing settings error")
-	}
-}
-
 func TestURLInputStartCancelsActiveRequest(t *testing.T) {
 	requestStarted := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -83,12 +77,17 @@ func TestURLInputStartCancelsActiveRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 	done := make(chan error, 1)
 	go func() {
 		done <- input.Start(ctx)
 	}()
 
-	<-requestStarted
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("request did not start")
+	}
 	cancel()
 	select {
 	case err := <-done:

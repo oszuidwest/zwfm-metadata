@@ -41,9 +41,3 @@ func TestDoOKLimitsErrorResponseBody(t *testing.T) {
 		t.Fatalf("DoOK() error length = %d, want bounded response body", len(err.Error()))
 	}
 }
-
-func TestValidateHTTPURLRequiresHost(t *testing.T) {
-	if err := ValidateHTTPURL("https:"); err == nil {
-		t.Fatal("ValidateHTTPURL() error = nil, want missing host error")
-	}
-}

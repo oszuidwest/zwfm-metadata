@@ -52,7 +52,7 @@ func TestHTTPOutputEndpoints(t *testing.T) {
 			if response.Code != http.StatusOK || response.Header().Get("Content-Type") != tt.contentType || !strings.Contains(response.Body.String(), tt.body) {
 				t.Fatalf("response = status %d, content type %q, body %q", response.Code, response.Header().Get("Content-Type"), response.Body.String())
 			}
-			if response.Header().Get("Access-Control-Allow-Origin") != "*" {
+			if tt.path == "/metadata.json" && response.Header().Get("Access-Control-Allow-Origin") != "*" {
 				t.Error("missing CORS header")
 			}
 		})

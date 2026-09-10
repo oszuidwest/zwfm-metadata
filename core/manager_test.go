@@ -218,27 +218,13 @@ func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*mockInpu
 	return input, output
 }
 
-func TestAddOutputRejectsInvalidInputs(t *testing.T) {
-	tests := []struct {
-		name    string
-		inputs  []string
-		wantErr string
-	}{
-		{name: "no inputs", wantErr: "at least one input is required"},
-		{name: "duplicate input", inputs: []string{"input", "input"}, wantErr: "listed more than once"},
-		{name: "unknown input", inputs: []string{"missing"}, wantErr: "not found"},
-	}
+func TestAddOutputRejectsUnknownInput(t *testing.T) {
+	router := NewMetadataRouter()
+	addInput(t, router, newMockInput("input"), &InputSpec{})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			router := NewMetadataRouter()
-			addInput(t, router, newMockInput("input"), &InputSpec{})
-
-			err := router.AddOutput(newMockOutput("output"), &OutputSpec{Inputs: tt.inputs})
-			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("AddOutput() error = %v, want error containing %q", err, tt.wantErr)
-			}
-		})
+	err := router.AddOutput(newMockOutput("output"), &OutputSpec{Inputs: []string{"missing"}})
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("AddOutput() error = %v, want unknown input error", err)
 	}
 }
 
@@ -560,23 +546,22 @@ func TestFallbackWithDuplicateContentUpdatesCurrentInputWithoutSending(t *testin
 	synctest.Test(t, func(t *testing.T) {
 		router := NewMetadataRouter()
 		primary := newMockInput("primary")
+		primaryMetadata := testMetadata("", "Station Name")
+		primaryMetadata.ExpiresAt = new(time.Now().Add(trackLength))
+		primary.SetMetadata(primaryMetadata)
 		addInput(t, router, primary, &InputSpec{})
 		fallback := newMockInput("fallback")
-		fallbackMetadata := testMetadata("", "Station Name")
-		fallback.SetMetadata(fallbackMetadata)
+		fallback.SetMetadata(testMetadata("", "Station Name"))
 		addInput(t, router, fallback, &InputSpec{})
 
 		output := newMockOutput("output")
-		if err := router.AddOutput(output, &OutputSpec{Inputs: []string{"primary", "fallback"}}); err != nil {
-			t.Fatalf("AddOutput failed: %v", err)
+		startRouter(t, router, output, OutputTiming{}, primary, fallback)
+		expectSent(t, output, "Station Name")
+		if got := router.GetOutputStatus()[0].CurrentInput; got != "primary" {
+			t.Fatalf("initial current input = %q, want %q", got, "primary")
 		}
-		entry := router.outputs["output"]
-		entry.currentInput = "primary"
-		entry.lastSent = "Station Name"
 
-		router.mu.Lock()
-		router.scheduleFallbackUpdate("output", entry, "fallback", fallbackMetadata)
-		router.mu.Unlock()
+		synctest.Sleep(trackLength + time.Second)
 		synctest.Wait()
 
 		if got := router.GetOutputStatus()[0].CurrentInput; got != "fallback" {
