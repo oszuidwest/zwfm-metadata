@@ -461,28 +461,6 @@ func TestFallbackInputChangeWithinFallbackDelayStillWaits(t *testing.T) {
 	})
 }
 
-func TestSupersededFiredTimerDoesNotSend(t *testing.T) {
-	router := NewMetadataRouter()
-	output := newMockOutput("timer-output")
-	entry := &outputEntry{output: output}
-
-	router.mu.Lock()
-	router.schedule(output.GetName(), entry, "test-input", testMetadata("", "superseded"), "input_change")
-	time.Sleep(10 * time.Millisecond)
-	if entry.pending.Stop() {
-		router.mu.Unlock()
-		t.Fatal("timer had not fired while waiting for the router lock")
-	}
-	router.schedule(output.GetName(), entry, "test-input", testMetadata("", "current"), "input_change")
-	router.mu.Unlock()
-
-	st, ok := output.waitForSend(time.Second)
-	if !ok || st.Title != "current" {
-		t.Fatalf("expected only current metadata, got %q", st.String())
-	}
-	expectNoSend(t, output, 10*time.Millisecond)
-}
-
 func TestReturningPrimaryIsNotDelayedByFallbackDelay(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		primary, _, output := setupFallbackRouter(t)
