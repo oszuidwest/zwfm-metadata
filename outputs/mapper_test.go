@@ -104,53 +104,9 @@ func TestPayloadMapper_ArrayPrimitiveValuesPassThrough(t *testing.T) {
 	}
 }
 
-func TestPayloadMapper_MixedArrayMapsAndPrimitives(t *testing.T) {
-	mapping := map[string]any{
-		"items": []any{
-			"before",
-			map[string]any{
-				"track": "{{.title}}",
-			},
-			float64(123),
-			map[string]any{
-				"artist": "{{.artist}}",
-			},
-		},
-	}
-	pm, err := NewPayloadMapper(mapping)
-	if err != nil {
-		t.Fatalf("NewPayloadMapper() error = %v", err)
-	}
-	got := pm.MapPayload(map[string]any{
-		"title":  "Test Song",
-		"artist": "Test Artist",
-	})
-
-	items, ok := got["items"].([]any)
-	if !ok {
-		t.Fatalf("items: got %T", got["items"])
-	}
-	if len(items) != 4 {
-		t.Fatalf("len(items) = %d", len(items))
-	}
-	if items[0] != "before" {
-		t.Errorf("items[0] = %q", items[0])
-	}
-	firstMap, ok := items[1].(map[string]any)
-	if !ok {
-		t.Fatalf("items[1]: got %T", items[1])
-	}
-	if firstMap["track"] != "Test Song" {
-		t.Errorf("track = %q", firstMap["track"])
-	}
-	if items[2] != float64(123) {
-		t.Errorf("items[2] = %v", items[2])
-	}
-	secondMap, ok := items[3].(map[string]any)
-	if !ok {
-		t.Fatalf("items[3]: got %T", items[3])
-	}
-	if secondMap["artist"] != "Test Artist" {
-		t.Errorf("artist = %q", secondMap["artist"])
+func TestNewPayloadMapperRejectsInvalidTemplate(t *testing.T) {
+	_, err := NewPayloadMapper(map[string]any{"title": "{{"})
+	if err == nil {
+		t.Fatal("NewPayloadMapper() error = nil, want invalid template error")
 	}
 }

@@ -71,19 +71,19 @@ func (d *DynamicInput) fixedExpiration() time.Time {
 	return time.Now().Add(time.Duration(d.settings.Expiration.Minutes) * time.Minute)
 }
 
-// dynamicExpiration expires the track when its duration has elapsed. A missing or
-// invalid duration falls back to the fixed expiration, which is immediate when no
-// minutes are configured.
+// dynamicExpiration expires the track when its duration has elapsed. A missing,
+// zero, or invalid duration falls back to the fixed expiration, which is immediate
+// when no minutes are configured.
 func (d *DynamicInput) dynamicExpiration(duration string) time.Time {
 	seconds, ok := utils.ParseDurationToSeconds(duration)
-	if ok {
+	if ok && seconds > 0 {
 		return time.Now().Add(time.Duration(seconds) * time.Second)
 	}
 
 	slog.Error("Invalid duration - using fixed expiration",
 		"input", d.GetName(),
 		"duration", duration,
-		"expected", "seconds, MM:SS, or HH:MM:SS",
+		"expected", "positive seconds, MM:SS, or HH:MM:SS",
 		"fallback_minutes", d.settings.Expiration.Minutes,
 	)
 	return d.fixedExpiration()

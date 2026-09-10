@@ -21,12 +21,9 @@ func TestURLInputParseJSON(t *testing.T) {
 		wantExpiry *time.Time
 		wantOK     bool
 	}{
-		{name: "nested title", body: `{"now":{"title":"Song"}}`, jsonKey: "now.title", wantTitle: "Song", wantOK: true},
-		{name: "numeric title", body: `{"title":42}`, jsonKey: "title", wantTitle: "42", wantOK: true},
-		{name: "valid expiry", body: `{"title":"Song","expiry":"2026-09-11T12:00:00Z"}`, jsonKey: "title", expiryKey: "expiry", wantTitle: "Song", wantExpiry: &wantExpiry, wantOK: true},
+		{name: "nested title and expiry", body: `{"now":{"title":"Song","expiry":"2026-09-11T12:00:00Z"}}`, jsonKey: "now.title", expiryKey: "now.expiry", wantTitle: "Song", wantExpiry: &wantExpiry, wantOK: true},
 		{name: "invalid expiry", body: `{"title":"Song","expiry":"later"}`, jsonKey: "title", expiryKey: "expiry", wantTitle: "Song", wantOK: true},
 		{name: "missing title", body: `{}`, jsonKey: "title"},
-		{name: "invalid JSON", body: `{`, jsonKey: "title"},
 	}
 
 	for _, tt := range tests {

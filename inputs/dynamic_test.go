@@ -21,7 +21,7 @@ func TestDynamicInputUpdateMetadataExpiration(t *testing.T) {
 		{name: "none", mode: "none"},
 		{name: "fixed", mode: "fixed", minutes: 2, wantExpiry: true, wantAfter: 2 * time.Minute},
 		{name: "dynamic", mode: "dynamic", duration: "90", wantExpiry: true, wantAfter: 90 * time.Second},
-		{name: "dynamic zero", mode: "dynamic", duration: "0", wantExpiry: true},
+		{name: "dynamic zero fallback", mode: "dynamic", minutes: 2, duration: "0", wantExpiry: true, wantAfter: 2 * time.Minute},
 		{name: "dynamic fallback", mode: "dynamic", minutes: 3, duration: "invalid", wantExpiry: true, wantAfter: 3 * time.Minute},
 	}
 
