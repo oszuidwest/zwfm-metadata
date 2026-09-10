@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"zwfm-metadata/config"
@@ -20,6 +21,9 @@ type DynamicInput struct {
 
 // NewDynamicInput initializes an HTTP API-driven input with the given settings.
 func NewDynamicInput(name string, settings config.DynamicInputConfig) (*DynamicInput, error) {
+	if settings.Expiration.Minutes < 0 {
+		return nil, errors.New("expiration.minutes must not be negative")
+	}
 	switch settings.Expiration.Type {
 	case "dynamic", "fixed", "none", "":
 	default:
@@ -66,24 +70,21 @@ func (d *DynamicInput) UpdateMetadata(update *core.MetadataRequest) error {
 	return nil
 }
 
-// fixedExpiration is now plus the configured minutes, which is "now" when none are configured.
 func (d *DynamicInput) fixedExpiration() time.Time {
 	return time.Now().Add(time.Duration(d.settings.Expiration.Minutes) * time.Minute)
 }
 
-// dynamicExpiration expires the track when its duration has elapsed. A missing,
-// zero, or invalid duration falls back to the fixed expiration, which is immediate
-// when no minutes are configured.
+// dynamicExpiration uses the configured fixed fallback for invalid durations.
 func (d *DynamicInput) dynamicExpiration(duration string) time.Time {
 	seconds, ok := utils.ParseDurationToSeconds(duration)
-	if ok && seconds > 0 {
+	maxSeconds := math.MaxInt64 / int64(time.Second)
+	if ok && seconds > 0 && int64(seconds) <= maxSeconds {
 		return time.Now().Add(time.Duration(seconds) * time.Second)
 	}
 
 	slog.Error("Invalid duration - using fixed expiration",
 		"input", d.GetName(),
 		"duration", duration,
-		"expected", "positive seconds, MM:SS, or HH:MM:SS",
 		"fallback_minutes", d.settings.Expiration.Minutes,
 	)
 	return d.fixedExpiration()

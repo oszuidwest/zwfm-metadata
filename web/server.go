@@ -1,5 +1,4 @@
-// Package web provides HTTP server functionality including a dashboard interface,
-// REST API endpoints, and WebSocket connections for real-time updates.
+// Package web serves the dashboard and metadata HTTP endpoints.
 package web
 
 import (
@@ -17,9 +16,11 @@ import (
 	"zwfm-metadata/utils"
 )
 
-const cacheControlNoCache = "public, max-age=0, must-revalidate"
+const (
+	cacheControlNoCache = "public, max-age=0, must-revalidate"
+	shutdownTimeout     = 15 * time.Second
+)
 
-// metadataUpdater is satisfied by inputs that accept metadata updates via the HTTP API.
 type metadataUpdater interface {
 	UpdateMetadata(update *core.MetadataRequest) error
 }
@@ -31,10 +32,9 @@ type Server struct {
 	server        *http.Server
 	dashboardHub  *utils.WebSocketHub
 	dashboardPage []byte
-	assets        map[string]asset // URL path -> pre-generated icon
+	assets        map[string]asset
 }
 
-// dashboardData is the payload pushed to dashboard WebSocket clients.
 type dashboardData struct {
 	Inputs  []core.InputStatus  `json:"inputs"`
 	Outputs []core.OutputStatus `json:"outputs"`
@@ -62,7 +62,7 @@ func NewServer(port int, router *core.MetadataRouter, stationName, brandColor st
 	return s, nil
 }
 
-// Start launches the HTTP server and blocks until context cancellation.
+// Start serves HTTP until ctx is canceled or the server fails.
 func (s *Server) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 
@@ -107,7 +107,9 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	case <-ctx.Done():
 		slog.Info("Shutting down web server")
-		if err := s.server.Shutdown(context.Background()); err != nil {
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
+		defer cancelShutdown()
+		if err := s.server.Shutdown(shutdownCtx); err != nil {
 			return err
 		}
 		if err := <-serveErr; !errors.Is(err, http.ErrServerClosed) {
@@ -117,7 +119,6 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 }
 
-// noIndexMiddleware adds headers to prevent search engine indexing.
 func noIndexMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet, noimageindex")
@@ -125,7 +126,6 @@ func noIndexMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// dynamicInputHandler accepts metadata updates via HTTP GET parameters.
 func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 	query := req.URL.Query()
 	inputName := query.Get("input")
@@ -165,7 +165,6 @@ func (s *Server) dynamicInputHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// dashboardHandler serves the HTML dashboard.
 func (s *Server) dashboardHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -174,7 +173,6 @@ func (s *Server) dashboardHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-// serveAsset returns a handler that serves a pre-generated static asset.
 func serveAsset(a asset) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", a.contentType)
@@ -186,7 +184,6 @@ func serveAsset(a asset) http.HandlerFunc {
 	}
 }
 
-// getDashboardData builds the input/output status payload for WebSocket clients.
 func (s *Server) getDashboardData() any {
 	return dashboardData{
 		Inputs:  s.router.GetInputStatus(),
@@ -194,17 +191,17 @@ func (s *Server) getDashboardData() any {
 	}
 }
 
-// startPeriodicDashboardUpdates checks the status every second and broadcasts it to
-// connected dashboard clients when it differs from the last broadcast.
+// startPeriodicDashboardUpdates broadcasts only changed dashboard state.
 func (s *Server) startPeriodicDashboardUpdates(ctx context.Context) {
-	ticks := time.Tick(1 * time.Second)
+	ticks := time.NewTicker(time.Second)
+	defer ticks.Stop()
 
 	var lastSent []byte
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticks:
+		case <-ticks.C:
 			if s.dashboardHub.ClientCount() == 0 {
 				continue
 			}

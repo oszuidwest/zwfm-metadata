@@ -38,8 +38,8 @@ var stereoToolFields = []struct {
 	id   int
 	name string
 }{
-	{6751, "Streaming Output Song"},
-	{9985, "FM RDS Radio Text"},
+	{id: 6751, name: "Streaming Output Song"},
+	{id: 9985, name: "FM RDS Radio Text"},
 }
 
 func (i *StereoToolOutput) sendToStereoTool(metadata string) error {

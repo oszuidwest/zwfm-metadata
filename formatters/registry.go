@@ -1,5 +1,4 @@
-// Package formatters provides text formatting capabilities for metadata,
-// including case transformations and specialized formatting for radio systems.
+// Package formatters transforms metadata for output protocols.
 package formatters
 
 import (

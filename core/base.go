@@ -23,7 +23,7 @@ type InputBase struct {
 	mu          sync.RWMutex
 }
 
-// NewInputBase initializes an InputBase with the given name.
+// NewInputBase returns an input base with the given name.
 func NewInputBase(name string) *InputBase {
 	return &InputBase{name: name}
 }
@@ -88,7 +88,7 @@ type OutputBase struct {
 	name string
 }
 
-// NewOutputBase initializes an OutputBase with the given name.
+// NewOutputBase returns an output base with the given name.
 func NewOutputBase(name string) *OutputBase {
 	return &OutputBase{name: name}
 }

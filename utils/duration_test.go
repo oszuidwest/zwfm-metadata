@@ -1,6 +1,10 @@
 package utils
 
-import "testing"
+import (
+	"fmt"
+	"math"
+	"testing"
+)
 
 func TestParseDurationToSeconds(t *testing.T) {
 	tests := []struct {
@@ -17,6 +21,8 @@ func TestParseDurationToSeconds(t *testing.T) {
 		{name: "zero clock", input: "0:00", want: 0, wantOK: true},
 		{name: "non-numeric", input: "abc", want: 0, wantOK: false},
 		{name: "seconds out of range", input: "3:60", want: 0, wantOK: false},
+		{name: "seconds overflow", input: fmt.Sprint(math.MaxInt), want: 0, wantOK: false},
+		{name: "clock overflow", input: fmt.Sprintf("%d:00", math.MaxInt), want: 0, wantOK: false},
 	}
 
 	for _, tt := range tests {

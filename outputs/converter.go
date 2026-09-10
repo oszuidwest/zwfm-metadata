@@ -6,7 +6,7 @@ import (
 	"zwfm-metadata/core"
 )
 
-// UniversalMetadata represents the common metadata structure used across all outputs.
+// UniversalMetadata is the shared serialized output shape.
 type UniversalMetadata struct {
 	Type              string     `json:"type,omitzero"`
 	FormattedMetadata string     `json:"formatted_metadata"`
@@ -20,7 +20,7 @@ type UniversalMetadata struct {
 	SourceType        string     `json:"source_type,omitzero"`
 }
 
-// ConvertStructuredText converts a StructuredText to UniversalMetadata.
+// ConvertStructuredText preserves original timestamps and unformatted fields.
 func ConvertStructuredText(st *core.StructuredText) *UniversalMetadata {
 	if st == nil {
 		return &UniversalMetadata{UpdatedAt: time.Now()}

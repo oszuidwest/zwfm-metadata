@@ -23,6 +23,7 @@ func TestDynamicInputUpdateMetadataExpiration(t *testing.T) {
 		{name: "dynamic", mode: "dynamic", duration: "90", wantExpiry: true, wantAfter: 90 * time.Second},
 		{name: "dynamic zero fallback", mode: "dynamic", minutes: 2, duration: "0", wantExpiry: true, wantAfter: 2 * time.Minute},
 		{name: "dynamic fallback", mode: "dynamic", minutes: 3, duration: "invalid", wantExpiry: true, wantAfter: 3 * time.Minute},
+		{name: "dynamic overflow fallback", mode: "dynamic", minutes: 2, duration: "10000000000", wantExpiry: true, wantAfter: 2 * time.Minute},
 	}
 
 	for _, tt := range tests {
@@ -60,5 +61,13 @@ func TestNewDynamicInputRejectsUnknownExpiration(t *testing.T) {
 	_, err := NewDynamicInput("test", settings)
 	if err == nil || !strings.Contains(err.Error(), "expiration.type") {
 		t.Fatalf("NewDynamicInput() error = %v", err)
+	}
+}
+
+func TestNewDynamicInputRejectsNegativeExpiration(t *testing.T) {
+	var settings config.DynamicInputConfig
+	settings.Expiration.Minutes = -1
+	if _, err := NewDynamicInput("test", settings); err == nil {
+		t.Fatal("NewDynamicInput() error = nil, want negative expiration error")
 	}
 }

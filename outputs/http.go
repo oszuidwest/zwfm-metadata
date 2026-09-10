@@ -14,15 +14,12 @@ import (
 	"zwfm-metadata/core"
 )
 
-// httpEndpoint is a configured endpoint with its response type normalised and
-// its payload mapping compiled.
 type httpEndpoint struct {
 	path         string
 	responseType string // "json", "xml", or "text"
 	mapper       *PayloadMapper
 }
 
-// httpResponse is a rendered endpoint body.
 type httpResponse struct {
 	data        []byte
 	contentType string
@@ -128,9 +125,7 @@ func (h *HTTPOutput) serve(w http.ResponseWriter, path string) {
 	}
 }
 
-// render produces the response body: the mapped payload when a mapping is
-// configured (a single string value is served raw for xml and text), otherwise
-// the standard metadata in the configured format.
+// render serves single mapped strings raw for XML and text; other mappings use JSON.
 func (e httpEndpoint) render(metadata *UniversalMetadata) (httpResponse, error) {
 	if e.mapper != nil {
 		mapped := e.mapper.MapPayload(metadata.ToTemplateData())

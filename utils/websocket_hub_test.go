@@ -291,7 +291,6 @@ func TestWebSocketHubBroadcastMarshalFailure(t *testing.T) {
 func TestWebSocketHubOnConnectMarshalFailureRemovesClient(t *testing.T) {
 	hub := NewWebSocketHub("test")
 
-	// Return an un-marshalable value from onConnect.
 	hub.SetOnConnect(func() any {
 		return make(chan int)
 	})

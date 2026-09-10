@@ -1,5 +1,4 @@
-// Package config provides configuration management for the metadata router
-// including loading and validation of input, output, and formatter settings.
+// Package config loads the router's JSON configuration.
 package config
 
 import (
@@ -41,18 +40,18 @@ type OutputConfig struct {
 // FilterConfig defines a metadata filter with a type and type-specific settings.
 type FilterConfig struct {
 	Type       string `json:"type"`
-	Field      string `json:"field,omitempty"`      // For pattern filter
-	Pattern    string `json:"pattern,omitempty"`    // For pattern filter
-	Action     string `json:"action,omitempty"`     // For pattern filter
-	MinSeconds int    `json:"minSeconds,omitempty"` // For duration filter
+	Field      string `json:"field,omitempty"`      // pattern filter
+	Pattern    string `json:"pattern,omitempty"`    // pattern filter
+	Action     string `json:"action,omitempty"`     // pattern filter
+	MinSeconds int    `json:"minSeconds,omitempty"` // duration filter
 }
 
 // DynamicInputConfig holds settings for HTTP API-driven metadata updates with optional expiration.
 type DynamicInputConfig struct {
 	Secret     string `json:"secret"`
 	Expiration struct {
-		Type    string `json:"type"`              // "dynamic", "fixed", "none"
-		Minutes int    `json:"minutes,omitempty"` // Fallback minutes for dynamic, or fixed duration
+		Type    string `json:"type"`              // "dynamic", "fixed", or "none"
+		Minutes int    `json:"minutes,omitempty"` // dynamic fallback or fixed duration
 	} `json:"expiration"`
 }
 
@@ -88,9 +87,9 @@ type FileOutputConfig struct {
 // URLOutputConfig holds settings for sending metadata via HTTP GET or POST requests.
 type URLOutputConfig struct {
 	URL            string         `json:"url"`
-	Method         string         `json:"method,omitempty"` // GET or POST (required)
+	Method         string         `json:"method,omitempty"` // GET or POST
 	BearerToken    string         `json:"bearerToken,omitempty"`
-	PayloadMapping map[string]any `json:"payloadMapping,omitempty"` // Only for POST
+	PayloadMapping map[string]any `json:"payloadMapping,omitempty"` // POST only
 }
 
 // DLPlusOutputConfig holds settings for DAB/DAB+ DL Plus text output.

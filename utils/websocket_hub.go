@@ -19,7 +19,6 @@ type hubClient struct {
 	closeOnce sync.Once
 }
 
-// signalDone closes the done channel exactly once to signal the write pump to exit.
 func (c *hubClient) signalDone() {
 	c.closeOnce.Do(func() {
 		close(c.done)
@@ -67,7 +66,6 @@ func (h *WebSocketHub) SetOnDisconnect(fn func()) {
 	h.onDisconnect = fn
 }
 
-// removeClient unregisters the client and reports whether it was still registered.
 func (h *WebSocketHub) removeClient(client *hubClient) (int, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -145,7 +143,8 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 // It is the only goroutine that writes to the connection, guaranteeing single-writer
 // safety by construction. Pings and close frames are also handled here.
 func (h *WebSocketHub) writePump(client *hubClient) {
-	pings := time.Tick(h.pingInterval)
+	pings := time.NewTicker(h.pingInterval)
+	defer pings.Stop()
 	defer h.disconnectClient(client)
 
 	for {
@@ -168,7 +167,7 @@ func (h *WebSocketHub) writePump(client *hubClient) {
 				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			return
 
-		case <-pings:
+		case <-pings.C:
 			if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
 				slog.Debug("WebSocket ping deadline failed", "hub", h.name, "error", err)
 				return

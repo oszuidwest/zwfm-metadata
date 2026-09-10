@@ -11,7 +11,8 @@ import (
 	"time"
 )
 
-// httpClient is the shared HTTP client for all requests.
+const maxErrorBodyBytes = 4 << 10
+
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -20,13 +21,13 @@ var httpClient = &http.Client{
 		}
 		if len(via) > 0 && strings.HasPrefix(via[0].Header.Get("Authorization"), "Bearer ") &&
 			req.URL.Scheme != "https" {
-			return errors.New("refusing to redirect bearer token to non-HTTPS URL")
+			return errors.New("refusing to redirect bearer token to non-https url")
 		}
 		return nil
 	},
 }
 
-// Get performs an HTTP GET request with standard headers.
+// Get issues an HTTP GET through the shared client.
 func Get(ctx context.Context, rawURL string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
@@ -35,13 +36,12 @@ func Get(ctx context.Context, rawURL string) (*http.Response, error) {
 	return do(req)
 }
 
-// do executes an HTTP request with the shared client and User-Agent.
 func do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("User-Agent", UserAgent())
-	return httpClient.Do(req) //nolint:gosec // URL is from validated user configuration
+	return httpClient.Do(req) //nolint:gosec // Targets are supplied by the operator.
 }
 
-// DoOK executes an HTTP request and reports non-2xx responses as errors including the response body.
+// DoOK reports non-2xx responses with up to 4 KiB of response body.
 func DoOK(req *http.Request) error {
 	resp, err := do(req)
 	if err != nil {
@@ -50,20 +50,26 @@ func DoOK(req *http.Request) error {
 	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+		if readErr != nil {
+			return fmt.Errorf("status %d: read response body: %w", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("status %d: %s", resp.StatusCode, body)
 	}
 	return nil
 }
 
-// ValidateHTTPURL checks that a configured URL parses and uses the http or https scheme.
+// ValidateHTTPURL accepts absolute HTTP and HTTPS URLs.
 func ValidateHTTPURL(rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("invalid URL %q: %w", rawURL, err)
+		return fmt.Errorf("invalid url %q: %w", rawURL, err)
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("URL %q must use http or https scheme, got %q", rawURL, parsed.Scheme)
+		return fmt.Errorf("url %q must use http or https scheme, got %q", rawURL, parsed.Scheme)
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("url %q must include a host", rawURL)
 	}
 	return nil
 }

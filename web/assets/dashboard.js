@@ -1,17 +1,14 @@
-// Store previous data to detect changes
 const previousData = {
     inputs: {},
     outputs: {},
     stats: {},
 };
 
-// WebSocket connection
 let ws = null;
 let reconnectTimeout = null;
 let reconnectDelay = 1000;
 const maxReconnectDelay = 30000;
 
-// DOM Element Factory Helpers
 function el(tag, className, textContent) {
     const element = document.createElement(tag);
     if (className) {
@@ -68,7 +65,6 @@ function createMetadataCard(name, type, headerClass, hasChanged) {
     return { card, body };
 }
 
-// Configuration Constants
 const STATUS_CONFIG = {
     available: { dot: 'bg-success', text: 'text-success', label: 'Available' },
     expired: { dot: 'bg-warning', text: 'text-warning', label: 'Expired' },
@@ -97,7 +93,6 @@ const CARD_HEADER_CLASSES = {
     output: 'card-header-slate',
 };
 
-// Data Management Helpers
 function hasDataChanged(current, previous, compareKeys) {
     if (!previous) {
         return true;
@@ -112,7 +107,6 @@ function hasDataChanged(current, previous, compareKeys) {
     });
 }
 
-// WebSocket Management
 function establishWebSocketConnection() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/dashboard`;
@@ -172,8 +166,7 @@ function formatDisplayTime(timestamp, useRelative) {
     return date.toLocaleTimeString();
 }
 
-// The server only pushes an update when something changed, so relative
-// timestamps ("12s ago") are re-rendered locally every second.
+// Refresh relative times locally because the server pushes only state changes.
 function refreshRelativeTimes() {
     for (const element of document.querySelectorAll('[data-timestamp]')) {
         element.textContent = formatDisplayTime(
@@ -213,7 +206,6 @@ function updateStatistics(data) {
     }
 }
 
-// Input card DOM builders
 function buildMetadataBox(metadata) {
     if (!metadata) {
         return null;
@@ -442,7 +434,6 @@ function processDashboardUpdate(data) {
     updateOutputCards(data.outputs);
 }
 
-// Initialize
 updateConnectionStatus('connecting');
 establishWebSocketConnection();
 setInterval(refreshRelativeTimes, 1000);

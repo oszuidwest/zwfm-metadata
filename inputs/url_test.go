@@ -1,6 +1,7 @@
 package inputs
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -57,8 +58,44 @@ func TestURLInputPollRejectsUnsuccessfulStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input.poll()
+	input.poll(context.Background())
 	if input.GetMetadata() != nil {
 		t.Fatal("unsuccessful response replaced metadata")
+	}
+}
+
+func TestNewURLInputRejectsNilSettings(t *testing.T) {
+	if _, err := NewURLInput("test", nil); err == nil {
+		t.Fatal("NewURLInput() error = nil, want missing settings error")
+	}
+}
+
+func TestURLInputStartCancelsActiveRequest(t *testing.T) {
+	requestStarted := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+
+	input, err := NewURLInput("test", &config.URLInputConfig{URL: server.URL, PollingInterval: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		done <- input.Start(ctx)
+	}()
+
+	<-requestStarted
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Start() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Start() did not stop after cancellation")
 	}
 }

@@ -7,11 +7,9 @@ import (
 	"strings"
 )
 
-// secondsFormatRe matches whole seconds or seconds with decimal places.
 var secondsFormatRe = regexp.MustCompile(`^\d+(?:[.,]\d+)?$`)
 
-// ParseDurationToSeconds parses a duration string to total seconds.
-// Supports formats: "272", "272.5", "3:45", "03:45", "1:30:00".
+// ParseDurationToSeconds accepts seconds, MM:SS, or HH:MM:SS and rounds fractions.
 func ParseDurationToSeconds(duration string) (int, bool) {
 	duration = strings.TrimSpace(duration)
 
@@ -20,7 +18,11 @@ func ParseDurationToSeconds(duration string) (int, bool) {
 		if err != nil {
 			return 0, false
 		}
-		return int(math.Round(seconds)), true
+		rounded := math.Round(seconds)
+		if rounded >= float64(math.MaxInt) {
+			return 0, false
+		}
+		return int(rounded), true
 	}
 
 	// MM:SS or HH:MM:SS; every part after the first must be below 60.
@@ -33,6 +35,9 @@ func ParseDurationToSeconds(duration string) (int, bool) {
 	for i, part := range parts {
 		n, err := strconv.Atoi(part)
 		if err != nil || n < 0 || (i > 0 && n >= 60) {
+			return 0, false
+		}
+		if total > (math.MaxInt-n)/60 {
 			return 0, false
 		}
 		total = total*60 + n

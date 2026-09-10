@@ -7,7 +7,6 @@ import (
 	"text/template"
 )
 
-// templateFuncs is the function set available in all metadata templates.
 var templateFuncs = template.FuncMap{
 	"lower": strings.ToLower,
 	"upper": strings.ToUpper,
@@ -18,7 +17,7 @@ var templateFuncs = template.FuncMap{
 // come from JSON config: strings (optionally templates), objects, and arrays.
 type PayloadMapper struct {
 	mapping   map[string]any
-	templates map[string]*template.Template // template string -> compiled template
+	templates map[string]*template.Template
 }
 
 // NewPayloadMapper compiles every template string in the mapping. A nil mapping
@@ -38,7 +37,6 @@ func NewPayloadMapper(mapping map[string]any) (*PayloadMapper, error) {
 	return pm, nil
 }
 
-// compileTemplates walks the mapping tree and compiles every template string it contains.
 func (pm *PayloadMapper) compileTemplates(value any) error {
 	switch v := value.(type) {
 	case string:
@@ -72,7 +70,6 @@ func (pm *PayloadMapper) compileTemplates(value any) error {
 	return nil
 }
 
-// isTemplate reports whether a mapping string contains template syntax.
 func isTemplate(s string) bool {
 	return strings.Contains(s, "{{")
 }
@@ -90,7 +87,6 @@ func (pm *PayloadMapper) MapPayload(data any) map[string]any {
 	return pm.processMapping(pm.mapping, data)
 }
 
-// processMapping walks the mapping tree and applies templates to strings, nested maps, and object slices.
 func (pm *PayloadMapper) processMapping(mapping map[string]any, data any) map[string]any {
 	result := make(map[string]any, len(mapping))
 	for key, value := range mapping {
@@ -108,7 +104,6 @@ func (pm *PayloadMapper) processMapping(mapping map[string]any, data any) map[st
 	return result
 }
 
-// processMappingSlice expands templates inside array-of-object mappings; other elements are copied as-is.
 func (pm *PayloadMapper) processMappingSlice(items []any, data any) []any {
 	out := make([]any, len(items))
 	for i, item := range items {
@@ -121,7 +116,6 @@ func (pm *PayloadMapper) processMappingSlice(items []any, data any) []any {
 	return out
 }
 
-// processTemplate executes the compiled template for s, or returns s when it is not a template.
 func (pm *PayloadMapper) processTemplate(s string, data any) string {
 	tmpl := pm.templates[s]
 	if tmpl == nil {

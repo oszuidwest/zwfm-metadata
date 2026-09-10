@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -23,6 +24,9 @@ type URLInput struct {
 
 // NewURLInput creates a URLInput with the given name and settings.
 func NewURLInput(name string, settings *config.URLInputConfig) (*URLInput, error) {
+	if settings == nil {
+		return nil, errors.New("settings are required")
+	}
 	if err := utils.ValidateHTTPURL(settings.URL); err != nil {
 		return nil, err
 	}
@@ -39,13 +43,15 @@ func NewURLInput(name string, settings *config.URLInputConfig) (*URLInput, error
 // Start polls on the configured interval, and additionally as soon as the current
 // metadata expires, until context cancellation.
 func (u *URLInput) Start(ctx context.Context) error {
-	polls := time.Tick(time.Duration(u.settings.PollingInterval) * time.Second)
+	polls := time.NewTicker(time.Duration(u.settings.PollingInterval) * time.Second)
+	defer polls.Stop()
 
 	expiry := time.NewTimer(0)
 	expiry.Stop()
+	defer expiry.Stop()
 
 	for {
-		u.poll()
+		u.poll(ctx)
 		if metadata := u.GetMetadata(); metadata != nil && metadata.ExpiresAt != nil {
 			if until := time.Until(*metadata.ExpiresAt); until > 0 {
 				expiry.Reset(until)
@@ -59,14 +65,14 @@ func (u *URLInput) Start(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-polls:
+		case <-polls.C:
 		case <-expiry.C:
 		}
 	}
 }
 
-func (u *URLInput) poll() {
-	resp, err := utils.Get(context.Background(), u.settings.URL)
+func (u *URLInput) poll(ctx context.Context) {
+	resp, err := utils.Get(ctx, u.settings.URL)
 	if err != nil {
 		slog.Error("Failed to fetch data from URL input", "input", u.GetName(), "error", err)
 		return
@@ -99,8 +105,7 @@ func (u *URLInput) poll() {
 	u.SetMetadata(metadata)
 }
 
-// parseJSON extracts the title and optional expiry from a JSON body. It reports
-// false when the title cannot be found; a bad expiry is logged and ignored.
+// parseJSON rejects a missing title but ignores an invalid optional expiry.
 func (u *URLInput) parseJSON(body []byte) (title string, expiresAt *time.Time, ok bool) {
 	var data any
 	if err := json.Unmarshal(body, &data); err != nil {
@@ -138,7 +143,6 @@ func (u *URLInput) parseJSON(body []byte) (title string, expiresAt *time.Time, o
 	return title, &t, true
 }
 
-// extractJSONValue navigates a JSON structure using a dot-separated key path.
 func extractJSONValue(data any, keyPath string) (any, bool) {
 	current := data
 	for key := range strings.SplitSeq(keyPath, ".") {

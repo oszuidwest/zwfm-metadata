@@ -18,23 +18,21 @@ type OutputTiming struct {
 	FallbackDelay int `json:"fallbackDelay"`
 }
 
-// InputSpec describes how the router treats an input: the text wrapped around its
-// metadata and the filters applied before any output sees it.
+// InputSpec configures preprocessing for an input.
 type InputSpec struct {
 	Type        string
 	Prefix      string
 	Suffix      string
 	Filters     []Filter
-	FilterNames []string // filter type names, for the dashboard
+	FilterNames []string // dashboard labels
 }
 
-// OutputSpec describes an output's sources in priority order, its formatter chain,
-// and its delivery timing.
+// OutputSpec configures an output's sources, formatting, and timing.
 type OutputSpec struct {
 	Type           string
 	Inputs         []string
 	Formatters     []Formatter
-	FormatterNames []string // for the dashboard
+	FormatterNames []string // dashboard labels
 	Timing         OutputTiming
 }
 
@@ -85,7 +83,7 @@ type outputEntry struct {
 	updateMu     sync.Mutex
 }
 
-// MetadataRouter coordinates metadata flow between inputs and outputs with priority-based fallback and configurable delays.
+// MetadataRouter routes metadata by input priority and output timing.
 type MetadataRouter struct {
 	inputs  map[string]*inputEntry
 	outputs map[string]*outputEntry
@@ -94,7 +92,7 @@ type MetadataRouter struct {
 	mu      sync.RWMutex
 }
 
-// NewMetadataRouter initializes a router with empty input and output registries.
+// NewMetadataRouter returns an empty router.
 func NewMetadataRouter() *MetadataRouter {
 	return &MetadataRouter{
 		inputs:  make(map[string]*inputEntry),
@@ -269,7 +267,7 @@ func (mr *MetadataRouter) GetOutputStatus() []OutputStatus {
 	return statuses
 }
 
-// Start launches all inputs, outputs, and the expiration checker until context cancellation.
+// Start launches router workers, which stop when ctx is canceled.
 func (mr *MetadataRouter) Start(ctx context.Context) error {
 	mr.mu.Lock()
 
@@ -315,9 +313,7 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 	return nil
 }
 
-// processInitialMetadata schedules inputs that already hold metadata (static text).
-// No lock: mr.inputs is immutable after Start and scheduleInputChangeUpdates takes
-// the lock itself.
+// processInitialMetadata schedules preloaded inputs after configuration becomes immutable.
 func (mr *MetadataRouter) processInitialMetadata() {
 	for inputName, entry := range mr.inputs {
 		metadata := entry.input.GetMetadata()
@@ -377,7 +373,8 @@ func (mr *MetadataRouter) findHighestPriorityInput(entry *outputEntry) (string, 
 }
 
 func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
-	ticks := time.Tick(1 * time.Second)
+	ticks := time.NewTicker(time.Second)
+	defer ticks.Stop()
 
 	slog.Info("Started expiration checker (1 second interval)")
 
@@ -386,7 +383,7 @@ func (mr *MetadataRouter) startExpirationChecker(ctx context.Context) {
 		case <-ctx.Done():
 			mr.cancelPendingUpdates()
 			return
-		case <-ticks:
+		case <-ticks.C:
 			mr.checkForExpirations()
 		}
 	}
@@ -407,7 +404,6 @@ func (mr *MetadataRouter) cancelPendingUpdates() {
 	}
 }
 
-// checkForExpirations takes the write lock because it clears the current input of outputs left without inputs.
 func (mr *MetadataRouter) checkForExpirations() {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
@@ -564,7 +560,7 @@ func (mr *MetadataRouter) transformMetadataForOutput(
 	return st
 }
 
-// executeUpdate sends metadata to an output, skipping if content matches the last sent value.
+// executeUpdate records state only after changed content is delivered successfully.
 func (mr *MetadataRouter) executeUpdate(
 	outputName string, entry *outputEntry, inputName string, metadata *Metadata, reason string,
 ) {

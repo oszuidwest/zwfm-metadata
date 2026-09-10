@@ -15,7 +15,6 @@ import (
 
 const maxRDSLength = 64
 
-// Common patterns compiled once for reuse.
 var (
 	parenRegex   = regexp.MustCompile(`\s*\([^)]*\)`)
 	bracketRegex = regexp.MustCompile(`\s*\[[^\]]*\]`)
@@ -36,7 +35,6 @@ var multiCharMappings = map[rune]string{
 	'ǅ': "dz", 'ǆ': "Dz", 'Ǆ': "DZ",
 }
 
-// multiCharReplacer applies multiCharMappings in a single pass.
 var multiCharReplacer = func() *strings.Replacer {
 	pairs := make([]string, 0, 2*len(multiCharMappings))
 	for r, mapped := range multiCharMappings {
@@ -45,7 +43,6 @@ var multiCharReplacer = func() *strings.Replacer {
 	return strings.NewReplacer(pairs...)
 }()
 
-// nonASCIIToASCII maps single non-ASCII characters to their ASCII equivalents.
 var nonASCIIToASCII = map[rune]rune{
 	// Nordic/Scandinavian
 	'ø': 'o', 'Ø': 'O', 'å': 'a', 'Å': 'A',
@@ -166,7 +163,6 @@ func smartTruncate(st *core.StructuredText) {
 	}
 }
 
-// truncateAtWord shortens text to maxRunes, breaking at word boundaries when possible.
 func truncateAtWord(s string, maxRunes int) string {
 	if maxRunes <= 0 {
 		return ""
@@ -225,7 +221,6 @@ func filterVisibleText(text string) string {
 	return strings.TrimSpace(visible)
 }
 
-// transliterateToASCII converts non-ASCII characters to their closest ASCII equivalents.
 func transliterateToASCII(text string) string {
 	text = multiCharReplacer.Replace(text)
 
@@ -243,7 +238,6 @@ func transliterateToASCII(text string) string {
 	return result
 }
 
-// mapNonASCIIToASCII maps single non-ASCII characters to their ASCII equivalents.
 func mapNonASCIIToASCII(r rune) rune {
 	if r <= 127 {
 		return r

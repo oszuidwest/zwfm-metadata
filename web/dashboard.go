@@ -10,7 +10,6 @@ var cssContent string
 //go:embed assets/dashboard.js
 var jsContent string
 
-// dashboardHTML returns the HTML for the dashboard.
 func dashboardHTML(stationName, brandColor, version, buildYear string) string {
 	return `<!DOCTYPE html>
 <html lang="en">

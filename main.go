@@ -1,5 +1,4 @@
-// Package main implements a metadata router for radio stations that manages
-// multiple input sources and distributes formatted metadata to various outputs.
+// Package main runs the metadata router.
 package main
 
 import (
@@ -103,7 +102,7 @@ func main() {
 	slog.Info("Shutting down...")
 }
 
-// setupInput creates an input and its filters and registers them on the router.
+// setupInput builds and registers an input and its filters.
 func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error {
 	input, err := createInput(inputCfg)
 	if err != nil {
@@ -133,7 +132,7 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error
 	return nil
 }
 
-// setupOutput creates an output and its formatters and registers them on the router.
+// setupOutput builds and registers an output and its formatters.
 func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) error {
 	timing, err := utils.ParseJSONSettings[core.OutputTiming](outputCfg.Settings)
 	if err != nil {
@@ -173,7 +172,6 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 	return nil
 }
 
-// createInput instantiates an input based on the configuration type.
 func createInput(cfg *config.InputConfig) (core.Input, error) {
 	switch cfg.Type {
 	case "dynamic":
@@ -202,7 +200,6 @@ func createInput(cfg *config.InputConfig) (core.Input, error) {
 	}
 }
 
-// createOutput instantiates an output based on the configuration type.
 func createOutput(cfg *config.OutputConfig) (core.Output, error) {
 	switch cfg.Type {
 	case "icecast":

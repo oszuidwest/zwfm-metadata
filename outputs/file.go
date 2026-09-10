@@ -1,5 +1,4 @@
-// Package outputs provides various metadata output destinations including
-// files, HTTP endpoints, WebSockets, and radio broadcasting systems.
+// Package outputs delivers formatted metadata to external destinations.
 package outputs
 
 import (
