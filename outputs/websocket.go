@@ -3,7 +3,7 @@ package outputs
 import (
 	"log/slog"
 	"net/http"
-	"sync"
+	"sync/atomic"
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
@@ -14,18 +14,17 @@ import (
 type WebSocketOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
-	settings        config.WebSocketOutputConfig
-	hub             *utils.WebSocketHub
-	currentMetadata *UniversalMetadata
-	metadataMu      sync.RWMutex
-	payloadMapper   *PayloadMapper
+	settings      config.WebSocketOutputConfig
+	hub           *utils.WebSocketHub
+	current       atomic.Pointer[UniversalMetadata] // replayed to newly connected clients
+	payloadMapper *PayloadMapper
 }
 
 // NewWebSocketOutput creates a WebSocketOutput with the given name and settings.
-func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *WebSocketOutput {
-	var mapper *PayloadMapper
-	if settings.PayloadMapping != nil {
-		mapper = NewPayloadMapper(settings.PayloadMapping)
+func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) (*WebSocketOutput, error) {
+	mapper, err := NewPayloadMapper(settings.PayloadMapping)
+	if err != nil {
+		return nil, err
 	}
 
 	output := &WebSocketOutput{
@@ -36,15 +35,13 @@ func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) *Web
 	}
 
 	output.hub.SetOnConnect(func() any {
-		output.metadataMu.RLock()
-		defer output.metadataMu.RUnlock()
-		if output.currentMetadata != nil {
-			return output.preparePayload(output.currentMetadata)
+		if current := output.current.Load(); current != nil {
+			return output.payloadMapper.Apply(current)
 		}
 		return nil
 	})
 
-	return output
+	return output, nil
 }
 
 // RegisterRoutes registers the WebSocket endpoint on the server mux.
@@ -55,25 +52,9 @@ func (w *WebSocketOutput) RegisterRoutes(mux *http.ServeMux) {
 
 // Send broadcasts metadata to all connected WebSocket clients.
 func (w *WebSocketOutput) Send(st *core.StructuredText) {
-	msg := ConvertStructuredTextWithType(st, "metadata_update")
+	msg := ConvertStructuredText(st)
+	msg.Type = "metadata_update"
 
-	w.storeCurrentMetadata(msg)
-	w.hub.Broadcast(w.preparePayload(msg))
-}
-
-func (w *WebSocketOutput) storeCurrentMetadata(metadata *UniversalMetadata) {
-	w.metadataMu.Lock()
-	defer w.metadataMu.Unlock()
-	w.currentMetadata = metadata
-}
-
-func (w *WebSocketOutput) preparePayload(msg *UniversalMetadata) any {
-	if w.payloadMapper != nil {
-		payload := w.payloadMapper.MapPayload(msg.ToTemplateData())
-		if payload != nil {
-			return payload
-		}
-		slog.Debug("PayloadMapper returned nil, using original message", "output", w.GetName())
-	}
-	return msg
+	w.current.Store(msg)
+	w.hub.Broadcast(w.payloadMapper.Apply(msg))
 }

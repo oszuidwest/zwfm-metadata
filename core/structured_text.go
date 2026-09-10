@@ -20,10 +20,6 @@ type StructuredText struct {
 
 // NewStructuredText initializes a StructuredText with artist and title from the given metadata.
 func NewStructuredText(m *Metadata) *StructuredText {
-	if m == nil {
-		return &StructuredText{Separator: " - "}
-	}
-
 	return &StructuredText{
 		Original:  m,
 		Artist:    m.Artist,
@@ -103,22 +99,4 @@ func (st *StructuredText) HasContent() bool {
 // IsRunning reports whether both artist and title are present for DL Plus ITEM_RUNNING.
 func (st *StructuredText) IsRunning() bool {
 	return st != nil && st.Artist != "" && st.Title != ""
-}
-
-// Clone duplicates the StructuredText with all its fields.
-func (st *StructuredText) Clone() *StructuredText {
-	if st == nil {
-		return nil
-	}
-
-	return &StructuredText{
-		Original:  st.Original,
-		Prefix:    st.Prefix,
-		Artist:    st.Artist,
-		Separator: st.Separator,
-		Title:     st.Title,
-		Suffix:    st.Suffix,
-		InputName: st.InputName,
-		InputType: st.InputType,
-	}
 }

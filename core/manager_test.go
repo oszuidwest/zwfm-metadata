@@ -112,8 +112,9 @@ type capturingFilter struct {
 }
 
 func (f *capturingFilter) Decide(st *StructuredText) FilterAction {
+	captured := *st
 	f.mu.Lock()
-	f.captured = st.Clone()
+	f.captured = &captured
 	f.mu.Unlock()
 	return FilterPass
 }
@@ -168,26 +169,29 @@ func testMetadata(artist, title string) *Metadata {
 	}
 }
 
-// startRouter registers the inputs in priority order and starts the router.
-// Callers run inside synctest.Test so router timers use fake time.
-func startRouter(t *testing.T, router *MetadataRouter, output *mockOutput, inputs ...*mockInput) {
+// startRouter registers the output with the given inputs in priority order and
+// starts the router. Callers run inside synctest.Test so router timers use fake time.
+func startRouter(t *testing.T, router *MetadataRouter, output *mockOutput, timing OutputTiming, inputs ...*mockInput) {
 	t.Helper()
 
 	inputNames := make([]string, 0, len(inputs))
 	for _, input := range inputs {
-		if err := router.AddInput(input); err != nil {
-			t.Fatalf("AddInput failed: %v", err)
-		}
 		inputNames = append(inputNames, input.GetName())
 	}
 
-	if err := router.AddOutput(output); err != nil {
+	if err := router.AddOutput(output, &OutputSpec{Inputs: inputNames, Timing: timing}); err != nil {
 		t.Fatalf("AddOutput failed: %v", err)
 	}
-	router.SetOutputInputs(output.GetName(), inputNames)
 
 	if err := router.Start(t.Context()); err != nil {
 		t.Fatalf("Start failed: %v", err)
+	}
+}
+
+func addInput(t *testing.T, router *MetadataRouter, input *mockInput, spec *InputSpec) {
+	t.Helper()
+	if err := router.AddInput(input, spec); err != nil {
+		t.Fatalf("AddInput failed: %v", err)
 	}
 }
 
@@ -195,12 +199,11 @@ func setupTestRouter(t *testing.T, outputDelay int, filters []Filter) (*mockInpu
 	t.Helper()
 
 	router := NewMetadataRouter()
-	router.SetInputFilters("test-input", filters)
-
 	input := newMockInput("test-input")
+	addInput(t, router, input, &InputSpec{Filters: filters})
+
 	output := newMockOutput("test-output")
-	router.SetOutputTiming(output.GetName(), OutputTiming{Delay: outputDelay})
-	startRouter(t, router, output, input)
+	startRouter(t, router, output, OutputTiming{Delay: outputDelay}, input)
 
 	return input, output
 }
@@ -318,12 +321,7 @@ func TestWouldFiltersReject(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := NewMetadataRouter()
-			input := newMockInput("test-input")
-			_ = router.AddInput(input)
-
-			if len(tt.filters) > 0 {
-				router.SetInputFilters("test-input", tt.filters)
-			}
+			addInput(t, router, newMockInput("test-input"), &InputSpec{Filters: tt.filters})
 
 			result := router.wouldFiltersReject("test-input", tt.metadata)
 			if result != tt.expectedReject {
@@ -337,13 +335,16 @@ func TestFilterContextMatchesExecution(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		router := NewMetadataRouter()
 		contextFilter := newContextAwareFilter("test-input", "url", "PREFIX:", ":SUFFIX")
-		router.SetInputType("test-input", "url")
-		router.SetInputPrefixSuffix("test-input", "PREFIX:", ":SUFFIX")
-		router.SetInputFilters("test-input", []Filter{contextFilter})
-
 		input := newMockInput("test-input")
+		addInput(t, router, input, &InputSpec{
+			Type:    "url",
+			Prefix:  "PREFIX:",
+			Suffix:  ":SUFFIX",
+			Filters: []Filter{contextFilter},
+		})
+
 		output := newMockOutput("test-output")
-		startRouter(t, router, output, input)
+		startRouter(t, router, output, OutputTiming{}, input)
 
 		input.SetMetadata(testMetadata("Artist", "Title"))
 		synctest.Wait()
@@ -358,12 +359,12 @@ func TestWouldFiltersRejectContextFields(t *testing.T) {
 	router := NewMetadataRouter()
 
 	captureFilter := &capturingFilter{}
-
-	input := newMockInput("test-input")
-	_ = router.AddInput(input)
-	router.SetInputType("test-input", "dynamic")
-	router.SetInputPrefixSuffix("test-input", "Hello ", " World")
-	router.SetInputFilters("test-input", []Filter{captureFilter})
+	addInput(t, router, newMockInput("test-input"), &InputSpec{
+		Type:    "dynamic",
+		Prefix:  "Hello ",
+		Suffix:  " World",
+		Filters: []Filter{captureFilter},
+	})
 
 	router.wouldFiltersReject("test-input", testMetadata("Artist", "Title"))
 
@@ -399,16 +400,16 @@ func expiringMetadata(title string) *Metadata {
 func setupFallbackRouter(t *testing.T) (primary, fallback *mockInput, output *mockOutput) {
 	t.Helper()
 
+	router := NewMetadataRouter()
 	primary = newMockInput("primary")
+	addInput(t, router, primary, &InputSpec{})
 	fallback = newMockInput("fallback")
 	fallback.SetMetadata(testMetadata("", "Station Name"))
+	addInput(t, router, fallback, &InputSpec{})
+
 	output = newMockOutput("test-output")
-	router := NewMetadataRouter()
-	router.SetOutputTiming(output.GetName(), OutputTiming{
-		Delay:         delaySeconds,
-		FallbackDelay: fallbackSeconds,
-	})
-	startRouter(t, router, output, primary, fallback)
+	timing := OutputTiming{Delay: delaySeconds, FallbackDelay: fallbackSeconds}
+	startRouter(t, router, output, timing, primary, fallback)
 
 	// Drain the initial static fallback.
 	expectSent(t, output, "Station Name")

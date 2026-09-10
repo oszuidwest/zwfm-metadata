@@ -14,7 +14,3 @@ func (u *UppercaseFormatter) Format(st *core.StructuredText) {
 	st.Artist = strings.ToUpper(st.Artist)
 	st.Title = strings.ToUpper(st.Title)
 }
-
-func init() {
-	RegisterFormatter("uppercase", func() core.Formatter { return &UppercaseFormatter{} })
-}

@@ -3,15 +3,15 @@ package core
 import (
 	"context"
 	"html"
+	"slices"
 	"sync"
 )
 
 // PassiveComponent provides a no-op Start method for components without background tasks.
 type PassiveComponent struct{}
 
-// Start blocks until context cancellation.
-func (p *PassiveComponent) Start(ctx context.Context) error {
-	<-ctx.Done()
+// Start returns immediately; passive components have nothing to run.
+func (p *PassiveComponent) Start(_ context.Context) error {
 	return nil
 }
 
@@ -25,10 +25,7 @@ type InputBase struct {
 
 // NewInputBase initializes an InputBase with the given name.
 func NewInputBase(name string) *InputBase {
-	return &InputBase{
-		name:        name,
-		subscribers: make([]chan<- *Metadata, 0),
-	}
+	return &InputBase{name: name}
 }
 
 // GetName returns the name of this input source.
@@ -36,15 +33,12 @@ func (b *InputBase) GetName() string {
 	return b.name
 }
 
-// GetMetadata returns the current metadata, which may be expired.
+// GetMetadata returns the current metadata, which may be expired. Metadata is
+// immutable once published, so callers share the stored value.
 func (b *InputBase) GetMetadata() *Metadata {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-
-	if b.metadata != nil {
-		return b.metadata.Clone()
-	}
-	return nil
+	return b.metadata
 }
 
 // Subscribe registers a channel to receive metadata change notifications.
@@ -78,8 +72,7 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 		return
 	}
 
-	subscribers := make([]chan<- *Metadata, len(b.subscribers))
-	copy(subscribers, b.subscribers)
+	subscribers := slices.Clone(b.subscribers)
 	b.mu.Unlock()
 
 	for _, ch := range subscribers {

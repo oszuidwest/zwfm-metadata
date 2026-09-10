@@ -7,163 +7,173 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 )
 
-// HTTPOutput serves metadata via configurable HTTP GET endpoints.
+// httpEndpoint is a configured endpoint with its response type normalised and
+// its payload mapping compiled.
+type httpEndpoint struct {
+	path         string
+	responseType string // "json", "xml", or "text"
+	mapper       *PayloadMapper
+}
+
+// httpResponse is a rendered endpoint body.
+type httpResponse struct {
+	data        []byte
+	contentType string
+}
+
+// HTTPOutput serves metadata via configurable HTTP GET endpoints. Responses are
+// rendered once per Send and served as-is.
 type HTTPOutput struct {
 	*core.OutputBase
 	core.PassiveComponent
-	settings        config.HTTPOutputConfig
-	currentMetadata *UniversalMetadata
-	metadataMu      sync.RWMutex
-
-	// Pre-compiled templates for performance
-	endpointMappers map[string]*PayloadMapper // path -> pre-compiled mapper
+	endpoints []httpEndpoint
+	responses atomic.Pointer[map[string]httpResponse] // path -> rendered response
 }
 
-// NewHTTPOutput initializes an HTTP endpoint server with the given settings.
-func NewHTTPOutput(name string, settings config.HTTPOutputConfig) *HTTPOutput {
+// NewHTTPOutput validates the endpoints and compiles their payload mappings.
+func NewHTTPOutput(name string, settings config.HTTPOutputConfig) (*HTTPOutput, error) {
 	output := &HTTPOutput{
-		OutputBase:      core.NewOutputBase(name),
-		settings:        settings,
-		endpointMappers: make(map[string]*PayloadMapper),
+		OutputBase: core.NewOutputBase(name),
+		endpoints:  make([]httpEndpoint, 0, len(settings.Endpoints)),
 	}
 
 	for _, endpoint := range settings.Endpoints {
-		if endpoint.PayloadMapping != nil {
-			output.endpointMappers[endpoint.Path] = NewPayloadMapper(endpoint.PayloadMapping)
+		responseType, err := normalizeResponseType(endpoint.ResponseType)
+		if err != nil {
+			return nil, fmt.Errorf("endpoint %q: %w", endpoint.Path, err)
 		}
+		mapper, err := NewPayloadMapper(endpoint.PayloadMapping)
+		if err != nil {
+			return nil, fmt.Errorf("endpoint %q: %w", endpoint.Path, err)
+		}
+		output.endpoints = append(output.endpoints, httpEndpoint{
+			path:         endpoint.Path,
+			responseType: responseType,
+			mapper:       mapper,
+		})
 	}
 
-	return output
+	return output, nil
+}
+
+func normalizeResponseType(responseType string) (string, error) {
+	switch strings.ToLower(responseType) {
+	case "json", "":
+		return "json", nil
+	case "xml":
+		return "xml", nil
+	case "plaintext", "text":
+		return "text", nil
+	default:
+		return "", fmt.Errorf("unknown response type: %s", responseType)
+	}
 }
 
 // RegisterRoutes adds HTTP GET handlers for each configured endpoint to the mux.
 func (h *HTTPOutput) RegisterRoutes(mux *http.ServeMux) {
-	for _, endpoint := range h.settings.Endpoints {
-		mux.HandleFunc("GET "+endpoint.Path, func(w http.ResponseWriter, req *http.Request) {
-			h.handleEndpoint(w, req, endpoint)
+	for _, endpoint := range h.endpoints {
+		mux.HandleFunc("GET "+endpoint.path, func(w http.ResponseWriter, _ *http.Request) {
+			h.serve(w, endpoint.path)
 		})
 
 		slog.Info("HTTP endpoint registered",
 			"output", h.GetName(),
-			"path", endpoint.Path,
-			"type", endpoint.ResponseType,
+			"path", endpoint.path,
+			"type", endpoint.responseType,
 		)
 	}
 }
 
-// Send caches the metadata for subsequent HTTP endpoint responses.
+// Send renders every endpoint's response for subsequent requests.
 func (h *HTTPOutput) Send(st *core.StructuredText) {
-	httpMetadata := ConvertStructuredText(st)
-	h.storeCurrentMetadata(httpMetadata)
+	metadata := ConvertStructuredText(st)
+
+	responses := make(map[string]httpResponse, len(h.endpoints))
+	for _, endpoint := range h.endpoints {
+		response, err := endpoint.render(metadata)
+		if err != nil {
+			slog.Error("Failed to render HTTP response", "output", h.GetName(), "path", endpoint.path, "error", err)
+			continue
+		}
+		responses[endpoint.path] = response
+	}
+
+	h.responses.Store(&responses)
 }
 
-func (h *HTTPOutput) handleEndpoint(
-	w http.ResponseWriter,
-	_ *http.Request,
-	endpoint config.HTTPEndpoint,
-) {
-	metadata := h.getCurrentMetadata()
-	if metadata == nil {
-		http.Error(w, "No metadata available", http.StatusNoContent)
+func (h *HTTPOutput) serve(w http.ResponseWriter, path string) {
+	responses := h.responses.Load()
+	if responses == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	response, ok := (*responses)[path]
+	if !ok {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
-	responseData, contentType, err := h.generateResponse(metadata, endpoint)
-	if err != nil {
-		slog.Error("Failed to generate HTTP response",
-			"output", h.GetName(),
-			"path", endpoint.Path,
-			"error", err,
-		)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Type", response.contentType)
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	if _, err := w.Write(responseData); err != nil {
-		slog.Error("Failed to write HTTP response",
-			"output", h.GetName(),
-			"path", endpoint.Path,
-			"error", err,
-		)
+	if _, err := w.Write(response.data); err != nil {
+		slog.Error("Failed to write HTTP response", "output", h.GetName(), "path", path, "error", err)
 	}
-
-	slog.Debug("Served HTTP response",
-		"output", h.GetName(),
-		"path", endpoint.Path,
-		"content_type", contentType,
-	)
 }
 
-func (h *HTTPOutput) generateResponse(
-	metadata *UniversalMetadata, endpoint config.HTTPEndpoint,
-) (data []byte, contentType string, err error) {
-	if endpoint.PayloadMapping != nil {
-		return h.generateCustomResponse(metadata, endpoint)
-	}
-	return h.generateStandardResponse(metadata, endpoint.ResponseType)
-}
-
-func (h *HTTPOutput) generateCustomResponse(
-	metadata *UniversalMetadata, endpoint config.HTTPEndpoint,
-) (data []byte, contentType string, err error) {
-	result := h.endpointMappers[endpoint.Path].MapPayload(metadata.ToTemplateData())
-
-	if len(result) == 1 {
-		for _, value := range result {
-			if str, ok := value.(string); ok {
-				return h.encodeResponse(str, endpoint.ResponseType)
+// render produces the response body: the mapped payload when a mapping is
+// configured (a single string value is served raw for xml and text), otherwise
+// the standard metadata in the configured format.
+func (e httpEndpoint) render(metadata *UniversalMetadata) (httpResponse, error) {
+	if e.mapper != nil {
+		mapped := e.mapper.MapPayload(metadata.ToTemplateData())
+		if len(mapped) == 1 {
+			for _, value := range mapped {
+				if str, ok := value.(string); ok {
+					if e.responseType == "json" {
+						return jsonResponse(str)
+					}
+					return rawResponse(str, e.responseType), nil
+				}
 			}
 		}
+		return jsonResponse(mapped)
 	}
-	return h.encodeResponse(result, endpoint.ResponseType)
-}
 
-func (h *HTTPOutput) generateStandardResponse(
-	metadata *UniversalMetadata, responseType string,
-) (data []byte, contentType string, err error) {
-	switch strings.ToLower(responseType) {
+	switch e.responseType {
 	case "xml":
-		return []byte(h.buildXMLString(metadata)), "application/xml", nil
-	case "plaintext", "text":
-		return []byte(metadata.FormattedMetadata), "text/plain", nil
-	case "json", "":
-		encoded, err := json.Marshal(metadata)
-		return encoded, "application/json", err
+		return rawResponse(buildXMLString(metadata), e.responseType), nil
+	case "text":
+		return rawResponse(metadata.FormattedMetadata, e.responseType), nil
 	default:
-		return nil, "", fmt.Errorf("unknown response type: %s", responseType)
+		return jsonResponse(metadata)
 	}
 }
 
-// encodeResponse serves a custom-mapped value: strings are served raw for xml and
-// plaintext response types; everything else is JSON.
-func (h *HTTPOutput) encodeResponse(
-	data any,
-	responseType string,
-) (encoded []byte, contentType string, err error) {
-	if str, ok := data.(string); ok {
-		switch strings.ToLower(responseType) {
-		case "xml":
-			return []byte(str), "application/xml", nil
-		case "plaintext", "text":
-			return []byte(str), "text/plain", nil
-		}
+func rawResponse(body, responseType string) httpResponse {
+	contentType := "text/plain"
+	if responseType == "xml" {
+		contentType = "application/xml"
 	}
-
-	encoded, err = json.Marshal(data)
-	return encoded, "application/json", err
+	return httpResponse{data: []byte(body), contentType: contentType}
 }
 
-func (h *HTTPOutput) buildXMLString(metadata *UniversalMetadata) string {
+func jsonResponse(data any) (httpResponse, error) {
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return httpResponse{}, err
+	}
+	return httpResponse{data: encoded, contentType: "application/json"}, nil
+}
+
+func buildXMLString(metadata *UniversalMetadata) string {
 	expiresAt := ""
 	if metadata.ExpiresAt != nil {
 		expiresAt = metadata.ExpiresAt.Format(time.RFC3339)
@@ -187,20 +197,4 @@ func (h *HTTPOutput) buildXMLString(metadata *UniversalMetadata) string {
 		metadata.UpdatedAt.Format(time.RFC3339),
 		expiresAt,
 	)
-}
-
-func (h *HTTPOutput) storeCurrentMetadata(metadata *UniversalMetadata) {
-	h.metadataMu.Lock()
-	defer h.metadataMu.Unlock()
-	h.currentMetadata = metadata
-}
-
-func (h *HTTPOutput) getCurrentMetadata() *UniversalMetadata {
-	h.metadataMu.RLock()
-	defer h.metadataMu.RUnlock()
-	if h.currentMetadata == nil {
-		return nil
-	}
-	metadata := *h.currentMetadata
-	return &metadata
 }

@@ -108,8 +108,6 @@ func dashboardHTML(stationName, brandColor, version, buildYear string) string {
                         </div>
                     </div>
 
-                    <div class="hidden-mobile"></div>
-
                     <div class="footer-links">
                         <div class="footer-links-row">
                             <a href="https://github.com/oszuidwest/zwfm-metadata" target="_blank" rel="noopener noreferrer">

@@ -18,19 +18,18 @@ func Get(ctx context.Context, rawURL string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", UserAgent())
-	return httpClient.Do(req) //nolint:gosec // URL is from validated user configuration
+	return do(req)
 }
 
-// Do executes an HTTP request with standard configuration.
-func Do(req *http.Request) (*http.Response, error) {
+// do executes an HTTP request with the shared client and User-Agent.
+func do(req *http.Request) (*http.Response, error) {
 	req.Header.Set("User-Agent", UserAgent())
 	return httpClient.Do(req) //nolint:gosec // URL is from validated user configuration
 }
 
 // DoOK executes an HTTP request and reports non-2xx responses as errors including the response body.
 func DoOK(req *http.Request) error {
-	resp, err := Do(req)
+	resp, err := do(req)
 	if err != nil {
 		return err
 	}

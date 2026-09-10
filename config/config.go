@@ -3,11 +3,10 @@
 package config
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
-	"path/filepath"
 )
 
 // Config holds application settings including web server port, inputs, and outputs.
@@ -22,21 +21,21 @@ type Config struct {
 
 // InputConfig defines a metadata source with its type, name, and type-specific settings.
 type InputConfig struct {
-	Type     string         `json:"type"`
-	Name     string         `json:"name"`
-	Prefix   string         `json:"prefix,omitempty"`
-	Suffix   string         `json:"suffix,omitempty"`
-	Filters  []FilterConfig `json:"filters,omitempty"`
-	Settings map[string]any `json:"settings"`
+	Type     string          `json:"type"`
+	Name     string          `json:"name"`
+	Prefix   string          `json:"prefix,omitempty"`
+	Suffix   string          `json:"suffix,omitempty"`
+	Filters  []FilterConfig  `json:"filters,omitempty"`
+	Settings json.RawMessage `json:"settings"`
 }
 
 // OutputConfig defines a metadata destination with its type, linked inputs, and type-specific settings.
 type OutputConfig struct {
-	Type       string         `json:"type"`
-	Name       string         `json:"name"`
-	Inputs     []string       `json:"inputs"`
-	Formatters []string       `json:"formatters,omitempty"`
-	Settings   map[string]any `json:"settings"`
+	Type       string          `json:"type"`
+	Name       string          `json:"name"`
+	Inputs     []string        `json:"inputs"`
+	Formatters []string        `json:"formatters,omitempty"`
+	Settings   json.RawMessage `json:"settings"`
 }
 
 // FilterConfig defines a metadata filter with a type and type-specific settings.
@@ -125,34 +124,19 @@ type StereoToolOutputConfig struct {
 
 // LoadConfig reads a configuration from the specified file.
 func LoadConfig(filename string) (*Config, error) {
-	cleanPath := filepath.Clean(filename)
-
-	// #nosec G304 - This is intentionally loading user-specified config files
-	file, err := os.Open(cleanPath)
+	data, err := os.ReadFile(filename) // #nosec G304 -- intentionally loads the user-specified config file
 	if err != nil {
-		return nil, fmt.Errorf("failed to open config file: %w", err)
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			slog.Warn("Failed to close config file", "error", err)
-		}
-	}()
 
 	var config Config
-	decoder := json.NewDecoder(file)
-	if err := decoder.Decode(&config); err != nil {
+	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to decode config: %w", err)
 	}
 
-	if config.WebServerPort == 0 {
-		config.WebServerPort = 9000
-	}
-	if config.StationName == "" {
-		config.StationName = "ZuidWest FM"
-	}
-	if config.BrandColor == "" {
-		config.BrandColor = "#e6007e"
-	}
+	config.WebServerPort = cmp.Or(config.WebServerPort, 9000)
+	config.StationName = cmp.Or(config.StationName, "ZuidWest FM")
+	config.BrandColor = cmp.Or(config.BrandColor, "#e6007e")
 
 	return &config, nil
 }

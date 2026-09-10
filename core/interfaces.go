@@ -9,6 +9,7 @@ import (
 )
 
 // Metadata carries song information with optional expiration for time-sensitive sources.
+// It is immutable once handed to InputBase.SetMetadata.
 type Metadata struct {
 	SongID    string
 	Artist    string

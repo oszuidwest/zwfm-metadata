@@ -3,9 +3,7 @@ package utils
 import (
 	"encoding/json"
 	"log/slog"
-	"maps"
 	"net/http"
-	"slices"
 	"sync"
 	"time"
 
@@ -69,22 +67,23 @@ func (h *WebSocketHub) SetOnDisconnect(fn func()) {
 	h.onDisconnect = fn
 }
 
+// removeClient unregisters the client and reports whether it was still registered.
 func (h *WebSocketHub) removeClient(client *hubClient) (int, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	if _, exists := h.clients[client.conn]; !exists {
-		return len(h.clients), false
+		return 0, false
 	}
 
 	delete(h.clients, client.conn)
 	return len(h.clients), true
 }
 
-func (h *WebSocketHub) disconnectClient(client *hubClient) int {
+func (h *WebSocketHub) disconnectClient(client *hubClient) {
 	clientCount, removed := h.removeClient(client)
 	if !removed {
-		return clientCount
+		return
 	}
 
 	client.signalDone()
@@ -98,7 +97,6 @@ func (h *WebSocketHub) disconnectClient(client *hubClient) int {
 	}
 
 	slog.Debug("WebSocket client disconnected", "hub", h.name, "clients", clientCount)
-	return clientCount
 }
 
 // HandleConnection upgrades an HTTP connection to WebSocket and manages its lifecycle.
@@ -165,18 +163,6 @@ func (h *WebSocketHub) writePump(client *hubClient) {
 				return
 			}
 
-			// Drain queued messages to reduce select overhead.
-			for n := len(client.send); n > 0; n-- {
-				if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
-					slog.Debug("WebSocket write deadline failed", "hub", h.name, "error", err)
-					return
-				}
-				if err := client.conn.WriteMessage(websocket.TextMessage, <-client.send); err != nil {
-					slog.Debug("WebSocket write failed", "hub", h.name, "error", err)
-					return
-				}
-			}
-
 		case <-client.done:
 			// Best-effort close frame; errors are expected since the
 			// connection may already be closed by the remote peer.
@@ -225,20 +211,25 @@ func (h *WebSocketHub) readPump(client *hubClient) {
 	}
 }
 
-// Broadcast serializes data once and sends it to all connected clients via their
-// write buffers. Clients that cannot keep up (full send buffer) are disconnected.
+// Broadcast serializes data once and sends it to all connected clients.
 func (h *WebSocketHub) Broadcast(data any) {
 	msg, err := json.Marshal(data)
 	if err != nil {
 		slog.Warn("Failed to marshal WebSocket broadcast data", "hub", h.name, "error", err)
 		return
 	}
+	h.BroadcastMessage(msg)
+}
 
+// BroadcastMessage queues an already serialized message on every client's write
+// buffer. Clients that cannot keep up (full send buffer) are disconnected.
+func (h *WebSocketHub) BroadcastMessage(msg []byte) {
+	// Sends are non-blocking and disconnects happen in writePump, so holding the
+	// read lock for the whole loop cannot deadlock.
 	h.mu.RLock()
-	clients := slices.Collect(maps.Values(h.clients))
-	h.mu.RUnlock()
+	defer h.mu.RUnlock()
 
-	for _, client := range clients {
+	for _, client := range h.clients {
 		select {
 		case client.send <- msg:
 		default:

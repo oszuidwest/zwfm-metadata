@@ -851,8 +851,6 @@ Custom functions (added for payload mapping):
 - `{{.field | upper}}` - Convert to uppercase
 - `{{.field | lower}}` - Convert to lowercase
 - `{{.field | trim}}` - Remove leading/trailing whitespace
-- `{{.field | formatTime}}` - Format time.Time to RFC3339 (rarely needed as times are pre-formatted)
-- `{{.field | formatTimePtr}}` - Format *time.Time to RFC3339, returns empty string if nil
 
 Built-in Go template functions (also available):
 - `{{.field | urlquery}}` - URL-encode a value (useful if building URLs in JSON)

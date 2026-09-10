@@ -146,6 +146,9 @@ body {
     .grid-footer {
         grid-template-columns: 1fr 1fr 1fr;
     }
+    .footer-links {
+        grid-column: 3;
+    }
 }
 
 @media (min-width: 1024px) {
@@ -225,9 +228,6 @@ body {
 .text-muted {
     color: var(--text-muted);
 }
-.text-muted-light {
-    color: var(--text-muted);
-}
 .text-muted-dark {
     color: var(--text-tertiary);
 }
@@ -282,16 +282,6 @@ body {
 }
 .bg-danger {
     background-color: var(--danger);
-}
-
-/* Visibility */
-.hidden-mobile {
-    display: none;
-}
-@media (min-width: 768px) {
-    .hidden-mobile {
-        display: block;
-    }
 }
 
 /* ==========================================================================
@@ -509,9 +499,7 @@ body {
     border-radius: 0.75rem;
     box-shadow: var(--shadow);
     overflow: hidden;
-    transition:
-        box-shadow 200ms ease,
-        transform 200ms ease;
+    transition: box-shadow 200ms ease;
 }
 
 .card:hover {
@@ -644,8 +632,6 @@ body {
     box-shadow:
         inset 0 0 0 1px rgba(255, 255, 255, 0.4),
         0 1px 2px rgba(0, 0, 0, 0.1);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -673,16 +659,14 @@ body {
    Content Boxes
    ========================================================================== */
 
-.content-box {
+.content-box,
+.content-box-bordered {
     background: var(--bg-subtle);
     padding: 1rem;
     border-radius: 0.5rem;
 }
 
 .content-box-bordered {
-    background: var(--bg-subtle);
-    padding: 1rem;
-    border-radius: 0.5rem;
     border: 1px solid var(--border);
 }
 

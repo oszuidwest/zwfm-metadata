@@ -60,11 +60,11 @@ func (o *DLPlusOutput) buildDLPlusContent(st *core.StructuredText) string {
 }
 
 func (o *DLPlusOutput) addDLPlusTags(content *strings.Builder, st *core.StructuredText) {
-	if start, length, ok := st.ArtistRange(); ok && length >= 0 {
+	if start, length, ok := st.ArtistRange(); ok {
 		fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeArtist, start, length)
 	}
 
-	if start, length, ok := st.TitleRange(); ok && length >= 0 {
+	if start, length, ok := st.TitleRange(); ok {
 		fmt.Fprintf(content, "DL_PLUS_TAG=%d %d %d\n", dlPlusTypeTitle, start, length)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -71,7 +72,8 @@ func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error
 	// Stereo Tool needs every reserved character percent-encoded (url.PathEscape would
 	// leave & and + literal) and spaces as %20 rather than QueryEscape's +.
 	escapedPayload := strings.ReplaceAll(url.QueryEscape(strings.TrimSuffix(payload.String(), "\n")), "+", "%20")
-	requestURL := fmt.Sprintf("http://%s:%d/json-1/lis%s", i.settings.Hostname, i.settings.Port, escapedPayload)
+	host := net.JoinHostPort(i.settings.Hostname, strconv.Itoa(i.settings.Port))
+	requestURL := "http://" + host + "/json-1/lis" + escapedPayload
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, http.NoBody)
 	if err != nil {

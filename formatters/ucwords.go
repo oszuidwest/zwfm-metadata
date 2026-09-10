@@ -17,7 +17,3 @@ func (u *UcwordsFormatter) Format(st *core.StructuredText) {
 	st.Artist = caser.String(strings.ToLower(st.Artist))
 	st.Title = caser.String(strings.ToLower(st.Title))
 }
-
-func init() {
-	RegisterFormatter("ucwords", func() core.Formatter { return &UcwordsFormatter{} })
-}

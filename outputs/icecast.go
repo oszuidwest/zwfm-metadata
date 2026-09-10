@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
@@ -20,8 +22,8 @@ type IcecastOutput struct {
 }
 
 // NewIcecastOutput creates an IcecastOutput with the given name and settings.
-func NewIcecastOutput(name string, settings *config.IcecastOutputConfig) *IcecastOutput {
-	return &IcecastOutput{OutputBase: core.NewOutputBase(name), settings: *settings}
+func NewIcecastOutput(name string, settings config.IcecastOutputConfig) *IcecastOutput {
+	return &IcecastOutput{OutputBase: core.NewOutputBase(name), settings: settings}
 }
 
 // Send updates the Icecast server with new metadata.
@@ -34,7 +36,7 @@ func (i *IcecastOutput) Send(st *core.StructuredText) {
 func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	reqURL := &url.URL{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%d", i.settings.Server, i.settings.Port),
+		Host:   net.JoinHostPort(i.settings.Server, strconv.Itoa(i.settings.Port)),
 		Path:   "/admin/metadata",
 	}
 

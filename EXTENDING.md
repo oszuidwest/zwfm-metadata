@@ -100,9 +100,7 @@ The codebase provides several utilities you can use:
   ```go
   // Convert core.StructuredText to universal format
   universal := ConvertStructuredText(st)
-
-  // Convert with a specific type field
-  universal := ConvertStructuredTextWithType(st, "webhook")
+  universal.Type = "webhook" // optional type field
 
   // Convert to template data for payload mapping
   templateData := universal.ToTemplateData()
@@ -110,15 +108,16 @@ The codebase provides several utilities you can use:
 
 - **Payload Mapping**: `NewPayloadMapper` for custom field mapping
   ```go
-  mapper := NewPayloadMapper(settings.PayloadMapping)
-  result := mapper.MapPayload(templateData)
+  // Returns (nil, nil) when no mapping is configured; Apply then passes the metadata through.
+  mapper, err := NewPayloadMapper(settings.PayloadMapping)
+  payload := mapper.Apply(universal)
   ```
 
 ### Common Gotchas
 
 1. **Logging**: Use `slog` package directly, not `utils.LogError()` or `utils.LogDebug()`
 2. **Error Handling**: Outputs should log errors but never return them from Send methods
-3. **Formatter Registration**: Must use `init()` function to register formatters
+3. **Formatter/Filter Registration**: Add a case to `New` in `formatters/registry.go` or `filters/registry.go`
 4. **Imports**: Use full import paths like `zwfm-metadata/config`, not just `config`
 5. **Build and Test**: Remember to `go build` before testing your extensions
 6. **HTTP Requests**: Always use `http.NewRequestWithContext` with proper timeout context
@@ -257,7 +256,7 @@ case "mycustom":
     if err != nil {
         return nil, err
     }
-    return inputs.NewMyCustomInput(cfg.Name, *settings), nil
+    return inputs.NewMyCustomInput(cfg.Name, settings), nil
 ```
 
 ### Step 5: Test Your Input
@@ -451,7 +450,7 @@ case "mycustom":
     if err != nil {
         return nil, err
     }
-    return outputs.NewMyCustomOutput(cfg.Name, *settings), nil
+    return outputs.NewMyCustomOutput(cfg.Name, settings), nil
 ```
 
 ### Step 6: Test Your Output
@@ -515,14 +514,11 @@ func (m *MyCustomFormatter) customTransform(text string) string {
 
 ### Step 2: Register Formatter
 
-Add an `init()` function to register your formatter:
+Add a case to `New` in `formatters/registry.go`:
 
 ```go
-func init() {
-    RegisterFormatter("mycustom", func() core.Formatter {
-        return &MyCustomFormatter{}
-    })
-}
+case "mycustom":
+    return &MyCustomFormatter{}, nil
 ```
 
 ### Step 3: Test Your Formatter
@@ -585,14 +581,11 @@ func (f *MyCustomFilter) Decide(st *core.StructuredText) core.FilterAction {
 
 ### Step 2: Register Filter
 
-Add an `init()` function to register your filter with the factory:
+Add a case to `New` in `filters/registry.go`:
 
 ```go
-func init() {
-    RegisterFilter("mycustom", func(cfg *config.FilterConfig) (core.Filter, error) {
-        return NewMyCustomFilter(cfg.Threshold)
-    })
-}
+case "mycustom":
+    return NewMyCustomFilter(cfg.Threshold)
 ```
 
 ### Step 3: Add Configuration Support
@@ -796,7 +789,7 @@ case "redis":
     if err != nil {
         return nil, err
     }
-    return inputs.NewRedisInput(cfg.Name, *settings), nil
+    return inputs.NewRedisInput(cfg.Name, settings), nil
 ```
 
 Usage:
@@ -988,13 +981,9 @@ func (s *SanitizeFormatter) sanitize(text string) string {
         return strings.Repeat("*", len(match))
     })
 }
-
-func init() {
-    RegisterFormatter("sanitize", func() core.Formatter {
-        return NewSanitizeFormatter()
-    })
-}
 ```
+
+Then add `case "sanitize": return NewSanitizeFormatter(), nil` to `New` in `formatters/registry.go`.
 
 ## Interface Reference
 
@@ -1121,9 +1110,7 @@ Use `ConvertStructuredText` instead of manually mapping fields. This ensures con
 func (o *MyOutput) Send(st *core.StructuredText) {
     // Convert to universal format for JSON APIs, webhooks, etc.
     universal := ConvertStructuredText(st)
-
-    // Or with a type field (use one or the other, not both):
-    // universal := ConvertStructuredTextWithType(st, "myoutput")
+    universal.Type = "myoutput" // optional
 
     // Send the universal metadata
     o.sendMetadata(*universal)
@@ -1148,13 +1135,16 @@ type MyOutput struct {
     payloadMapper *PayloadMapper
 }
 
-func NewMyOutput(name string, settings config.MyOutputConfig) *MyOutput {
-    output := &MyOutput{
+func NewMyOutput(name string, settings config.MyOutputConfig) (*MyOutput, error) {
+    mapper, err := NewPayloadMapper(settings.PayloadMapping)
+    if err != nil {
+        return nil, err
+    }
+    return &MyOutput{
         OutputBase:    core.NewOutputBase(name),
         settings:      settings,
-        payloadMapper: NewPayloadMapper(settings.PayloadMapping),
-    }
-    return output
+        payloadMapper: mapper,
+    }, nil
 }
 
 func (o *MyOutput) Send(st *core.StructuredText) {

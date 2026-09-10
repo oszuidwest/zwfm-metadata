@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"testing"
 
 	"zwfm-metadata/config"
@@ -10,36 +11,33 @@ import (
 func TestSetupOutputTiming(t *testing.T) {
 	tests := []struct {
 		name           string
-		settings       map[string]any
+		settings       json.RawMessage
 		expectedTiming core.OutputTiming
 		wantError      bool
 	}{
 		{
-			name: "configured timings",
-			settings: map[string]any{
-				"delay":         12,
-				"fallbackDelay": 5,
-			},
+			name:           "configured timings",
+			settings:       json.RawMessage(`{"delay": 12, "fallbackDelay": 5}`),
 			expectedTiming: core.OutputTiming{Delay: 12, FallbackDelay: 5},
 		},
 		{
 			name:           "default fallback delay",
-			settings:       map[string]any{"delay": 12},
+			settings:       json.RawMessage(`{"delay": 12}`),
 			expectedTiming: core.OutputTiming{Delay: 12},
 		},
 		{
 			name:      "invalid delay",
-			settings:  map[string]any{"delay": "invalid"},
+			settings:  json.RawMessage(`{"delay": "invalid"}`),
 			wantError: true,
 		},
 		{
 			name:      "negative delay",
-			settings:  map[string]any{"delay": -1},
+			settings:  json.RawMessage(`{"delay": -1}`),
 			wantError: true,
 		},
 		{
 			name:      "negative fallback delay",
-			settings:  map[string]any{"delay": 12, "fallbackDelay": -1},
+			settings:  json.RawMessage(`{"delay": 12, "fallbackDelay": -1}`),
 			wantError: true,
 		},
 	}
@@ -64,8 +62,8 @@ func TestSetupOutputTiming(t *testing.T) {
 				t.Fatalf("setupOutput() error = %v", err)
 			}
 
-			if got := router.GetOutputTiming(outputCfg.Name); got != tt.expectedTiming {
-				t.Errorf("GetOutputTiming() = %+v, want %+v", got, tt.expectedTiming)
+			if got := router.GetOutputStatus()[0].OutputTiming; got != tt.expectedTiming {
+				t.Errorf("output timing = %+v, want %+v", got, tt.expectedTiming)
 			}
 		})
 	}

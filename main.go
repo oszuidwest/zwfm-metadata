@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/filters"
@@ -72,22 +73,14 @@ func main() {
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-sigChan
-		slog.Info("Shutdown signal received")
-		cancel()
-	}()
-
 	server, err := web.NewServer(appConfig.WebServerPort, router, appConfig.StationName, appConfig.BrandColor)
 	if err != nil {
 		slog.Error("Failed to initialize web server", "error", err)
 		os.Exit(1)
 	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
 	go func() {
 		if err := server.Start(ctx); err != nil {
 			slog.Error("Web server encountered an error", "error", err)
@@ -95,61 +88,51 @@ func main() {
 	}()
 
 	if err := router.Start(ctx); err != nil {
-		slog.Error("Failed to start timeline router", "error", err)
-		cancel() // Cancel context before exiting
+		slog.Error("Failed to start metadata router", "error", err)
+		stop()
 		os.Exit(1)
 	}
 
 	<-ctx.Done()
+	stop()
 	slog.Info("Shutting down...")
 }
 
-// setupInput configures an input and its filters on the router.
+// setupInput creates an input and its filters and registers them on the router.
 func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error {
 	input, err := createInput(inputCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create input %q: %w", inputCfg.Name, err)
 	}
 
-	if err := router.AddInput(input); err != nil {
-		return fmt.Errorf("failed to add input %q: %w", inputCfg.Name, err)
+	spec := core.InputSpec{
+		Type:   inputCfg.Type,
+		Prefix: inputCfg.Prefix,
+		Suffix: inputCfg.Suffix,
 	}
-
-	router.SetInputType(inputCfg.Name, inputCfg.Type)
-
-	var inputFilters []core.Filter
-	var filterNames []string
 	for i, filterCfg := range inputCfg.Filters {
-		filter, err := filters.GetFilter(&filterCfg)
+		filter, err := filters.New(&filterCfg)
 		if err != nil {
 			return fmt.Errorf("failed to create %s filter for input %q (index %d): %w", filterCfg.Type, inputCfg.Name, i, err)
 		}
-		inputFilters = append(inputFilters, filter)
-		filterNames = append(filterNames, filterCfg.Type)
-	}
-	if len(inputFilters) > 0 {
-		router.SetInputFilters(inputCfg.Name, inputFilters)
-		router.SetInputFilterNames(inputCfg.Name, filterNames)
+		spec.Filters = append(spec.Filters, filter)
+		spec.FilterNames = append(spec.FilterNames, filterCfg.Type)
 	}
 
-	if inputCfg.Prefix != "" || inputCfg.Suffix != "" {
-		router.SetInputPrefixSuffix(inputCfg.Name, inputCfg.Prefix, inputCfg.Suffix)
-		slog.Info("Added input", "name", inputCfg.Name, "type", inputCfg.Type, "prefix", inputCfg.Prefix, "suffix", inputCfg.Suffix)
-	} else {
-		slog.Info("Added input", "name", inputCfg.Name, "type", inputCfg.Type)
+	if err := router.AddInput(input, &spec); err != nil {
+		return fmt.Errorf("failed to add input %q: %w", inputCfg.Name, err)
 	}
+
+	slog.Info("Added input", "name", inputCfg.Name, "type", inputCfg.Type, "prefix", inputCfg.Prefix, "suffix", inputCfg.Suffix)
 
 	return nil
 }
 
-// setupOutput configures an output with its inputs, formatters, and timing on the router.
+// setupOutput creates an output and its formatters and registers them on the router.
 func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) error {
 	timing, err := utils.ParseJSONSettings[core.OutputTiming](outputCfg.Settings)
 	if err != nil {
 		return fmt.Errorf("failed to parse timing for output %q: %w", outputCfg.Name, err)
-	}
-	if timing.Delay < 0 || timing.FallbackDelay < 0 {
-		return fmt.Errorf("output %q: delay and fallbackDelay must not be negative", outputCfg.Name)
 	}
 
 	output, err := createOutput(outputCfg)
@@ -157,29 +140,23 @@ func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) er
 		return fmt.Errorf("failed to create output %q: %w", outputCfg.Name, err)
 	}
 
-	for _, inputName := range outputCfg.Inputs {
-		if _, exists := router.GetInput(inputName); !exists {
-			return fmt.Errorf("input %q not found for output %q", inputName, outputCfg.Name)
-		}
+	spec := core.OutputSpec{
+		Type:           outputCfg.Type,
+		Inputs:         outputCfg.Inputs,
+		FormatterNames: outputCfg.Formatters,
+		Timing:         timing,
 	}
-	router.SetOutputInputs(outputCfg.Name, outputCfg.Inputs)
-	router.SetOutputTiming(outputCfg.Name, *timing)
-
-	var outputFormatters []core.Formatter
 	for _, formatterName := range outputCfg.Formatters {
-		formatter, err := formatters.GetFormatter(formatterName)
+		formatter, err := formatters.New(formatterName)
 		if err != nil {
 			return fmt.Errorf("failed to get formatter %q: %w", formatterName, err)
 		}
-		outputFormatters = append(outputFormatters, formatter)
+		spec.Formatters = append(spec.Formatters, formatter)
 	}
-	router.SetOutputFormatters(outputCfg.Name, outputFormatters)
-	router.SetOutputFormatterNames(outputCfg.Name, outputCfg.Formatters)
 
-	if err := router.AddOutput(output); err != nil {
+	if err := router.AddOutput(output, &spec); err != nil {
 		return fmt.Errorf("failed to add output %q: %w", outputCfg.Name, err)
 	}
-	router.SetOutputType(outputCfg.Name, outputCfg.Type)
 
 	slog.Info("Added output",
 		"name", outputCfg.Name,
@@ -199,21 +176,21 @@ func createInput(cfg *config.InputConfig) (core.Input, error) {
 		if err != nil {
 			return nil, err
 		}
-		return inputs.NewDynamicInput(cfg.Name, *settings), nil
+		return inputs.NewDynamicInput(cfg.Name, settings)
 
 	case "url":
 		settings, err := utils.ParseJSONSettings[config.URLInputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return inputs.NewURLInput(cfg.Name, settings)
+		return inputs.NewURLInput(cfg.Name, &settings)
 
 	case "text":
 		settings, err := utils.ParseJSONSettings[config.TextInputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return inputs.NewTextInput(cfg.Name, *settings), nil
+		return inputs.NewTextInput(cfg.Name, settings), nil
 
 	default:
 		return nil, fmt.Errorf("unknown type: %s", cfg.Type)
@@ -235,42 +212,42 @@ func createOutput(cfg *config.OutputConfig) (core.Output, error) {
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewFileOutput(cfg.Name, *settings), nil
+		return outputs.NewFileOutput(cfg.Name, settings), nil
 
 	case "url":
 		settings, err := utils.ParseJSONSettings[config.URLOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewURLOutput(cfg.Name, *settings)
+		return outputs.NewURLOutput(cfg.Name, settings)
 
 	case "dlplus":
 		settings, err := utils.ParseJSONSettings[config.DLPlusOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewDLPlusOutput(cfg.Name, *settings), nil
+		return outputs.NewDLPlusOutput(cfg.Name, settings), nil
 
 	case "websocket":
 		settings, err := utils.ParseJSONSettings[config.WebSocketOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewWebSocketOutput(cfg.Name, *settings), nil
+		return outputs.NewWebSocketOutput(cfg.Name, settings)
 
 	case "http":
 		settings, err := utils.ParseJSONSettings[config.HTTPOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewHTTPOutput(cfg.Name, *settings), nil
+		return outputs.NewHTTPOutput(cfg.Name, settings)
 
 	case "stereotool":
 		settings, err := utils.ParseJSONSettings[config.StereoToolOutputConfig](cfg.Settings)
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewStereoToolOutput(cfg.Name, *settings), nil
+		return outputs.NewStereoToolOutput(cfg.Name, settings), nil
 
 	default:
 		return nil, fmt.Errorf("unknown type: %s", cfg.Type)
