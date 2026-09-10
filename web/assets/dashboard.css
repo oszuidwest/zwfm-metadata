@@ -125,7 +125,7 @@ body {
 
 .output-stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
 }
 
@@ -767,17 +767,18 @@ body {
     }
 }
 
-.footer-links a {
+.footer-links-row a {
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
     color: var(--text-tertiary);
     text-decoration: none;
-    transition: color 150ms ease;
 }
 
-.footer-links a:hover {
-    color: var(--brand);
+.footer-copyright a {
+    color: inherit;
+    text-decoration-color: var(--border);
+    text-underline-offset: 0.15em;
 }
 
 .footer-links svg {

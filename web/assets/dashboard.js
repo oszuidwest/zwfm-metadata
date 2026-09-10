@@ -391,16 +391,23 @@ function buildOutputCard(output) {
         return card;
     }
 
-    const statsBox = el('div', 'content-box output-stats mb-4');
+    const statsBox = el('div', 'content-box mb-4');
     const inputValueClass = output.currentInput ? 'text-success' : 'text-faint';
-    statsBox.append(
+    const timingStats = el('div', 'output-stats mt-4 pt-4 border-t');
+    timingStats.append(
         buildStatColumn('Delay', `${output.delay}s`),
-        buildStatColumn('Fallback', `+${output.fallbackDelay}s`),
+        buildStatColumn(
+            'Fallback',
+            `${output.fallbackDelay > 0 ? '+' : ''}${output.fallbackDelay}s`,
+        ),
+    );
+    statsBox.append(
         buildStatColumn(
             'Current Input',
             output.currentInput || 'None',
             inputValueClass,
         ),
+        timingStats,
     );
     body.appendChild(statsBox);
 
