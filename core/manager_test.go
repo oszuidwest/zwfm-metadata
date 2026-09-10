@@ -464,10 +464,7 @@ func TestFallbackInputChangeWithinFallbackDelayStillWaits(t *testing.T) {
 func TestSupersededFiredTimerDoesNotSend(t *testing.T) {
 	router := NewMetadataRouter()
 	output := newMockOutput("timer-output")
-	entry := &outputEntry{
-		output: output,
-		spec:   OutputSpec{Timing: OutputTiming{}},
-	}
+	entry := &outputEntry{output: output}
 
 	router.mu.Lock()
 	router.schedule(output.GetName(), entry, "test-input", testMetadata("", "superseded"), "input_change")
