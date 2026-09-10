@@ -82,6 +82,7 @@ type outputEntry struct {
 	lastSent     string
 	currentInput string
 	pending      *time.Timer
+	updateMu     sync.Mutex
 }
 
 // MetadataRouter coordinates metadata flow between inputs and outputs with priority-based fallback and configurable delays.
@@ -441,6 +442,9 @@ func (mr *MetadataRouter) schedule(
 
 	var timer *time.Timer
 	timer = time.AfterFunc(delay, func() {
+		entry.updateMu.Lock()
+		defer entry.updateMu.Unlock()
+
 		mr.mu.Lock()
 		if entry.pending != timer {
 			mr.mu.Unlock()

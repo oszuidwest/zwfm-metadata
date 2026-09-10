@@ -20,7 +20,8 @@ func newMockInput(name string) *mockInput {
 type mockOutput struct {
 	*OutputBase
 	PassiveComponent
-	sendChan chan *StructuredText
+	sendChan   chan *StructuredText
+	beforeSend func(*StructuredText)
 }
 
 func newMockOutput(name string) *mockOutput {
@@ -31,6 +32,9 @@ func newMockOutput(name string) *mockOutput {
 }
 
 func (m *mockOutput) Send(st *StructuredText) {
+	if m.beforeSend != nil {
+		m.beforeSend(st)
+	}
 	select {
 	case m.sendChan <- st:
 	default:
@@ -246,6 +250,33 @@ func TestDelayedUpdatePreservedWhenNewMetadataCumulativelyCleared(t *testing.T) 
 		expectSent(t, output, "Title A")
 		expectNoSend(t, output, time.Second)
 	})
+}
+
+func TestOutputUpdatesStayOrdered(t *testing.T) {
+	input, output := setupTestRouter(t, 0, nil)
+	oldStarted, currentStarted := make(chan struct{}), make(chan struct{})
+	releaseOld := make(chan struct{})
+	output.beforeSend = func(st *StructuredText) {
+		switch st.Title {
+		case "old":
+			close(oldStarted)
+			<-releaseOld
+		case "current":
+			close(currentStarted)
+		}
+	}
+
+	input.SetMetadata(testMetadata("", "old"))
+	<-oldStarted
+	input.SetMetadata(testMetadata("", "current"))
+	select {
+	case <-currentStarted:
+	case <-time.After(time.Second):
+	}
+	close(releaseOld)
+
+	expectSent(t, output, "old")
+	expectSent(t, output, "current")
 }
 
 func TestCumulativeFieldClearingRejectsMetadata(t *testing.T) {
