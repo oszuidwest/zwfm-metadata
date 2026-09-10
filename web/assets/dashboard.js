@@ -393,23 +393,22 @@ function buildOutputCard(output) {
 
     const statsBox = el('div', 'content-box mb-4');
     const inputValueClass = output.currentInput ? 'text-success' : 'text-faint';
-    const currentInput = buildStatColumn(
-        'Current Input',
-        output.currentInput || 'None',
-        inputValueClass,
-    );
-    currentInput.classList.add('output-current-input');
-
-    const timingStats = el('div', 'output-stats');
-    const fallbackDelay =
-        output.fallbackDelay > 0
-            ? `+${output.fallbackDelay}s`
-            : `${output.fallbackDelay}s`;
+    const timingStats = el('div', 'output-stats mt-4 pt-4 border-t');
     timingStats.append(
         buildStatColumn('Delay', `${output.delay}s`),
-        buildStatColumn('Fallback', fallbackDelay),
+        buildStatColumn(
+            'Fallback',
+            `${output.fallbackDelay > 0 ? '+' : ''}${output.fallbackDelay}s`,
+        ),
     );
-    statsBox.append(currentInput, timingStats);
+    statsBox.append(
+        buildStatColumn(
+            'Current Input',
+            output.currentInput || 'None',
+            inputValueClass,
+        ),
+        timingStats,
+    );
     body.appendChild(statsBox);
 
     const tagsContainer = el('div', 'space-y-4');
