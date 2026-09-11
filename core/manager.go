@@ -72,6 +72,7 @@ type inputEntry struct {
 	spec  InputSpec
 }
 
+// outputUpdate is a coalesced Send waiting for its readyAt time.
 type outputUpdate struct {
 	inputName string
 	metadata  *Metadata
@@ -159,11 +160,7 @@ func (mr *MetadataRouter) AddOutput(output Output, spec OutputSpec) error {
 	storedSpec.Inputs = slices.Clone(spec.Inputs)
 	storedSpec.Formatters = slices.Clone(spec.Formatters)
 	storedSpec.FormatterNames = slices.Clone(spec.FormatterNames)
-	mr.outputs[name] = &outputEntry{
-		output: output,
-		spec:   storedSpec,
-		wake:   make(chan struct{}, 1),
-	}
+	mr.outputs[name] = &outputEntry{output: output, spec: storedSpec, wake: make(chan struct{}, 1)}
 	return nil
 }
 
@@ -483,40 +480,28 @@ func (mr *MetadataRouter) schedule(
 	)
 }
 
+// runOutputWorker delivers the output's pending update once it is ready. Context
+// cancellation drops the queued update, but a Send already in progress runs to
+// completion because Output.Send takes no context.
 func (mr *MetadataRouter) runOutputWorker(ctx context.Context, outputName string, entry *outputEntry) {
-	timer := time.NewTimer(time.Hour)
-	if !timer.Stop() {
-		<-timer.C
-	}
-	defer timer.Stop()
-
 	for {
 		mr.mu.Lock()
 		pending := entry.pending
 		mr.mu.Unlock()
 
-		if pending == nil {
-			select {
-			case <-ctx.Done():
-				return
-			case <-entry.wake:
-				continue
-			}
+		var ready <-chan time.Time // nil blocks forever while nothing is pending
+		if pending != nil {
+			ready = time.After(time.Until(pending.readyAt))
 		}
-
-		delay := max(time.Until(pending.readyAt), 0)
-		timer.Reset(delay)
-
 		select {
 		case <-ctx.Done():
-			stopTimer(timer)
 			return
 		case <-entry.wake:
-			stopTimer(timer)
 			continue
-		case <-timer.C:
+		case <-ready:
 		}
 
+		// Claim the slot; an update scheduled after the timer fired wins.
 		mr.mu.Lock()
 		if entry.pending != pending {
 			mr.mu.Unlock()
@@ -525,23 +510,7 @@ func (mr *MetadataRouter) runOutputWorker(ctx context.Context, outputName string
 		entry.pending = nil
 		mr.mu.Unlock()
 
-		mr.executeUpdate(
-			outputName,
-			entry,
-			pending.inputName,
-			pending.metadata,
-			pending.reason,
-		)
-	}
-}
-
-func stopTimer(timer *time.Timer) {
-	if timer.Stop() {
-		return
-	}
-	select {
-	case <-timer.C:
-	default:
+		mr.executeUpdate(outputName, entry, pending.inputName, pending.metadata, pending.reason)
 	}
 }
 
