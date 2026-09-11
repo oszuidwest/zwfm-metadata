@@ -72,7 +72,6 @@ type inputEntry struct {
 	spec  InputSpec
 }
 
-// outputUpdate is a coalesced Send waiting for its readyAt time.
 type outputUpdate struct {
 	inputName string
 	metadata  *Metadata
@@ -80,8 +79,7 @@ type outputUpdate struct {
 	readyAt   time.Time
 }
 
-// outputEntry pairs an output with its spec and the router's per-output state.
-// Its worker serializes Send calls and consumes at most one coalesced update.
+// outputEntry owns one worker that serializes sends and retains only the latest pending update.
 type outputEntry struct {
 	output       Output
 	spec         OutputSpec
@@ -452,8 +450,7 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 	mr.schedule(outputName, entry, inputName, metadata, "expiration_fallback")
 }
 
-// schedule replaces the output's pending update and wakes its worker. Callers
-// must hold mr.mu for writing.
+// schedule replaces the pending update. The caller must hold mr.mu for writing.
 func (mr *MetadataRouter) schedule(
 	outputName string, entry *outputEntry, inputName string, metadata *Metadata, reason string,
 ) {
@@ -480,28 +477,38 @@ func (mr *MetadataRouter) schedule(
 	)
 }
 
-// runOutputWorker delivers the output's pending update once it is ready. Context
-// cancellation drops the queued update, but a Send already in progress runs to
-// completion because Output.Send takes no context.
+// runOutputWorker serializes sends. Cancellation drops pending work but cannot
+// interrupt an active Send.
 func (mr *MetadataRouter) runOutputWorker(ctx context.Context, outputName string, entry *outputEntry) {
-	for {
-		mr.mu.Lock()
-		pending := entry.pending
-		mr.mu.Unlock()
+	timer := time.NewTimer(0)
+	timer.Stop()
+	defer timer.Stop()
 
-		var ready <-chan time.Time // nil blocks forever while nothing is pending
-		if pending != nil {
-			ready = time.After(time.Until(pending.readyAt))
+	for {
+		mr.mu.RLock()
+		pending := entry.pending
+		mr.mu.RUnlock()
+
+		if pending == nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-entry.wake:
+			}
+			continue
 		}
+
+		timer.Reset(time.Until(pending.readyAt))
 		select {
 		case <-ctx.Done():
 			return
 		case <-entry.wake:
+			timer.Stop()
 			continue
-		case <-ready:
+		case <-timer.C:
 		}
 
-		// Claim the slot; an update scheduled after the timer fired wins.
+		// Preserve a replacement scheduled as the timer fired.
 		mr.mu.Lock()
 		if entry.pending != pending {
 			mr.mu.Unlock()

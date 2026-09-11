@@ -58,9 +58,7 @@ func (m *mockOutput) waitForSend(timeout time.Duration) (*StructuredText, bool) 
 	}
 }
 
-// blockSend makes output block inside Send for title until release is called.
-// started is closed when that Send begins; release is idempotent and also runs
-// at cleanup so a failing test cannot hang.
+// blockSend pauses matching sends until release; cleanup always releases the block.
 func blockSend(t *testing.T, output *mockOutput, title string) (started <-chan struct{}, release func()) {
 	t.Helper()
 	startedCh, releaseCh := make(chan struct{}), make(chan struct{})
@@ -81,8 +79,7 @@ const (
 	fallbackSeconds = 20
 )
 
-// expectSent allows the regular output delay plus the expiration checker's 1s tick,
-// so a send that was held back by the fallback delay is reported as missing.
+// expectSent waits through the output delay and one expiration-check tick, but not the fallback delay.
 func expectSent(t *testing.T, output *mockOutput, title string) {
 	t.Helper()
 	st, ok := output.waitForSend((delaySeconds + 1) * time.Second)
@@ -198,8 +195,7 @@ func testMetadata(artist, title string) *Metadata {
 	}
 }
 
-// startRouter registers the output with the given inputs in priority order and
-// starts the router. Callers run inside synctest.Test so router timers use fake time.
+// startRouter registers the output's inputs in priority order, then starts the router.
 func startRouter(t *testing.T, router *MetadataRouter, output *mockOutput, timing OutputTiming, inputs ...*mockInput) {
 	t.Helper()
 
@@ -375,7 +371,7 @@ func TestBlockedOutputCoalescesBurstWithBoundedGoroutines(t *testing.T) {
 			router.schedule(output.GetName(), entry, input.GetName(), testMetadata("", strings.Repeat("x", i+1)), "test")
 			router.mu.Unlock()
 		}
-		// schedule starts no goroutines; the tolerance only absorbs unrelated runtime churn.
+		// Allow for unrelated runtime churn; schedule itself starts no goroutines.
 		if delta := runtime.NumGoroutine() - baseline; delta > 5 {
 			t.Fatalf("goroutine delta after %d replacements = %d, want at most 5", replacements, delta)
 		}
@@ -390,38 +386,44 @@ func TestBlockedOutputCoalescesBurstWithBoundedGoroutines(t *testing.T) {
 func TestCancellationDropsQueuedOutputUpdate(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
 		router := NewMetadataRouter()
 		input := newMockInput("input")
 		addInput(t, router, input, InputSpec{})
 		output := newMockOutput("output")
-		if err := router.AddOutput(output, OutputSpec{Inputs: []string{input.GetName()}}); err != nil {
+		if err := router.AddOutput(output, OutputSpec{
+			Inputs: []string{input.GetName()},
+			Timing: OutputTiming{Delay: 1},
+		}); err != nil {
 			t.Fatalf("AddOutput failed: %v", err)
 		}
-		started, release := blockSend(t, output, "initial")
 		if err := router.Start(ctx); err != nil {
 			t.Fatalf("Start failed: %v", err)
 		}
 
-		input.SetMetadata(testMetadata("", "initial"))
-		<-started
+		input.SetMetadata(testMetadata("", "queued"))
+		synctest.Wait()
 
 		entry := router.outputs[output.GetName()]
-		router.mu.Lock()
-		router.schedule(output.GetName(), entry, input.GetName(), testMetadata("", "queued"), "test")
-		router.mu.Unlock()
+		router.mu.RLock()
+		pending := entry.pending
+		router.mu.RUnlock()
+		if pending == nil {
+			t.Fatal("update was not queued before cancellation")
+		}
+
 		cancel()
 		synctest.Wait()
 
 		router.mu.RLock()
-		pending := entry.pending
+		pending = entry.pending
 		router.mu.RUnlock()
 		if pending != nil {
 			t.Fatal("pending update was not cleared on cancellation")
 		}
 
-		release()
-		expectSent(t, output, "initial")
-		expectNoSend(t, output, 50*time.Millisecond)
+		expectNoSend(t, output, 2*time.Second)
 	})
 }
 
@@ -613,7 +615,7 @@ func setupFallbackRouter(t *testing.T) (primary, fallback *mockInput, output *mo
 	timing := OutputTiming{Delay: delaySeconds, FallbackDelay: fallbackSeconds}
 	startRouter(t, router, output, timing, primary, fallback)
 
-	// Drain the initial static fallback.
+	// Drain the startup fallback.
 	expectSent(t, output, "Station Name")
 
 	return primary, fallback, output
