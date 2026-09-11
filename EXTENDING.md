@@ -153,7 +153,7 @@ type WebhookOutputConfig struct {
 }
 ```
 
-Do not add `Delay` or `FallbackDelay` to this struct. `setupOutput` parses those shared fields separately into `core.OutputTiming`.
+Do not add `Delay` or `FallbackDelay` to this struct. `setupOutput` strips those shared keys before `createOutput` sees the settings. Any other unknown settings key fails startup.
 
 ### 2. Implement the output
 

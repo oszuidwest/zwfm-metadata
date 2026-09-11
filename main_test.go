@@ -32,6 +32,11 @@ func TestSetupOutputTiming(t *testing.T) {
 			wantError: true,
 		},
 		{
+			name:      "unknown setting",
+			settings:  json.RawMessage(`{"dealy": 12}`),
+			wantError: true,
+		},
+		{
 			name:      "negative delay",
 			settings:  json.RawMessage(`{"delay": -1}`),
 			wantError: true,

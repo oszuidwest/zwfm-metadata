@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -11,7 +12,9 @@ func ParseJSONSettings[T any](settings json.RawMessage) (T, error) {
 	if len(settings) == 0 {
 		return result, nil
 	}
-	if err := json.Unmarshal(settings, &result); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(settings))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&result); err != nil {
 		return result, fmt.Errorf("failed to parse settings: %w", err)
 	}
 	return result, nil
