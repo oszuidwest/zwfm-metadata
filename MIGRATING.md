@@ -88,10 +88,7 @@ cfg := config.OutputConfig{
     Type:   "file",
     Name:   "archive",
     Inputs: []string{"radio-live"},
-    Settings: json.RawMessage(`{
-        "delay": 2,
-        "filename": "/tmp/metadata.txt"
-    }`),
+    Settings: json.RawMessage(`{"filename": "/tmp/metadata.txt"}`),
 }
 ```
 
@@ -102,12 +99,12 @@ cfg := config.OutputConfig{
 settings, err := utils.ParseJSONSettings[config.FileOutputConfig](cfg.Settings)
 output := outputs.NewFileOutput(cfg.Name, *settings)
 
-// v3 output settings include shared timing in the same JSON object
-settings, timing, err := parseOutputSettings[config.FileOutputConfig](cfg.Settings)
+// v3
+settings, err := utils.ParseJSONSettings[config.FileOutputConfig](cfg.Settings)
 output := outputs.NewFileOutput(cfg.Name, settings)
 ```
 
-An absent or empty `Settings` value now decodes to the zero value of the target type. Unknown settings keys are rejected instead of being silently ignored. `parseOutputSettings` validates shared timing and output-specific settings together without making timing part of the component constructor configuration.
+An absent or empty `Settings` value now decodes to the zero value of the target type. Unknown keys are rejected instead of silently ignored, so `delay` and `fallbackDelay` must not be in the JSON passed to `ParseJSONSettings` for an output config. Supply timing via `core.OutputSpec.Timing` instead (see below).
 
 ### Router registration
 

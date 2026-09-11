@@ -153,7 +153,7 @@ type WebhookOutputConfig struct {
 }
 ```
 
-Do not add `Delay` or `FallbackDelay` to this struct. `parseOutputSettings` separates those shared fields and strictly validates the remaining output-specific fields. Unknown settings keys cause startup to fail.
+Do not add `Delay` or `FallbackDelay` to this struct. `setupOutput` strips those shared keys before `createOutput` sees the settings. Any other unknown settings key fails startup.
 
 ### 2. Implement the output
 
@@ -219,16 +219,15 @@ func (o *WebhookOutput) Send(st *core.StructuredText) error {
 
 ### 3. Register the output
 
-Add a case to `createOutput` in `main.go`, which returns the output and its timing:
+Add a case to `createOutput` in `main.go`:
 
 ```go
 case "webhook":
-    settings, timing, err := parseOutputSettings[config.WebhookOutputConfig](cfg.Settings)
+    settings, err := utils.ParseJSONSettings[config.WebhookOutputConfig](cfg.Settings)
     if err != nil {
-        return nil, core.OutputTiming{}, err
+        return nil, err
     }
-    output, err := outputs.NewWebhookOutput(cfg.Name, settings)
-    return output, timing, err
+    return outputs.NewWebhookOutput(cfg.Name, settings)
 ```
 
 The configuration can then use the output:

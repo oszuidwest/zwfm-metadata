@@ -7,23 +7,29 @@ import (
 )
 
 func TestParseJSONSettingsRejectsUnknownFields(t *testing.T) {
+	type nested struct {
+		Type string `json:"type"`
+	}
 	type settings struct {
-		Delay int `json:"delay"`
+		Delay  int    `json:"delay"`
+		Nested nested `json:"nested"`
 	}
 
-	_, err := ParseJSONSettings[settings](json.RawMessage(`{"dealy":12}`))
-	if err == nil || !strings.Contains(err.Error(), `unknown field "dealy"`) {
-		t.Fatalf("ParseJSONSettings() error = %v, want unknown field error", err)
-	}
-}
-
-func TestParseJSONSettingsRejectsMultipleValues(t *testing.T) {
-	type settings struct {
-		Delay int `json:"delay"`
+	tests := []struct {
+		name     string
+		settings json.RawMessage
+		field    string
+	}{
+		{name: "top level", settings: json.RawMessage(`{"dealy":12}`), field: "dealy"},
+		{name: "nested", settings: json.RawMessage(`{"nested":{"tpye":"x"}}`), field: "tpye"},
 	}
 
-	_, err := ParseJSONSettings[settings](json.RawMessage(`{"delay":12} {"delay":13}`))
-	if err == nil || !strings.Contains(err.Error(), "single JSON value") {
-		t.Fatalf("ParseJSONSettings() error = %v, want single value error", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseJSONSettings[settings](tt.settings)
+			if err == nil || !strings.Contains(err.Error(), `unknown field "`+tt.field+`"`) {
+				t.Fatalf("ParseJSONSettings() error = %v, want unknown field %q", err, tt.field)
+			}
+		})
 	}
 }

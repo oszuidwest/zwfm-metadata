@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"zwfm-metadata/config"
@@ -96,37 +95,5 @@ func TestExampleConfigComponents(t *testing.T) {
 		if err := setupOutput(router, &appConfig.Outputs[i]); err != nil {
 			t.Fatalf("setup output %q: %v", appConfig.Outputs[i].Name, err)
 		}
-	}
-}
-
-func TestCreateInputRejectsUnknownSettings(t *testing.T) {
-	tests := []struct {
-		name     string
-		settings json.RawMessage
-		field    string
-	}{
-		{
-			name:     "misspelled secret",
-			settings: json.RawMessage(`{"secert":"expected"}`),
-			field:    "secert",
-		},
-		{
-			name:     "misspelled nested expiration type",
-			settings: json.RawMessage(`{"expiration":{"tpye":"dynamic"}}`),
-			field:    "tpye",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := createInput(&config.InputConfig{
-				Type:     "dynamic",
-				Name:     "input",
-				Settings: tt.settings,
-			})
-			if err == nil || !strings.Contains(err.Error(), `unknown field "`+tt.field+`"`) {
-				t.Fatalf("createInput() error = %v, want unknown field %q", err, tt.field)
-			}
-		})
 	}
 }

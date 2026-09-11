@@ -9,11 +9,8 @@ import (
 
 func TestInputBaseLogsDroppedSubscriberUpdate(t *testing.T) {
 	var logs bytes.Buffer
-	previousLogger := slog.Default()
+	defer slog.SetDefault(slog.Default())
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() {
-		slog.SetDefault(previousLogger)
-	})
 
 	input := NewInputBase("input")
 	updates := make(chan *Metadata, 1)
