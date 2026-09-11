@@ -678,6 +678,7 @@ func TestFallbackWithDuplicateContentUpdatesCurrentInputWithoutSending(t *testin
 		output := newMockOutput("output")
 		startRouter(t, router, output, OutputTiming{}, primary, fallback)
 		expectSent(t, output, "Station Name")
+		synctest.Wait()
 		if got := router.GetOutputStatus()[0].CurrentInput; got != "primary" {
 			t.Fatalf("initial current input = %q, want %q", got, "primary")
 		}
