@@ -1,7 +1,9 @@
 package core
 
 import (
+	"context"
 	"errors"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -56,14 +58,28 @@ func (m *mockOutput) waitForSend(timeout time.Duration) (*StructuredText, bool) 
 	}
 }
 
+// blockSend pauses matching sends until release; cleanup always releases the block.
+func blockSend(t *testing.T, output *mockOutput, title string) (started <-chan struct{}, release func()) {
+	t.Helper()
+	startedCh, releaseCh := make(chan struct{}), make(chan struct{})
+	output.beforeSend = func(st *StructuredText) {
+		if st.Title == title {
+			close(startedCh)
+			<-releaseCh
+		}
+	}
+	release = sync.OnceFunc(func() { close(releaseCh) })
+	t.Cleanup(release)
+	return startedCh, release
+}
+
 const (
 	trackLength     = 3 * time.Minute
 	delaySeconds    = 5
 	fallbackSeconds = 20
 )
 
-// expectSent allows the regular output delay plus the expiration checker's 1s tick,
-// so a send that was held back by the fallback delay is reported as missing.
+// expectSent waits through the output delay and one expiration-check tick, but not the fallback delay.
 func expectSent(t *testing.T, output *mockOutput, title string) {
 	t.Helper()
 	st, ok := output.waitForSend((delaySeconds + 1) * time.Second)
@@ -179,8 +195,7 @@ func testMetadata(artist, title string) *Metadata {
 	}
 }
 
-// startRouter registers the output with the given inputs in priority order and
-// starts the router. Callers run inside synctest.Test so router timers use fake time.
+// startRouter registers the output's inputs in priority order, then starts the router.
 func startRouter(t *testing.T, router *MetadataRouter, output *mockOutput, timing OutputTiming, inputs ...*mockInput) {
 	t.Helper()
 
@@ -303,6 +318,113 @@ func TestOutputUpdatesStayOrdered(t *testing.T) {
 
 	expectSent(t, output, "old")
 	expectSent(t, output, "current")
+}
+
+func TestBlockedOutputDoesNotDelayOtherOutputs(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		router := NewMetadataRouter()
+		input := newMockInput("input")
+		addInput(t, router, input, InputSpec{})
+
+		blocked := newMockOutput("blocked")
+		fast := newMockOutput("fast")
+		for _, output := range []*mockOutput{blocked, fast} {
+			if err := router.AddOutput(output, OutputSpec{Inputs: []string{input.GetName()}}); err != nil {
+				t.Fatalf("AddOutput(%q) failed: %v", output.GetName(), err)
+			}
+		}
+		started, release := blockSend(t, blocked, "first")
+		if err := router.Start(t.Context()); err != nil {
+			t.Fatalf("Start failed: %v", err)
+		}
+
+		input.SetMetadata(testMetadata("", "first"))
+		<-started
+		expectSent(t, fast, "first")
+
+		input.SetMetadata(testMetadata("", "second"))
+		expectSent(t, fast, "second")
+
+		release()
+		expectSent(t, blocked, "first")
+		expectSent(t, blocked, "second")
+	})
+}
+
+func TestBlockedOutputCoalescesBurstWithBoundedGoroutines(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		router := NewMetadataRouter()
+		input := newMockInput("input")
+		addInput(t, router, input, InputSpec{})
+		output := newMockOutput("output")
+		started, release := blockSend(t, output, "initial")
+		startRouter(t, router, output, OutputTiming{}, input)
+
+		input.SetMetadata(testMetadata("", "initial"))
+		<-started
+
+		baseline := runtime.NumGoroutine()
+		entry := router.outputs[output.GetName()]
+		const replacements = 200
+		for i := range replacements {
+			router.mu.Lock()
+			router.schedule(output.GetName(), entry, input.GetName(), testMetadata("", strings.Repeat("x", i+1)), "test")
+			router.mu.Unlock()
+		}
+		// Allow for unrelated runtime churn; schedule itself starts no goroutines.
+		if delta := runtime.NumGoroutine() - baseline; delta > 5 {
+			t.Fatalf("goroutine delta after %d replacements = %d, want at most 5", replacements, delta)
+		}
+
+		release()
+		expectSent(t, output, "initial")
+		expectSent(t, output, strings.Repeat("x", replacements))
+		expectNoSend(t, output, 50*time.Millisecond)
+	})
+}
+
+func TestCancellationDropsQueuedOutputUpdate(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+
+		router := NewMetadataRouter()
+		input := newMockInput("input")
+		addInput(t, router, input, InputSpec{})
+		output := newMockOutput("output")
+		if err := router.AddOutput(output, OutputSpec{
+			Inputs: []string{input.GetName()},
+			Timing: OutputTiming{Delay: 1},
+		}); err != nil {
+			t.Fatalf("AddOutput failed: %v", err)
+		}
+		if err := router.Start(ctx); err != nil {
+			t.Fatalf("Start failed: %v", err)
+		}
+
+		input.SetMetadata(testMetadata("", "queued"))
+		synctest.Wait()
+
+		entry := router.outputs[output.GetName()]
+		router.mu.RLock()
+		pending := entry.pending
+		router.mu.RUnlock()
+		if pending == nil {
+			t.Fatal("update was not queued before cancellation")
+		}
+
+		cancel()
+		synctest.Wait()
+
+		router.mu.RLock()
+		pending = entry.pending
+		router.mu.RUnlock()
+		if pending != nil {
+			t.Fatal("pending update was not cleared on cancellation")
+		}
+
+		expectNoSend(t, output, 2*time.Second)
+	})
 }
 
 func TestFailedOutputUpdateCanBeRetried(t *testing.T) {
@@ -493,7 +615,7 @@ func setupFallbackRouter(t *testing.T) (primary, fallback *mockInput, output *mo
 	timing := OutputTiming{Delay: delaySeconds, FallbackDelay: fallbackSeconds}
 	startRouter(t, router, output, timing, primary, fallback)
 
-	// Drain the initial static fallback.
+	// Drain the startup fallback.
 	expectSent(t, output, "Station Name")
 
 	return primary, fallback, output
@@ -558,6 +680,7 @@ func TestFallbackWithDuplicateContentUpdatesCurrentInputWithoutSending(t *testin
 		output := newMockOutput("output")
 		startRouter(t, router, output, OutputTiming{}, primary, fallback)
 		expectSent(t, output, "Station Name")
+		synctest.Wait()
 		if got := router.GetOutputStatus()[0].CurrentInput; got != "primary" {
 			t.Fatalf("initial current input = %q, want %q", got, "primary")
 		}

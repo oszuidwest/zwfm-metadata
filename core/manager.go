@@ -72,15 +72,21 @@ type inputEntry struct {
 	spec  InputSpec
 }
 
-// outputEntry pairs an output with its spec and the router's per-output state.
-// At most one update is pending per output; scheduling a new one replaces it.
+type outputUpdate struct {
+	inputName string
+	metadata  *Metadata
+	reason    string
+	readyAt   time.Time
+}
+
+// outputEntry owns one worker that serializes sends and retains only the latest pending update.
 type outputEntry struct {
 	output       Output
 	spec         OutputSpec
 	lastSent     string
 	currentInput string
-	pending      *time.Timer
-	updateMu     sync.Mutex
+	pending      *outputUpdate
+	wake         chan struct{}
 }
 
 // MetadataRouter routes metadata by input priority and output timing.
@@ -152,7 +158,7 @@ func (mr *MetadataRouter) AddOutput(output Output, spec OutputSpec) error {
 	storedSpec.Inputs = slices.Clone(spec.Inputs)
 	storedSpec.Formatters = slices.Clone(spec.Formatters)
 	storedSpec.FormatterNames = slices.Clone(spec.FormatterNames)
-	mr.outputs[name] = &outputEntry{output: output, spec: storedSpec}
+	mr.outputs[name] = &outputEntry{output: output, spec: storedSpec, wake: make(chan struct{}, 1)}
 	return nil
 }
 
@@ -300,6 +306,7 @@ func (mr *MetadataRouter) Start(ctx context.Context) error {
 				slog.Error("Failed to start output", "name", name, "error", err)
 			}
 		}()
+		go mr.runOutputWorker(ctx, name, entry)
 	}
 
 	mr.mu.Unlock()
@@ -394,7 +401,6 @@ func (mr *MetadataRouter) cancelPendingUpdates() {
 	mr.stopped = true
 	for outputName, entry := range mr.outputs {
 		if entry.pending != nil {
-			entry.pending.Stop()
 			entry.pending = nil
 			slog.Debug("Cancelled pending output update", "output", outputName)
 		}
@@ -444,43 +450,75 @@ func (mr *MetadataRouter) scheduleFallbackUpdate(
 	mr.schedule(outputName, entry, inputName, metadata, "expiration_fallback")
 }
 
-// schedule replaces the output's pending update with one that fires after the
-// configured delay. Callers must hold mr.mu for writing; that also guarantees the
-// timer is stored before its callback can observe it.
+// schedule replaces the pending update. The caller must hold mr.mu for writing.
 func (mr *MetadataRouter) schedule(
 	outputName string, entry *outputEntry, inputName string, metadata *Metadata, reason string,
 ) {
 	if mr.stopped {
 		return
 	}
-	if entry.pending != nil {
-		entry.pending.Stop()
-	}
 
 	delay := mr.updateDelay(entry, inputName)
-
-	var timer *time.Timer
-	timer = time.AfterFunc(delay, func() {
-		entry.updateMu.Lock()
-		defer entry.updateMu.Unlock()
-
-		mr.mu.Lock()
-		if entry.pending != timer {
-			mr.mu.Unlock()
-			return
-		}
-		entry.pending = nil
-		mr.mu.Unlock()
-
-		mr.executeUpdate(outputName, entry, inputName, metadata, reason)
-	})
-	entry.pending = timer
+	entry.pending = &outputUpdate{
+		inputName: inputName,
+		metadata:  metadata,
+		reason:    reason,
+		readyAt:   time.Now().Add(delay),
+	}
+	select {
+	case entry.wake <- struct{}{}:
+	default:
+	}
 
 	slog.Debug("Scheduled update for output",
 		"update_type", reason,
 		"output", outputName,
 		"delay", delay,
 	)
+}
+
+// runOutputWorker serializes sends. Cancellation drops pending work but cannot
+// interrupt an active Send.
+func (mr *MetadataRouter) runOutputWorker(ctx context.Context, outputName string, entry *outputEntry) {
+	timer := time.NewTimer(0)
+	timer.Stop()
+	defer timer.Stop()
+
+	for {
+		mr.mu.RLock()
+		pending := entry.pending
+		mr.mu.RUnlock()
+
+		if pending == nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-entry.wake:
+			}
+			continue
+		}
+
+		timer.Reset(time.Until(pending.readyAt))
+		select {
+		case <-ctx.Done():
+			return
+		case <-entry.wake:
+			timer.Stop()
+			continue
+		case <-timer.C:
+		}
+
+		// Preserve a replacement scheduled as the timer fired.
+		mr.mu.Lock()
+		if entry.pending != pending {
+			mr.mu.Unlock()
+			continue
+		}
+		entry.pending = nil
+		mr.mu.Unlock()
+
+		mr.executeUpdate(outputName, entry, pending.inputName, pending.metadata, pending.reason)
+	}
 }
 
 // updateDelay returns Delay, plus FallbackDelay when inputName ranks below the input
