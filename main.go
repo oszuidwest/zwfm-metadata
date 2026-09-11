@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -134,12 +135,7 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error
 
 // setupOutput builds and registers an output and its formatters.
 func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) error {
-	timing, err := utils.ParseJSONSettings[core.OutputTiming](outputCfg.Settings)
-	if err != nil {
-		return fmt.Errorf("failed to parse timing for output %q: %w", outputCfg.Name, err)
-	}
-
-	output, err := createOutput(outputCfg)
+	output, timing, err := createOutput(outputCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create output %q: %w", outputCfg.Name, err)
 	}
@@ -200,58 +196,97 @@ func createInput(cfg *config.InputConfig) (core.Input, error) {
 	}
 }
 
-func createOutput(cfg *config.OutputConfig) (core.Output, error) {
+func createOutput(cfg *config.OutputConfig) (core.Output, core.OutputTiming, error) {
 	switch cfg.Type {
 	case "icecast":
-		settings, err := utils.ParseJSONSettings[config.IcecastOutputConfig](cfg.Settings)
+		settings, timing, err := parseOutputSettings[config.IcecastOutputConfig](cfg.Settings)
 		if err != nil {
-			return nil, err
+			return nil, core.OutputTiming{}, err
 		}
-		return outputs.NewIcecastOutput(cfg.Name, settings), nil
+		return outputs.NewIcecastOutput(cfg.Name, settings), timing, nil
 
 	case "file":
-		settings, err := utils.ParseJSONSettings[config.FileOutputConfig](cfg.Settings)
+		settings, timing, err := parseOutputSettings[config.FileOutputConfig](cfg.Settings)
 		if err != nil {
-			return nil, err
+			return nil, core.OutputTiming{}, err
 		}
-		return outputs.NewFileOutput(cfg.Name, settings), nil
+		return outputs.NewFileOutput(cfg.Name, settings), timing, nil
 
 	case "url":
-		settings, err := utils.ParseJSONSettings[config.URLOutputConfig](cfg.Settings)
+		settings, timing, err := parseOutputSettings[config.URLOutputConfig](cfg.Settings)
 		if err != nil {
-			return nil, err
+			return nil, core.OutputTiming{}, err
 		}
-		return outputs.NewURLOutput(cfg.Name, settings)
+		output, err := outputs.NewURLOutput(cfg.Name, settings)
+		return output, timing, err
 
 	case "dlplus":
-		settings, err := utils.ParseJSONSettings[config.DLPlusOutputConfig](cfg.Settings)
+		settings, timing, err := parseOutputSettings[config.DLPlusOutputConfig](cfg.Settings)
 		if err != nil {
-			return nil, err
+			return nil, core.OutputTiming{}, err
 		}
-		return outputs.NewDLPlusOutput(cfg.Name, settings), nil
+		return outputs.NewDLPlusOutput(cfg.Name, settings), timing, nil
 
 	case "websocket":
-		settings, err := utils.ParseJSONSettings[config.WebSocketOutputConfig](cfg.Settings)
+		settings, timing, err := parseOutputSettings[config.WebSocketOutputConfig](cfg.Settings)
 		if err != nil {
-			return nil, err
+			return nil, core.OutputTiming{}, err
 		}
-		return outputs.NewWebSocketOutput(cfg.Name, settings)
+		output, err := outputs.NewWebSocketOutput(cfg.Name, settings)
+		return output, timing, err
 
 	case "http":
-		settings, err := utils.ParseJSONSettings[config.HTTPOutputConfig](cfg.Settings)
+		settings, timing, err := parseOutputSettings[config.HTTPOutputConfig](cfg.Settings)
 		if err != nil {
-			return nil, err
+			return nil, core.OutputTiming{}, err
 		}
-		return outputs.NewHTTPOutput(cfg.Name, settings)
+		output, err := outputs.NewHTTPOutput(cfg.Name, settings)
+		return output, timing, err
 
 	case "stereotool":
-		settings, err := utils.ParseJSONSettings[config.StereoToolOutputConfig](cfg.Settings)
+		settings, timing, err := parseOutputSettings[config.StereoToolOutputConfig](cfg.Settings)
 		if err != nil {
-			return nil, err
+			return nil, core.OutputTiming{}, err
 		}
-		return outputs.NewStereoToolOutput(cfg.Name, settings), nil
+		return outputs.NewStereoToolOutput(cfg.Name, settings), timing, nil
 
 	default:
-		return nil, fmt.Errorf("unknown type: %s", cfg.Type)
+		return nil, core.OutputTiming{}, fmt.Errorf("unknown type: %s", cfg.Type)
 	}
+}
+
+func parseOutputSettings[T any](settings json.RawMessage) (T, core.OutputTiming, error) {
+	var zero T
+	fields, err := utils.ParseJSONSettings[map[string]json.RawMessage](settings)
+	if err != nil {
+		return zero, core.OutputTiming{}, err
+	}
+
+	timingFields := make(map[string]json.RawMessage, 2)
+	for _, key := range []string{"delay", "fallbackDelay"} {
+		if value, exists := fields[key]; exists {
+			timingFields[key] = value
+			delete(fields, key)
+		}
+	}
+
+	timingJSON, err := json.Marshal(timingFields)
+	if err != nil {
+		return zero, core.OutputTiming{}, fmt.Errorf("failed to prepare output timing: %w", err)
+	}
+	timing, err := utils.ParseJSONSettings[core.OutputTiming](timingJSON)
+	if err != nil {
+		return zero, core.OutputTiming{}, err
+	}
+
+	componentJSON, err := json.Marshal(fields)
+	if err != nil {
+		return zero, core.OutputTiming{}, fmt.Errorf("failed to prepare output settings: %w", err)
+	}
+	component, err := utils.ParseJSONSettings[T](componentJSON)
+	if err != nil {
+		return zero, core.OutputTiming{}, err
+	}
+
+	return component, timing, nil
 }

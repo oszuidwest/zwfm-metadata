@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"html"
+	"log/slog"
 	"slices"
 	"sync"
 )
@@ -79,6 +80,7 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 		select {
 		case ch <- metadata:
 		default:
+			slog.Warn("Subscriber channel full, dropping metadata update", "input", b.name)
 		}
 	}
 }

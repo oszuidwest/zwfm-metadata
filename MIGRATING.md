@@ -102,12 +102,12 @@ cfg := config.OutputConfig{
 settings, err := utils.ParseJSONSettings[config.FileOutputConfig](cfg.Settings)
 output := outputs.NewFileOutput(cfg.Name, *settings)
 
-// v3
-settings, err := utils.ParseJSONSettings[config.FileOutputConfig](cfg.Settings)
+// v3 output settings include shared timing in the same JSON object
+settings, timing, err := parseOutputSettings[config.FileOutputConfig](cfg.Settings)
 output := outputs.NewFileOutput(cfg.Name, settings)
 ```
 
-An absent or empty `Settings` value now decodes to the zero value of the target type.
+An absent or empty `Settings` value now decodes to the zero value of the target type. Unknown settings keys are rejected instead of being silently ignored. `parseOutputSettings` validates shared timing and output-specific settings together without making timing part of the component constructor configuration.
 
 ### Router registration
 
