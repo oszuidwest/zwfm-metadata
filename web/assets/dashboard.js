@@ -1,17 +1,14 @@
-// Store previous data to detect changes
 const previousData = {
     inputs: {},
     outputs: {},
     stats: {},
 };
 
-// WebSocket connection
 let ws = null;
 let reconnectTimeout = null;
 let reconnectDelay = 1000;
 const maxReconnectDelay = 30000;
 
-// DOM Element Factory Helpers
 function el(tag, className, textContent) {
     const element = document.createElement(tag);
     if (className) {
@@ -40,8 +37,8 @@ function createBadge(text, classes) {
     return el('span', `badge ${classes}`, text);
 }
 
-function createStatusBadge(status, statusConfig) {
-    const config = statusConfig[status] || statusConfig.default;
+function createStatusBadge(status) {
+    const config = STATUS_CONFIG[status] || STATUS_CONFIG.unavailable;
     const container = el('div', 'flex items-center mb-3');
     const dot = el('span', `status-dot ${config.dot}`);
     const label = el('span', `font-semibold ${config.text}`, config.label);
@@ -51,7 +48,9 @@ function createStatusBadge(status, statusConfig) {
 
 function createMetadataCard(name, type, headerClass, hasChanged) {
     const card = el('div', 'card');
-    card.dataset.changed = hasChanged;
+    if (hasChanged) {
+        animateCardChange(card);
+    }
 
     const header = el('div', `card-header ${headerClass}`);
     const titleRow = el('div', 'card-title-row');
@@ -63,10 +62,9 @@ function createMetadataCard(name, type, headerClass, hasChanged) {
     const body = el('div', 'card-body');
 
     card.append(header, body);
-    return card;
+    return { card, body };
 }
 
-// Configuration Constants
 const STATUS_CONFIG = {
     available: { dot: 'bg-success', text: 'text-success', label: 'Available' },
     expired: { dot: 'bg-warning', text: 'text-warning', label: 'Expired' },
@@ -75,7 +73,12 @@ const STATUS_CONFIG = {
         text: 'text-danger',
         label: 'Unavailable',
     },
-    default: { dot: 'bg-danger', text: 'text-danger', label: 'Unavailable' },
+};
+
+const CONNECTION_LABELS = {
+    connected: 'Connected',
+    disconnected: 'Disconnected',
+    connecting: 'Connecting',
 };
 
 const TAG_CLASSES = {
@@ -89,14 +92,6 @@ const CARD_HEADER_CLASSES = {
     input: 'card-header-brand',
     output: 'card-header-slate',
 };
-
-// Data Management Helpers
-function updateContainerWithCards(container, cards) {
-    container.replaceChildren(...cards);
-    for (const card of container.querySelectorAll('[data-changed="true"]')) {
-        animateCardChange(card);
-    }
-}
 
 function hasDataChanged(current, previous, compareKeys) {
     if (!previous) {
@@ -112,7 +107,6 @@ function hasDataChanged(current, previous, compareKeys) {
     });
 }
 
-// WebSocket Management
 function establishWebSocketConnection() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/dashboard`;
@@ -127,10 +121,6 @@ function establishWebSocketConnection() {
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         processDashboardUpdate(data);
-    };
-
-    ws.onerror = () => {
-        // Error handling - connection will be retried on close
     };
 
     ws.onclose = () => {
@@ -150,22 +140,11 @@ function establishWebSocketConnection() {
 function updateConnectionStatus(status) {
     const plugIcon = document.getElementById('plug-icon');
     const statusText = document.getElementById('connection-status');
+    const connecting = status === 'connecting';
 
-    plugIcon.classList.remove('animate-pulse');
-    statusText.classList.remove('animate-pulse');
-
-    const statusLabels = {
-        connected: 'Connected',
-        disconnected: 'Disconnected',
-        connecting: 'Connecting',
-    };
-
-    statusText.textContent = statusLabels[status] || 'Unknown';
-
-    if (status === 'connecting') {
-        plugIcon.classList.add('animate-pulse');
-        statusText.classList.add('animate-pulse');
-    }
+    statusText.textContent = CONNECTION_LABELS[status] || 'Unknown';
+    plugIcon.classList.toggle('animate-pulse', connecting);
+    statusText.classList.toggle('animate-pulse', connecting);
 }
 
 function formatDisplayTime(timestamp, useRelative) {
@@ -187,6 +166,16 @@ function formatDisplayTime(timestamp, useRelative) {
     return date.toLocaleTimeString();
 }
 
+// Refresh relative times locally because the server pushes only state changes.
+function refreshRelativeTimes() {
+    for (const element of document.querySelectorAll('[data-timestamp]')) {
+        element.textContent = formatDisplayTime(
+            element.dataset.timestamp,
+            true,
+        );
+    }
+}
+
 function animateCardChange(element) {
     element.classList.add('animate-flash');
     setTimeout(() => {
@@ -197,9 +186,10 @@ function animateCardChange(element) {
 function updateStatistics(data) {
     const stats = {
         'total-inputs': data.inputs.length,
-        'available-inputs': data.inputs.filter((i) => i.available).length,
+        'available-inputs': data.inputs.filter((i) => i.status === 'available')
+            .length,
         'total-outputs': data.outputs.length,
-        'active-flows': data.activeFlows,
+        'active-flows': data.outputs.filter((o) => o.currentInput).length,
     };
 
     for (const [id, newValue] of Object.entries(stats)) {
@@ -216,7 +206,6 @@ function updateStatistics(data) {
     }
 }
 
-// Input card DOM builders
 function buildMetadataBox(metadata) {
     if (!metadata) {
         return null;
@@ -249,7 +238,7 @@ function buildPrefixSuffixBox(input) {
     const fields = [
         { label: 'Prefix', value: input.prefix },
         { label: 'Suffix', value: input.suffix },
-    ].filter((f) => f.value && f.value !== 'undefined');
+    ].filter((f) => f.value);
 
     if (fields.length === 0) {
         return null;
@@ -262,7 +251,7 @@ function buildPrefixSuffixBox(input) {
             createLabeledField(
                 field.label,
                 field.value,
-                'text-muted-light',
+                'text-muted',
                 'font-mono',
             ),
         );
@@ -289,13 +278,16 @@ function buildBadgeSection(label, items, badgeClass) {
 }
 
 function buildInputTimestampBox(input) {
-    const container = el('div', 'text-muted-light text-sm mt-4 pt-4 border-t');
+    const container = el('div', 'text-muted text-sm mt-4 pt-4 border-t');
     const isAvailable = input.status === 'available';
     const updatedTime = formatDisplayTime(input.updatedAt, isAvailable);
 
     const updatedDiv = el('div');
     const labelSpan = el('span', null, 'Updated: ');
     const timeSpan = el('span', isAvailable ? 'font-medium' : '', updatedTime);
+    if (isAvailable && input.updatedAt) {
+        timeSpan.dataset.timestamp = input.updatedAt;
+    }
     updatedDiv.append(labelSpan, timeSpan);
     container.appendChild(updatedDiv);
 
@@ -318,20 +310,14 @@ function buildInputCard(input) {
     const prevInput = previousData.inputs[input.name];
     const hasChanged = hasDataChanged(input, prevInput, ['status', 'metadata']);
 
-    const card = createMetadataCard(
+    const { card, body } = createMetadataCard(
         input.name,
         input.type,
         CARD_HEADER_CLASSES.input,
         hasChanged,
     );
-    card.dataset.inputName = input.name;
 
-    const body = card.querySelector('.card-body');
-    if (!body) {
-        return card;
-    }
-
-    body.appendChild(createStatusBadge(input.status, STATUS_CONFIG));
+    body.appendChild(createStatusBadge(input.status));
     appendIfPresent(body, buildPrefixSuffixBox(input));
 
     const filterSection = buildBadgeSection(
@@ -352,9 +338,7 @@ function buildInputCard(input) {
 
 function updateInputCards(inputs) {
     const container = document.getElementById('inputs-grid');
-    const cards = inputs.map((input) => buildInputCard(input));
-
-    updateContainerWithCards(container, cards);
+    container.replaceChildren(...inputs.map(buildInputCard));
 
     for (const input of inputs) {
         previousData.inputs[input.name] = {
@@ -378,18 +362,12 @@ function buildOutputCard(output) {
     const prevOutput = previousData.outputs[output.name];
     const hasChanged = hasDataChanged(output, prevOutput, ['currentInput']);
 
-    const card = createMetadataCard(
+    const { card, body } = createMetadataCard(
         output.name,
         output.type,
         CARD_HEADER_CLASSES.output,
         hasChanged,
     );
-    card.dataset.outputName = output.name;
-
-    const body = card.querySelector('.card-body');
-    if (!body) {
-        return card;
-    }
 
     const statsBox = el('div', 'content-box mb-4');
     const inputValueClass = output.currentInput ? 'text-success' : 'text-faint';
@@ -413,21 +391,22 @@ function buildOutputCard(output) {
 
     const tagsContainer = el('div', 'space-y-4');
 
-    const inputsSection = buildBadgeSection(
-        'Inputs (priority order)',
-        output.inputs || [],
-        TAG_CLASSES.input,
+    appendIfPresent(
+        tagsContainer,
+        buildBadgeSection(
+            'Inputs (priority order)',
+            output.inputs,
+            TAG_CLASSES.input,
+        ),
     );
-    if (inputsSection) {
-        tagsContainer.appendChild(inputsSection);
-    }
-
-    const formattersSection = buildBadgeSection(
-        'Formatters',
-        output.formatters,
-        TAG_CLASSES.formatter,
+    appendIfPresent(
+        tagsContainer,
+        buildBadgeSection(
+            'Formatters',
+            output.formatters,
+            TAG_CLASSES.formatter,
+        ),
     );
-    appendIfPresent(tagsContainer, formattersSection);
 
     body.appendChild(tagsContainer);
 
@@ -436,9 +415,7 @@ function buildOutputCard(output) {
 
 function updateOutputCards(outputs) {
     const container = document.getElementById('outputs-grid');
-    const cards = outputs.map((output) => buildOutputCard(output));
-
-    updateContainerWithCards(container, cards);
+    container.replaceChildren(...outputs.map(buildOutputCard));
 
     for (const output of outputs) {
         previousData.outputs[output.name] = {
@@ -457,15 +434,6 @@ function processDashboardUpdate(data) {
     updateOutputCards(data.outputs);
 }
 
-// Initialize
 updateConnectionStatus('connecting');
 establishWebSocketConnection();
-
-window.addEventListener('beforeunload', () => {
-    if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-    }
-    if (ws) {
-        ws.close();
-    }
-});
+setInterval(refreshRelativeTimes, 1000);

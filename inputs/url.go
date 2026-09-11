@@ -1,8 +1,10 @@
 package inputs
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -17,12 +19,14 @@ import (
 // URLInput polls an external URL for metadata with optional JSON parsing.
 type URLInput struct {
 	*core.InputBase
-	settings  config.URLInputConfig
-	expiresAt *time.Time
+	settings config.URLInputConfig
 }
 
 // NewURLInput creates a URLInput with the given name and settings.
 func NewURLInput(name string, settings *config.URLInputConfig) (*URLInput, error) {
+	if settings == nil {
+		return nil, errors.New("settings are required")
+	}
 	if err := utils.ValidateHTTPURL(settings.URL); err != nil {
 		return nil, err
 	}
@@ -36,52 +40,39 @@ func NewURLInput(name string, settings *config.URLInputConfig) (*URLInput, error
 	}, nil
 }
 
-// Start begins the polling loop and runs until context cancellation.
+// Start polls on the configured interval, and additionally as soon as the current
+// metadata expires, until context cancellation.
 func (u *URLInput) Start(ctx context.Context) error {
-	ticker := time.NewTicker(time.Duration(u.settings.PollingInterval) * time.Second)
-	defer ticker.Stop()
+	polls := time.NewTicker(time.Duration(u.settings.PollingInterval) * time.Second)
+	defer polls.Stop()
 
-	var expiryTimer *time.Timer
-
-	u.poll()
-	u.updateExpiryTimer(&expiryTimer)
+	expiry := time.NewTimer(0)
+	expiry.Stop()
+	defer expiry.Stop()
 
 	for {
+		u.poll(ctx)
+		if metadata := u.GetMetadata(); metadata != nil && metadata.ExpiresAt != nil {
+			if until := time.Until(*metadata.ExpiresAt); until > 0 {
+				expiry.Reset(until)
+			} else {
+				expiry.Stop()
+			}
+		} else {
+			expiry.Stop()
+		}
+
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-ticker.C:
-			u.poll()
-			u.updateExpiryTimer(&expiryTimer)
-		case <-u.expiryTimerChan(expiryTimer):
-			u.poll()
-			u.updateExpiryTimer(&expiryTimer)
+		case <-polls.C:
+		case <-expiry.C:
 		}
 	}
 }
 
-func (u *URLInput) updateExpiryTimer(timer **time.Timer) {
-	if u.expiresAt != nil {
-		duration := time.Until(*u.expiresAt)
-		if duration > 0 {
-			if *timer != nil {
-				(*timer).Reset(duration)
-			} else {
-				*timer = time.NewTimer(duration)
-			}
-		}
-	}
-}
-
-func (u *URLInput) expiryTimerChan(timer *time.Timer) <-chan time.Time {
-	if timer != nil {
-		return timer.C
-	}
-	return nil // receive from a nil channel blocks forever, so this case never fires
-}
-
-func (u *URLInput) poll() {
-	resp, err := utils.Get(context.Background(), u.settings.URL)
+func (u *URLInput) poll(ctx context.Context) {
+	resp, err := utils.Get(ctx, u.settings.URL)
 	if err != nil {
 		slog.Error("Failed to fetch data from URL input", "input", u.GetName(), "error", err)
 		return
@@ -93,59 +84,65 @@ func (u *URLInput) poll() {
 		slog.Error("Failed to read response from URL input", "input", u.GetName(), "error", err)
 		return
 	}
-
-	var content string
-	var expiresAt *time.Time
-
-	if u.settings.JSONParsing && u.settings.JSONKey != "" {
-		var data any
-		if err := json.Unmarshal(body, &data); err != nil {
-			slog.Error("Failed to parse JSON response", "input", u.GetName(), "error", err)
-			return
-		}
-
-		contentVal, ok := extractJSONValue(data, u.settings.JSONKey)
-		if !ok {
-			slog.Error("Cannot navigate JSON path", "input", u.GetName(), "path", u.settings.JSONKey)
-			return
-		}
-		content = fmt.Sprint(contentVal)
-
-		if u.settings.ExpiryKey != "" {
-			expVal, ok := extractJSONValue(data, u.settings.ExpiryKey)
-			if !ok {
-				slog.Error("Cannot navigate expiry JSON path", "input", u.GetName(), "path", u.settings.ExpiryKey)
-			} else if expStr, ok := expVal.(string); ok {
-				var t time.Time
-				var err error
-				if u.settings.ExpiryFormat != "" {
-					t, err = time.Parse(u.settings.ExpiryFormat, expStr)
-				} else {
-					t, err = time.Parse(time.RFC3339, expStr)
-				}
-				if err != nil {
-					slog.Error("Failed to parse expiry time", "input", u.GetName(), "value", expStr, "error", err)
-				} else {
-					expiresAt = &t
-				}
-			}
-		}
-	} else {
-		content = string(body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		slog.Error("URL input returned unsuccessful status", "input", u.GetName(), "status", resp.Status)
+		return
 	}
 
 	metadata := &core.Metadata{
-		Title:     content,
+		Title:     string(body),
 		UpdatedAt: time.Now(),
-		ExpiresAt: expiresAt,
 	}
 
-	u.expiresAt = expiresAt
+	if u.settings.JSONParsing && u.settings.JSONKey != "" {
+		var ok bool
+		metadata.Title, metadata.ExpiresAt, ok = u.parseJSON(body)
+		if !ok {
+			return
+		}
+	}
 
 	u.SetMetadata(metadata)
 }
 
-// extractJSONValue navigates a JSON structure using a dot-separated key path.
+// parseJSON rejects a missing title but ignores an invalid optional expiry.
+func (u *URLInput) parseJSON(body []byte) (title string, expiresAt *time.Time, ok bool) {
+	var data any
+	if err := json.Unmarshal(body, &data); err != nil {
+		slog.Error("Failed to parse JSON response", "input", u.GetName(), "error", err)
+		return "", nil, false
+	}
+
+	titleVal, found := extractJSONValue(data, u.settings.JSONKey)
+	if !found {
+		slog.Error("Cannot navigate JSON path", "input", u.GetName(), "path", u.settings.JSONKey)
+		return "", nil, false
+	}
+	title = fmt.Sprint(titleVal)
+
+	if u.settings.ExpiryKey == "" {
+		return title, nil, true
+	}
+
+	expVal, found := extractJSONValue(data, u.settings.ExpiryKey)
+	if !found {
+		slog.Error("Cannot navigate expiry JSON path", "input", u.GetName(), "path", u.settings.ExpiryKey)
+		return title, nil, true
+	}
+	expStr, isString := expVal.(string)
+	if !isString {
+		slog.Error("Expiry value is not a string", "input", u.GetName(), "value", expVal)
+		return title, nil, true
+	}
+
+	t, err := time.Parse(cmp.Or(u.settings.ExpiryFormat, time.RFC3339), expStr)
+	if err != nil {
+		slog.Error("Failed to parse expiry time", "input", u.GetName(), "value", expStr, "error", err)
+		return title, nil, true
+	}
+	return title, &t, true
+}
+
 func extractJSONValue(data any, keyPath string) (any, bool) {
 	current := data
 	for key := range strings.SplitSeq(keyPath, ".") {

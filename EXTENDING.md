@@ -1,491 +1,294 @@
 # Extending ZuidWest FM Metadata
 
-This guide covers how to add new inputs, outputs, and formatters to the ZuidWest FM metadata system. The system uses a clean interface-based architecture that makes extending functionality straightforward.
+This guide explains how to add an input, output, formatter, or filter to the application. Extensions are compiled into the binary; there is no runtime plugin system.
 
-## Table of Contents
+For configuration of existing components, see [README.md](README.md). When upgrading extension code from v2, see [MIGRATING.md](MIGRATING.md).
 
-- [Architecture Overview](#architecture-overview)
-- [Before You Begin](#before-you-begin)
-  - [Available Utilities](#available-utilities)
-  - [Common Gotchas](#common-gotchas)
-- [Adding a New Input](#adding-a-new-input)
-  - [Input Types](#input-types)
-  - [Step 1: Create Input Structure](#step-1-create-input-structure)
-  - [Step 2: Implement Required Methods](#step-2-implement-required-methods)
-  - [Step 3: Add Configuration Support](#step-3-add-configuration-support)
-  - [Step 4: Register Input](#step-4-register-input)
-  - [Step 5: Test Your Input](#step-5-test-your-input)
-- [Adding a New Output](#adding-a-new-output)
-  - [Output Types](#output-types)
-  - [Step 1: Create Output Structure](#step-1-create-output-structure)
-  - [Step 2: Implement Required Methods](#step-2-implement-required-methods-1)
-  - [Step 3: HTTP Route Registration (Optional)](#step-3-http-route-registration-optional)
-  - [Step 4: Add Configuration Support](#step-4-add-configuration-support)
-  - [Step 5: Register Output](#step-5-register-output)
-  - [Step 6: Test Your Output](#step-6-test-your-output)
-- [Adding a New Formatter](#adding-a-new-formatter)
-  - [Step 1: Create Formatter Structure](#step-1-create-formatter-structure)
-  - [Step 2: Register Formatter](#step-2-register-formatter)
-  - [Step 3: Test Your Formatter](#step-3-test-your-formatter)
-- [Adding a New Filter](#adding-a-new-filter)
-  - [Step 1: Create Filter Structure](#step-1-create-filter-structure)
-  - [Step 2: Register Filter](#step-2-register-filter)
-  - [Step 3: Add Configuration Support](#step-3-add-configuration-support-1)
-  - [Step 4: Test Your Filter](#step-4-test-your-filter)
-- [Built-in Components](#built-in-components)
-  - [Inputs](#inputs)
-  - [Outputs](#outputs)
-  - [Formatters](#formatters)
-- [Complete Examples](#complete-examples)
-  - [Example: Redis Input](#example-redis-input)
-  - [Example: Discord Output](#example-discord-output)
-  - [Example: Sanitize Formatter](#example-sanitize-formatter)
-- [Interface Reference](#interface-reference)
-  - [core.Input Interface](#coreinput-interface)
-  - [core.Output Interface](#coreoutput-interface)
-  - [core.RouteRegistrar Interface](#corerouteregistrar-interface)
-  - [core.Formatter Interface](#coreformatter-interface)
-  - [core.Filter Interface](#corefilter-interface)
-  - [core.StructuredText Type](#corestructuredtext-type)
-- [Design Patterns](#design-patterns)
-  - [Base Class Embedding](#base-class-embedding)
-  - [PassiveComponent](#passivecomponent)
-  - [Change Detection](#change-detection)
-  - [Universal Metadata Converter](#universal-metadata-converter)
-  - [Payload Mapping](#payload-mapping)
-  - [Error Handling](#error-handling)
-  - [Thread Safety](#thread-safety)
-- [Testing](#testing)
-  - [Creating Test Configuration](#creating-test-configuration)
-  - [Running Tests](#running-tests)
-  - [Debugging Tips](#debugging-tips)
-- [Best Practices](#best-practices)
+## How metadata moves through the application
 
-## Architecture Overview
+The router processes metadata in this order:
 
-The ZuidWest FM metadata system consists of four main extension points:
+1. An input publishes `core.Metadata` through `core.InputBase`.
+2. The router adds the input prefix and suffix and applies its filters.
+3. For each output, the router selects the highest-priority available input.
+4. The router applies the output's formatter chain.
+5. After the configured delay, the router calls `Output.Send`.
 
-- **Inputs** - Source metadata from various systems (APIs, files, static text)
-- **Outputs** - Send formatted metadata to destinations (streaming servers, files, webhooks)
-- **Formatters** - Transform metadata fields (uppercase, lowercase, RDS compliance, etc.)
-- **Filters** - Accept or reject metadata based on criteria (patterns, duration, etc.)
+The router also handles expiration, fallback delays, and output deduplication. All inputs, outputs, filters, and formatters must be registered before `MetadataRouter.Start` is called.
 
-All components communicate through the central `MetadataRouter` which handles:
-- Priority-based fallback between inputs
-- Scheduling updates with configurable delays
-- Change detection to avoid duplicate updates
-- Thread-safe subscription management
+## Shared rules
 
-## Before You Begin
+- Embed `*core.InputBase` in inputs and `*core.OutputBase` in outputs.
+- Embed `core.PassiveComponent` when a component has no background work.
+- Treat metadata as immutable after calling `InputBase.SetMetadata`. `GetMetadata`, subscribers, and `StructuredText.Original` share pointers.
+- Return constructor errors for invalid configuration.
+- Return delivery errors from `Output.Send`. The router logs the error and does not update its deduplication state. It does not automatically retry.
+- Use `log/slog` and include the component name as an `input` or `output` field.
+- Use `utils.DoOK` for requests where only success matters. It sets the standard User-Agent, applies the shared timeout, closes the response body, and returns non-2xx responses as errors.
+- Run `go test ./...`, `go vet ./...`, and `go build` before committing.
 
-### Available Utilities
+## Add an input
 
-The codebase provides several utilities you can use:
-
-- **Logging**: Use `log/slog` package (NOT utils.LogError/LogDebug)
-  ```go
-  import "log/slog"
-  
-  slog.Debug("Debug message", "key", "value")
-  slog.Info("Info message", "key", "value")
-  slog.Error("Error message", "error", err)
-  ```
-
-- **JSON Parsing**: `utils.ParseJSONSettings` for configuration parsing
-  ```go
-  settings, err := utils.ParseJSONSettings[YourConfigType](cfg.Settings)
-  ```
-
-- **Universal Metadata Converter**: `ConvertStructuredText` (in the `outputs` package, so call it unqualified from your output) for consistent metadata handling
-  ```go
-  // Convert core.StructuredText to universal format
-  universal := ConvertStructuredText(st)
-
-  // Convert with a specific type field
-  universal := ConvertStructuredTextWithType(st, "webhook")
-
-  // Convert to template data for payload mapping
-  templateData := universal.ToTemplateData()
-  ```
-
-- **Payload Mapping**: `NewPayloadMapper` for custom field mapping
-  ```go
-  mapper := NewPayloadMapper(settings.PayloadMapping)
-  result := mapper.MapPayload(templateData)
-  ```
-
-### Common Gotchas
-
-1. **Logging**: Use `slog` package directly, not `utils.LogError()` or `utils.LogDebug()`
-2. **Error Handling**: Outputs should log errors but never return them from Send methods
-3. **Formatter Registration**: Must use `init()` function to register formatters
-4. **Imports**: Use full import paths like `zwfm-metadata/config`, not just `config`
-5. **Build and Test**: Remember to `go build` before testing your extensions
-6. **HTTP Requests**: Always use `http.NewRequestWithContext` with proper timeout context
-7. **HTTP Body Closing**: Always use `defer resp.Body.Close() //nolint:errcheck`
-8. **Error Response Reading**: For HTTP errors, read response body for debugging information
-9. **Deduplication**: The router only calls `Send` when the formatted text changed — no output-side change detection needed
-10. **Logging Fields**: Include "output" or "input" field in all log messages for easy filtering
-11. **Context Timeouts**: Use context with timeout for all HTTP requests and external operations
-12. **StructuredText**: All outputs receive `*core.StructuredText` which provides Artist, Title, and position calculations
-
-## Adding a New Input
-
-Inputs implement the `core.Input` interface and typically embed `core.InputBase` for common functionality.
-
-### Input Types
-
-- **Passive Inputs**: Wait for external updates (e.g., Dynamic, Text inputs)
-- **Active Inputs**: Poll external sources periodically (e.g., URL input)
-
-### Step 1: Create Input Structure
-
-Create a new file in the `inputs/` directory:
+An input implements `core.Input`:
 
 ```go
-// inputs/myinput.go
+type Input interface {
+    Start(ctx context.Context) error
+    GetName() string
+    GetMetadata() *Metadata
+    Subscribe(ch chan<- *Metadata)
+}
+```
+
+`InputBase` supplies `GetName`, `GetMetadata`, `Subscribe`, and `SetMetadata`. For a passive input, `PassiveComponent` supplies `Start`.
+
+### 1. Implement the input
+
+This complete passive input can be added as `inputs/manual.go`:
+
+```go
 package inputs
 
 import (
-    "context"
-    "log/slog"
     "time"
-    "zwfm-metadata/config"
+
     "zwfm-metadata/core"
 )
 
-// MyCustomInput handles custom input source
-type MyCustomInput struct {
+// ManualInput accepts metadata pushed by another part of the application.
+type ManualInput struct {
     *core.InputBase
-    core.PassiveComponent  // For passive inputs only
-    settings config.MyCustomInputConfig
+    core.PassiveComponent
 }
 
-// NewMyCustomInput creates a new custom input
-func NewMyCustomInput(name string, settings config.MyCustomInputConfig) *MyCustomInput {
-    return &MyCustomInput{
-        InputBase: core.NewInputBase(name),
-        settings:  settings,
-    }
+// NewManualInput creates an empty manual input.
+func NewManualInput(name string) *ManualInput {
+    return &ManualInput{InputBase: core.NewInputBase(name)}
 }
-```
 
-### Step 2: Implement Required Methods
-
-#### For Passive Inputs
-
-```go
-// Start implements the Input interface (PassiveComponent provides empty implementation)
-// No additional implementation needed for passive inputs
-
-// UpdateMetadata updates metadata from external source (called by your API endpoint)
-func (m *MyCustomInput) UpdateMetadata(title, artist string) error {
-    metadata := &core.Metadata{
-        Name:      m.GetName(),
+// Update publishes a new title and artist.
+func (i *ManualInput) Update(title, artist string) {
+    i.SetMetadata(&core.Metadata{
         Title:     title,
         Artist:    artist,
         UpdatedAt: time.Now(),
-        // Set ExpiresAt if needed
-    }
-    
-    m.SetMetadata(metadata)
-    return nil
+    })
 }
 ```
 
-#### For Active Inputs
+Wire `Update` to the system that supplies the metadata. Implementing an HTTP handler is separate from implementing an input; the built-in dynamic input is a useful example.
+
+For an active input, do not embed `PassiveComponent`. Implement `Start`, stop when `ctx.Done()` is closed, and release tickers, clients, and other resources before returning. Pass the supplied context into operations that support cancellation. See [`inputs/url.go`](inputs/url.go) for a polling input.
+
+`SetMetadata(nil)` clears an input. A non-nil value is considered available only when it has a title and has not expired. `SetMetadata` notifies subscribers when the title, artist, song ID, or duration changes; changing timestamps alone does not publish an update.
+
+### 2. Add configuration when needed
+
+Put type-specific settings in `config/config.go`:
 
 ```go
-// Start implements the Input interface  
-func (m *MyCustomInput) Start(ctx context.Context) error {
-    // Initial fetch
-    if err := m.fetchAndUpdate(); err != nil {
-        slog.Error("Initial fetch failed", "error", err)
-    }
-
-    ticker := time.NewTicker(time.Duration(m.settings.PollingInterval) * time.Second)
-    defer ticker.Stop()
-    
-    for {
-        select {
-        case <-ctx.Done():
-            return nil
-        case <-ticker.C:
-            if err := m.fetchAndUpdate(); err != nil {
-                slog.Error("Failed to fetch data", "input", m.GetName(), "error", err)
-            }
-        }
-    }
-}
-
-func (m *MyCustomInput) fetchAndUpdate() error {
-    // Fetch data from external source
-    title, artist := m.fetchFromSource()
-    
-    metadata := &core.Metadata{
-        Name:      m.GetName(),
-        Title:     title,
-        Artist:    artist,
-        UpdatedAt: time.Now(),
-    }
-    
-    m.SetMetadata(metadata)
-    return nil
-}
-```
-
-### Step 3: Add Configuration Support
-
-Add your configuration struct to `config/config.go`:
-
-```go
-// MyCustomInputConfig represents settings for custom input
-type MyCustomInputConfig struct {
-    APIKey          string `json:"apiKey"`
+type MyInputConfig struct {
+    URL             string `json:"url"`
     PollingInterval int    `json:"pollingInterval"`
-    CustomParam     string `json:"customParam"`
 }
 ```
 
-### Step 4: Register Input
-
-In `main.go`, add a case for your new input type in the `createInput` function:
+Parse settings in the `createInput` switch in `main.go`. The generic helper returns a value, not a pointer:
 
 ```go
-case "mycustom":
-    settings, err := utils.ParseJSONSettings[config.MyCustomInputConfig](cfg.Settings)
+case "myinput":
+    settings, err := utils.ParseJSONSettings[config.MyInputConfig](cfg.Settings)
     if err != nil {
         return nil, err
     }
-    return inputs.NewMyCustomInput(cfg.Name, *settings), nil
+    return inputs.NewMyInput(cfg.Name, settings)
 ```
 
-### Step 5: Test Your Input
+If a constructor cannot fail, return the component and `nil` from the switch. For the `ManualInput` above:
 
-Create a test configuration:
+```go
+case "manual":
+    return inputs.NewManualInput(cfg.Name), nil
+```
 
-```json
-{
-  "inputs": [
-    {
-      "type": "mycustom",
-      "name": "my-source",
-      "prefix": "Custom: ",
-      "suffix": " 🎵",
-      "settings": {
-        "apiKey": "secret123",
-        "pollingInterval": 30,
-        "customParam": "value"
-      }
+`setupInput` creates the `core.InputSpec` from the input's type, prefix, suffix, and filters. A new input type therefore needs no router-specific setup.
+
+### 3. Test the input
+
+Test metadata publication and any parsing, validation, expiration, or polling behavior. A minimal test for the passive example is:
+
+```go
+func TestManualInputUpdate(t *testing.T) {
+    input := NewManualInput("manual")
+    input.Update("Song", "Artist")
+
+    metadata := input.GetMetadata()
+    if metadata == nil || metadata.Title != "Song" || metadata.Artist != "Artist" {
+        t.Fatalf("GetMetadata() = %#v", metadata)
     }
-  ]
 }
 ```
 
-Build and run:
-```bash
-go build
-./zwfm-metadata -config test-config.json
-```
+## Add an output
 
-## Adding a New Output
-
-Outputs implement the `core.Output` interface and typically embed `core.OutputBase` for common functionality.
-
-### Output Types
-
-All outputs receive `*core.StructuredText` which provides:
-- Separate `Artist` and `Title` fields (for field-level access)
-- `String()` method for combined formatted text
-- `ArtistRange()` and `TitleRange()` for position calculations (useful for DL Plus)
-- Access to original metadata via `Original` field
-
-- **Standard Outputs**: Process metadata and send to destinations
-- **HTTP Outputs**: Can also register HTTP routes (implement `core.RouteRegistrar`)
-
-### Step 1: Create Output Structure
-
-Create a new file in the `outputs/` directory:
+An output implements `core.Output`:
 
 ```go
-// outputs/myoutput.go
+type Output interface {
+    Start(ctx context.Context) error
+    GetName() string
+    Send(st *StructuredText) error
+}
+```
+
+`OutputBase` supplies `GetName`; `PassiveComponent` supplies `Start` for outputs without background work. The router serializes `Send` calls for each output. HTTP handlers and other goroutines may still run concurrently with `Send`, so protect any state they share.
+
+### 1. Add the output settings
+
+Add only settings owned by the output to `config/config.go`:
+
+```go
+type WebhookOutputConfig struct {
+    URL string `json:"url"`
+}
+```
+
+Do not add `Delay` or `FallbackDelay` to this struct. `setupOutput` parses those shared fields separately into `core.OutputTiming`.
+
+### 2. Implement the output
+
+This complete output can be added as `outputs/webhook.go`:
+
+```go
 package outputs
 
 import (
     "context"
     "fmt"
-    "io"
-    "log/slog"
     "net/http"
     "strings"
     "time"
+
     "zwfm-metadata/config"
     "zwfm-metadata/core"
     "zwfm-metadata/utils"
 )
 
-// MyCustomOutput handles custom output destination
-type MyCustomOutput struct {
+// WebhookOutput sends the formatted text to an HTTP endpoint.
+type WebhookOutput struct {
     *core.OutputBase
-    core.PassiveComponent  // Most outputs are passive
-    settings   config.MyCustomOutputConfig
-    httpClient *http.Client
+    core.PassiveComponent
+    url string
 }
 
-// NewMyCustomOutput creates a new custom output
-func NewMyCustomOutput(name string, settings config.MyCustomOutputConfig) *MyCustomOutput {
-    output := &MyCustomOutput{
+// NewWebhookOutput validates settings and creates a webhook output.
+func NewWebhookOutput(name string, settings config.WebhookOutputConfig) (*WebhookOutput, error) {
+    if err := utils.ValidateHTTPURL(settings.URL); err != nil {
+        return nil, err
+    }
+    return &WebhookOutput{
         OutputBase: core.NewOutputBase(name),
-        settings:   settings,
-        httpClient: &http.Client{Timeout: 10 * time.Second},
-    }
-    return output
-}
-```
-
-### Step 2: Implement Required Methods
-
-```go
-// Send implements the Output interface
-func (m *MyCustomOutput) Send(st *core.StructuredText) {
-    // The router already skips unchanged metadata, so Send only runs on real updates
-    text := st.String()
-
-    // Access individual fields if needed
-    artist := st.Artist
-    title := st.Title
-
-    // Access original metadata for additional fields
-    if st.Original != nil {
-        songID := st.Original.SongID
-        duration := st.Original.Duration
-        _ = songID   // use as needed
-        _ = duration // use as needed
-    }
-
-    // Send to your custom destination
-    if err := m.sendToDestination(text); err != nil {
-        // IMPORTANT: Log error but don't return it
-        slog.Error("Failed to send to custom output", "output", m.GetName(), "error", err)
-    }
+        url:        settings.URL,
+    }, nil
 }
 
-func (m *MyCustomOutput) sendToDestination(metadata string) error {
-    // Create request with context timeout for HTTP operations
+// Send delivers one formatted metadata update.
+func (o *WebhookOutput) Send(st *core.StructuredText) error {
     ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
     defer cancel()
 
-    // Example HTTP request (if applicable)
-    req, err := http.NewRequestWithContext(ctx, "POST", m.settings.URL, strings.NewReader(metadata))
+    req, err := http.NewRequestWithContext(
+        ctx,
+        http.MethodPost,
+        o.url,
+        strings.NewReader(st.String()),
+    )
     if err != nil {
-        return fmt.Errorf("failed to create request: %w", err)
+        return fmt.Errorf("create webhook request: %w", err)
     }
+    req.Header.Set("Content-Type", "text/plain; charset=utf-8")
 
-    req.Header.Set("Content-Type", "text/plain")
-    req.Header.Set("User-Agent", utils.UserAgent())
-
-    resp, err := m.httpClient.Do(req)
-    if err != nil {
-        return fmt.Errorf("request failed: %w", err)
+    if err := utils.DoOK(req); err != nil {
+        return fmt.Errorf("send webhook request: %w", err)
     }
-    defer resp.Body.Close() //nolint:errcheck
-
-    if resp.StatusCode >= 400 {
-        // Read error response for debugging
-        bodyBytes, _ := io.ReadAll(resp.Body)
-        return fmt.Errorf("server error: status %d, response: %s", resp.StatusCode, string(bodyBytes))
-    }
-
-    slog.Debug("Sent to custom output", "output", m.GetName(), "metadata", metadata)
     return nil
 }
 ```
 
-### Step 3: HTTP Route Registration (Optional)
+`utils.DoOK` owns the response body. Do not close or read it again. Use `utils.Get` instead when an input needs the response body, and always close the returned body.
 
-If your output needs to expose HTTP endpoints:
+### 3. Register the output
 
-```go
-import (
-    "encoding/json"
-    "net/http"
-)
-
-// RegisterRoutes implements the RouteRegistrar interface
-func (m *MyCustomOutput) RegisterRoutes(mux *http.ServeMux) {
-    mux.HandleFunc("GET /output/"+m.GetName(), m.handleHTTPRequest)
-    slog.Info("Route registered", "output", m.GetName(), "path", "/output/"+m.GetName())
-}
-
-func (m *MyCustomOutput) handleHTTPRequest(w http.ResponseWriter, r *http.Request) {
-    // Access stored metadata (you'll need to implement storage in your output)
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-```
-
-### Step 4: Add Configuration Support
-
-Add your configuration struct to `config/config.go`:
-
-The router parses the shared `delay` and `fallbackDelay` settings through
-`core.OutputTiming`, so output-specific config structs only contain settings
-used by that output.
+Add a case to `createOutput` in `main.go`:
 
 ```go
-// MyCustomOutputConfig represents settings for custom output
-type MyCustomOutputConfig struct {
-    URL            string                 `json:"url"`
-    APIKey         string                 `json:"apiKey"`
-    PayloadMapping map[string]interface{} `json:"payloadMapping,omitempty"`
-}
-```
-
-### Step 5: Register Output
-
-In `main.go`, add a case for your new output type in the `createOutput` function:
-
-```go
-case "mycustom":
-    settings, err := utils.ParseJSONSettings[config.MyCustomOutputConfig](cfg.Settings)
+case "webhook":
+    settings, err := utils.ParseJSONSettings[config.WebhookOutputConfig](cfg.Settings)
     if err != nil {
         return nil, err
     }
-    return outputs.NewMyCustomOutput(cfg.Name, *settings), nil
+    return outputs.NewWebhookOutput(cfg.Name, settings)
 ```
 
-### Step 6: Test Your Output
-
-Create a test configuration:
+The configuration can then use the output:
 
 ```json
 {
-  "outputs": [
-    {
-      "type": "mycustom",
-      "name": "my-destination",
-      "inputs": ["radio-live", "fallback"],
-      "formatters": ["ucwords"],
-      "settings": {
-        "delay": 2,
-        "url": "https://api.example.com/metadata",
-        "apiKey": "secret123"
-      }
-    }
-  ]
+  "type": "webhook",
+  "name": "website",
+  "inputs": ["radio-live", "fallback"],
+  "formatters": ["ucwords"],
+  "settings": {
+    "delay": 2,
+    "fallbackDelay": 20,
+    "url": "https://example.com/metadata"
+  }
 }
 ```
 
-## Adding a New Formatter
+### Optional HTTP routes
 
-Formatters implement the `core.Formatter` interface and transform `StructuredText` fields in place.
-
-### Step 1: Create Formatter Structure
-
-Create a new file in the `formatters/` directory:
+An output that serves HTTP or WebSocket clients can also implement:
 
 ```go
-// formatters/myformatter.go
+type RouteRegistrar interface {
+    RegisterRoutes(mux *http.ServeMux)
+}
+```
+
+The web server calls `RegisterRoutes` during startup. Keep configurable patterns valid and unique: `http.ServeMux` panics on invalid or duplicate patterns. See [`outputs/http.go`](outputs/http.go) and [`outputs/websocket.go`](outputs/websocket.go).
+
+### Optional universal payload and mapping
+
+Outputs that send structured payloads can start with `outputs.ConvertStructuredText`. It preserves the formatted text, individual fields, original metadata, and input identity:
+
+```go
+metadata := ConvertStructuredText(st)
+metadata.Type = "webhook"
+```
+
+For user-configurable JSON shapes, compile a payload mapper in the constructor:
+
+```go
+mapper, err := NewPayloadMapper(settings.PayloadMapping)
+if err != nil {
+    return nil, fmt.Errorf("create payload mapper: %w", err)
+}
+```
+
+Store `mapper` on the output and call `mapper.Apply(metadata)` before encoding. A nil mapping produces a nil mapper; calling `Apply` on it is supported and returns the original metadata. Templates have the fields returned by `UniversalMetadata.ToTemplateData` and the `lower`, `upper`, and `trim` functions. See [`outputs/url.go`](outputs/url.go) for an end-to-end example.
+
+### 4. Test the output
+
+Use `httptest.Server` for HTTP delivery and assert the method, headers, body, and error behavior. Constructor validation and non-2xx responses need tests too. See [`outputs/url_test.go`](outputs/url_test.go) and [`outputs/http_test.go`](outputs/http_test.go).
+
+## Add a formatter
+
+Formatters modify `StructuredText` in place. They may change its text fields but must not mutate `st.Original`.
+
+Add `formatters/collapse_space.go`:
+
+```go
 package formatters
 
 import (
@@ -494,868 +297,139 @@ import (
     "zwfm-metadata/core"
 )
 
-// MyCustomFormatter applies custom text transformation
-type MyCustomFormatter struct{}
+// CollapseSpaceFormatter replaces runs of whitespace with one space.
+type CollapseSpaceFormatter struct{}
 
-// Format implements the Formatter interface
-// It modifies the StructuredText fields in place
-func (m *MyCustomFormatter) Format(st *core.StructuredText) {
-    // Transform Artist and Title fields separately
-    st.Artist = m.customTransform(st.Artist)
-    st.Title = m.customTransform(st.Title)
-}
-
-func (m *MyCustomFormatter) customTransform(text string) string {
-    // Example: Replace special characters
-    text = strings.ReplaceAll(text, "&", "and")
-    text = strings.ReplaceAll(text, "@", "at")
-    return text
+// Format normalizes whitespace in the artist and title.
+func (f *CollapseSpaceFormatter) Format(st *core.StructuredText) {
+    st.Artist = strings.Join(strings.Fields(st.Artist), " ")
+    st.Title = strings.Join(strings.Fields(st.Title), " ")
 }
 ```
 
-### Step 2: Register Formatter
-
-Add an `init()` function to register your formatter:
+Add a case to `formatters.New` in `formatters/registry.go`:
 
 ```go
-func init() {
-    RegisterFormatter("mycustom", func() core.Formatter {
-        return &MyCustomFormatter{}
-    })
-}
+case "collapse-space":
+    return &CollapseSpaceFormatter{}, nil
 ```
 
-### Step 3: Test Your Formatter
+Test artist and title separately, plus empty strings and Unicode input. Formatter order is significant: the router applies them in configuration order.
 
-Use in configuration:
+## Add a filter
 
-```json
-{
-  "outputs": [
-    {
-      "type": "file",
-      "name": "formatted-output",
-      "inputs": ["radio-live"],
-      "formatters": ["mycustom", "ucwords"],
-      "settings": {
-        "delay": 0,
-        "filename": "/tmp/formatted.txt"
-      }
-    }
-  ]
-}
-```
+Filters inspect `StructuredText` before formatters run and return one of these actions:
 
-## Adding a New Filter
+| Action | Effect |
+| --- | --- |
+| `core.FilterPass` | Keep both fields |
+| `core.FilterClearArtist` | Clear only the artist |
+| `core.FilterClearTitle` | Clear only the title |
+| `core.FilterReject` | Clear both fields and keep the output's previous content |
 
-Filters implement the `core.Filter` interface and decide whether metadata should pass through to outputs. Unlike formatters which transform text, filters accept or reject metadata.
-
-### Step 1: Create Filter Structure
-
-Create a new file in the `filters/` directory:
+For a configurable filter, first add its setting to `config.FilterConfig`:
 
 ```go
-// filters/myfilter.go
+MinTitleRunes int `json:"minTitleRunes,omitempty"`
+```
+
+Then add `filters/title_length.go`:
+
+```go
 package filters
 
 import (
-    "zwfm-metadata/config"
+    "errors"
+    "unicode/utf8"
+
     "zwfm-metadata/core"
 )
 
-// MyCustomFilter rejects metadata based on custom criteria.
-type MyCustomFilter struct {
-    threshold int
+// TitleLengthFilter rejects titles shorter than a configured rune count.
+type TitleLengthFilter struct {
+    minimum int
 }
 
-// NewMyCustomFilter creates a filter with the given threshold.
-func NewMyCustomFilter(threshold int) (*MyCustomFilter, error) {
-    return &MyCustomFilter{threshold: threshold}, nil
+// NewTitleLengthFilter validates the minimum and creates the filter.
+func NewTitleLengthFilter(minimum int) (*TitleLengthFilter, error) {
+    if minimum < 1 {
+        return nil, errors.New("minimum title length must be positive")
+    }
+    return &TitleLengthFilter{minimum: minimum}, nil
 }
 
-// Decide examines the metadata and returns the action to take.
-func (f *MyCustomFilter) Decide(st *core.StructuredText) core.FilterAction {
-    // Example: reject if title is too short
-    if len(st.Title) < f.threshold {
+// Decide rejects metadata with a title shorter than the minimum.
+func (f *TitleLengthFilter) Decide(st *core.StructuredText) core.FilterAction {
+    if utf8.RuneCountInString(st.Title) < f.minimum {
         return core.FilterReject
     }
     return core.FilterPass
 }
 ```
 
-### Step 2: Register Filter
-
-Add an `init()` function to register your filter with the factory:
+Add a case to `filters.New` in `filters/registry.go`:
 
 ```go
-func init() {
-    RegisterFilter("mycustom", func(cfg *config.FilterConfig) (core.Filter, error) {
-        return NewMyCustomFilter(cfg.Threshold)
-    })
-}
+case "title-length":
+    return NewTitleLengthFilter(cfg.MinTitleRunes)
 ```
 
-### Step 3: Add Configuration Support
+Test every action the filter can return. When multiple filters clear fields, their effects are cumulative.
 
-Add any custom configuration fields to `config/config.go`:
+## Build a router directly
+
+Most extensions only need a constructor switch entry because `setupInput` and `setupOutput` build the specs. Code that constructs a router directly must register inputs before outputs and supply complete specs:
 
 ```go
-type FilterConfig struct {
-    Type       string `json:"type"`
-    Field      string `json:"field,omitempty"`      // For pattern filter
-    Pattern    string `json:"pattern,omitempty"`    // For pattern filter
-    Action     string `json:"action,omitempty"`     // For pattern filter
-    MinSeconds int    `json:"minSeconds,omitempty"` // For duration filter
-    Threshold  int    `json:"threshold,omitempty"`  // For your custom filter
-}
-```
-
-### Step 4: Test Your Filter
-
-Use in configuration:
-
-```json
-{
-  "inputs": [
-    {
-      "type": "dynamic",
-      "name": "radio-live",
-      "filters": [
-        {
-          "type": "mycustom",
-          "threshold": 5
-        }
-      ],
-      "settings": { "secret": "..." }
-    }
-  ]
-}
-```
-
-### FilterAction Values
-
-The `core.FilterAction` enum controls what happens:
-
-| Value | Effect |
-|-------|--------|
-| `FilterPass` | Metadata continues to outputs unchanged |
-| `FilterClearArtist` | Clears the Artist field but allows metadata through |
-| `FilterClearTitle` | Clears the Title field but allows metadata through |
-| `FilterReject` | Metadata is rejected entirely, outputs keep previous content |
-
-## Built-in Components
-
-### Inputs
-
-- **dynamic** - HTTP API endpoint for live metadata updates with expiration
-- **url** - Polls external URLs/APIs for metadata
-- **text** - Static text fallback
-
-### Outputs
-
-- **icecast** - Updates Icecast streaming server metadata
-- **file** - Writes metadata to local files
-- **url** - Sends metadata via HTTP GET/POST requests
-- **http** - Creates HTTP endpoints with multiple response formats
-- **websocket** - Real-time metadata streaming via WebSocket
-- **dlplus** - DAB/DAB+ radio text format (ODR-PadEnc)
-- **stereotool** - Stereo Tool RDS RadioText and streaming song integration
-
-### Formatters
-
-- **uppercase** - Converts fields to UPPERCASE
-- **lowercase** - Converts fields to lowercase
-- **ucwords** - Capitalizes First Letter Of Each Word
-- **rds** - RDS compliance (64-char limit with smart field truncation)
-
-### Filters
-
-- **pattern** - Regex-based filtering to skip or clear metadata fields
-- **duration** - Skips tracks shorter than a minimum duration threshold
-
-## Complete Examples
-
-### Example: Redis Input
-
-A complete Redis input that polls a Redis key for metadata:
-
-```go
-// inputs/redis.go
-package inputs
-
-import (
-    "context"
-    "encoding/json"
-    "log/slog"
-    "time"
-    
-    "github.com/go-redis/redis/v8"
-    "zwfm-metadata/config"
-    "zwfm-metadata/core"
-)
-
-type RedisInput struct {
-    *core.InputBase
-    settings config.RedisInputConfig
-    client   *redis.Client
-}
-
-func NewRedisInput(name string, settings config.RedisInputConfig) *RedisInput {
-    client := redis.NewClient(&redis.Options{
-        Addr:     settings.Address,
-        Password: settings.Password,
-        DB:       settings.Database,
-    })
-    
-    return &RedisInput{
-        InputBase: core.NewInputBase(name),
-        settings:  settings,
-        client:    client,
-    }
-}
-
-func (r *RedisInput) Start(ctx context.Context) error {
-    // Initial fetch
-    if err := r.fetchFromRedis(); err != nil {
-        slog.Error("Initial Redis fetch failed", "error", err)
-    }
-
-    ticker := time.NewTicker(time.Duration(r.settings.PollingInterval) * time.Second)
-    defer ticker.Stop()
-    
-    for {
-        select {
-        case <-ctx.Done():
-            r.client.Close()
-            return nil
-        case <-ticker.C:
-            if err := r.fetchFromRedis(); err != nil {
-                slog.Error("Failed to fetch from Redis", "error", err)
-            }
-        }
-    }
-}
-
-func (r *RedisInput) fetchFromRedis() error {
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-    
-    // Get metadata from Redis key
-    result, err := r.client.Get(ctx, r.settings.Key).Result()
-    if err != nil {
-        if err == redis.Nil {
-            // Key doesn't exist - clear metadata
-            r.SetMetadata(nil)
-            return nil
-        }
-        return err
-    }
-    
-    // Parse JSON or use as title
-    var title, artist string
-    if r.settings.JSONParsing {
-        var data map[string]string
-        if err := json.Unmarshal([]byte(result), &data); err != nil {
-            return err
-        }
-        title = data["title"]
-        artist = data["artist"]
-    } else {
-        title = result
-    }
-    
-    metadata := &core.Metadata{
-        Name:      r.GetName(),
-        Title:     title,
-        Artist:    artist,
-        UpdatedAt: time.Now(),
-    }
-    
-    r.SetMetadata(metadata)
-    slog.Debug("Updated from Redis", "key", r.settings.Key, "title", title)
-    return nil
-}
-```
-
-Configuration (`config/config.go`):
-```go
-type RedisInputConfig struct {
-    Address         string `json:"address"`
-    Password        string `json:"password,omitempty"`
-    Database        int    `json:"database"`
-    Key             string `json:"key"`
-    PollingInterval int    `json:"pollingInterval"`
-    JSONParsing     bool   `json:"jsonParsing"`
-}
-```
-
-Registration (`main.go`):
-```go
-case "redis":
-    settings, err := utils.ParseJSONSettings[config.RedisInputConfig](cfg.Settings)
-    if err != nil {
-        return nil, err
-    }
-    return inputs.NewRedisInput(cfg.Name, *settings), nil
-```
-
-Usage:
-```json
-{
-  "type": "redis",
-  "name": "redis-nowplaying",
-  "settings": {
-    "address": "localhost:6379",
-    "database": 0,
-    "key": "nowplaying",
-    "pollingInterval": 5,
-    "jsonParsing": true
-  }
-}
-```
-
-### Example: Discord Output
-
-A Discord webhook output with rich embed support:
-
-```go
-// outputs/discord.go
-package outputs
-
-import (
-    "bytes"
-    "context"
-    "encoding/json"
-    "fmt"
-    "io"
-    "log/slog"
-    "net/http"
-    "time"
-
-    "zwfm-metadata/config"
-    "zwfm-metadata/core"
-    "zwfm-metadata/utils"
-)
-
-type DiscordOutput struct {
-    *core.OutputBase
-    core.PassiveComponent
-    settings   config.DiscordOutputConfig
-    httpClient *http.Client
-}
-
-func NewDiscordOutput(name string, settings config.DiscordOutputConfig) *DiscordOutput {
-    output := &DiscordOutput{
-        OutputBase: core.NewOutputBase(name),
-        settings:   settings,
-        httpClient: &http.Client{Timeout: 10 * time.Second},
-    }
-    return output
-}
-
-func (d *DiscordOutput) Send(st *core.StructuredText) {
-    text := st.String()
-
-    // Build Discord embed fields from StructuredText
-    fields := []map[string]interface{}{}
-
-    if st.Artist != "" {
-        fields = append(fields, map[string]interface{}{
-            "name":   "Artist",
-            "value":  st.Artist,
-            "inline": true,
-        })
-    }
-
-    if st.Title != "" {
-        fields = append(fields, map[string]interface{}{
-            "name":   "Title",
-            "value":  st.Title,
-            "inline": true,
-        })
-    }
-
-    // Access original metadata for additional fields
-    if st.Original != nil && st.Original.Duration != "" {
-        fields = append(fields, map[string]interface{}{
-            "name":   "Duration",
-            "value":  st.Original.Duration,
-            "inline": true,
-        })
-    }
-
-    if st.InputName != "" {
-        fields = append(fields, map[string]interface{}{
-            "name":   "Source",
-            "value":  st.InputName,
-            "inline": true,
-        })
-    }
-
-    embed := map[string]interface{}{
-        "title":       "Now Playing",
-        "description": text,
-        "color":       0x00ff00,
-        "fields":      fields,
-        "timestamp":   time.Now().Format(time.RFC3339),
-    }
-
-    if err := d.sendWebhook(embed); err != nil {
-        slog.Error("Failed to send to Discord", "output", d.GetName(), "error", err)
-    }
-}
-
-func (d *DiscordOutput) sendWebhook(embed map[string]interface{}) error {
-    payload := map[string]interface{}{
-        "embeds": []map[string]interface{}{embed},
-    }
-
-    jsonData, err := json.Marshal(payload)
-    if err != nil {
-        return err
-    }
-
-    // Create request with context timeout
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
-
-    req, err := http.NewRequestWithContext(ctx, "POST", d.settings.WebhookURL, bytes.NewBuffer(jsonData))
-    if err != nil {
-        return err
-    }
-
-    req.Header.Set("Content-Type", "application/json")
-    req.Header.Set("User-Agent", utils.UserAgent())
-
-    resp, err := d.httpClient.Do(req)
-    if err != nil {
-        return err
-    }
-    defer resp.Body.Close() //nolint:errcheck
-
-    if resp.StatusCode >= 400 {
-        // Read error response for debugging
-        bodyBytes, _ := io.ReadAll(resp.Body)
-        return fmt.Errorf("discord webhook returned status %d, response: %s", resp.StatusCode, string(bodyBytes))
-    }
-
-    return nil
-}
-```
-
-### Example: Sanitize Formatter
-
-A formatter that removes profanity and inappropriate content:
-
-```go
-// formatters/sanitize.go
-package formatters
-
-import (
-    "regexp"
-    "strings"
-
-    "zwfm-metadata/core"
-)
-
-type SanitizeFormatter struct {
-    regex *regexp.Regexp
-}
-
-func NewSanitizeFormatter() *SanitizeFormatter {
-    badWords := []string{
-        "explicit1", "explicit2", // Add actual words to filter
-    }
-
-    // Create regex pattern
-    pattern := "(?i)\\b(" + strings.Join(badWords, "|") + ")\\b"
-    regex := regexp.MustCompile(pattern)
-
-    return &SanitizeFormatter{
-        regex: regex,
-    }
-}
-
-// Format sanitizes Artist and Title fields by replacing bad words
-func (s *SanitizeFormatter) Format(st *core.StructuredText) {
-    st.Artist = s.sanitize(st.Artist)
-    st.Title = s.sanitize(st.Title)
-}
-
-func (s *SanitizeFormatter) sanitize(text string) string {
-    // Replace bad words with asterisks
-    return s.regex.ReplaceAllStringFunc(text, func(match string) string {
-        return strings.Repeat("*", len(match))
-    })
-}
-
-func init() {
-    RegisterFormatter("sanitize", func() core.Formatter {
-        return NewSanitizeFormatter()
-    })
-}
-```
-
-## Interface Reference
-
-### core.Input Interface
-
-```go
-type Input interface {
-    Start(ctx context.Context) error          // Start processing
-    GetName() string                          // Return input name
-    GetMetadata() *Metadata                   // Get current metadata
-    Subscribe(ch chan<- *Metadata)            // Subscribe to updates
-}
-```
-
-### core.Output Interface
-
-```go
-type Output interface {
-    Start(ctx context.Context) error    // Start processing
-    GetName() string                    // Return output name
-    Send(st *StructuredText)            // Process structured metadata
-}
-```
-
-### core.RouteRegistrar Interface
-
-```go
-type RouteRegistrar interface {
-    RegisterRoutes(mux *http.ServeMux)  // Register HTTP routes
-}
-```
-
-### core.Formatter Interface
-
-```go
-type Formatter interface {
-    Format(st *StructuredText)          // Transform fields in place
-}
-```
-
-### core.Filter Interface
-
-```go
-type Filter interface {
-    Decide(st *StructuredText) FilterAction  // Examine metadata and decide action
-}
-
-type FilterAction int
-
-const (
-    FilterPass        FilterAction = iota  // Allow metadata through unchanged
-    FilterClearArtist                      // Clear Artist field, allow through
-    FilterClearTitle                       // Clear Title field, allow through
-    FilterReject                           // Reject metadata entirely
-)
-```
-
-### core.StructuredText Type
-
-```go
-type StructuredText struct {
-    // Original metadata for access to SongID, Duration, UpdatedAt, etc.
-    Original *Metadata
-
-    // Text fields (transformed by formatters)
-    Prefix    string
-    Artist    string
-    Separator string  // Default: " - "
-    Title     string
-    Suffix    string
-
-    // Source information
-    InputName string
-    InputType string
-}
-
-// Key methods:
-func (st *StructuredText) String() string                        // Combined text
-func (st *StructuredText) Len() int                              // Length in runes
-func (st *StructuredText) ArtistRange() (start, length int, ok bool)  // Position for DL Plus
-func (st *StructuredText) TitleRange() (start, length int, ok bool)   // Position for DL Plus
-func (st *StructuredText) HasContent() bool                      // Has artist or title
-func (st *StructuredText) IsRunning() bool                       // Has both artist and title
-func (st *StructuredText) Clone() *StructuredText                // Deep copy
-```
-
-## Design Patterns
-
-### Base Class Embedding
-
-Always embed `core.InputBase` or `core.OutputBase` to get common functionality:
-
-```go
-type MyInput struct {
-    *core.InputBase  // Provides subscription management, metadata storage
-    // your fields...
-}
-```
-
-### PassiveComponent
-
-Use `core.PassiveComponent` for components that don't need background tasks:
-
-```go
-type MyOutput struct {
-    *core.OutputBase
-    core.PassiveComponent  // Provides empty Start() implementation
-}
-```
-
-This is typically used for:
-- Outputs that only react to metadata updates
-- Inputs that wait for external triggers (like API calls)
-
-### Change Detection
-
-Deduplication is handled centrally by the router: it tracks the last sent content per output and skips the `Send` call entirely when the formatted text hasn't changed. Outputs don't need their own change detection — just process every `Send` you receive.
-
-### Universal Metadata Converter
-
-Use `ConvertStructuredText` instead of manually mapping fields. This ensures consistency across all outputs and makes maintenance easier:
-
-```go
-func (o *MyOutput) Send(st *core.StructuredText) {
-    // Convert to universal format for JSON APIs, webhooks, etc.
-    universal := ConvertStructuredText(st)
-
-    // Or with a type field (use one or the other, not both):
-    // universal := ConvertStructuredTextWithType(st, "myoutput")
-
-    // Send the universal metadata
-    o.sendMetadata(*universal)
-}
-```
-
-**Benefits:**
-- **Consistency**: All outputs use the same metadata structure
-- **Maintainability**: Adding new metadata fields only requires changes in one place
-- **DRY Principle**: No duplicate field mapping code
-- **Template Compatibility**: Built-in `ToTemplateData()` method for payload mapping
-
-### Payload Mapping
-
-For outputs that need custom field mapping:
-
-```go
-type MyOutput struct {
-    *core.OutputBase
-    core.PassiveComponent
-    settings      config.MyOutputConfig
-    payloadMapper *PayloadMapper
-}
-
-func NewMyOutput(name string, settings config.MyOutputConfig) *MyOutput {
-    output := &MyOutput{
-        OutputBase:    core.NewOutputBase(name),
-        settings:      settings,
-        payloadMapper: NewPayloadMapper(settings.PayloadMapping),
-    }
-    return output
-}
-
-func (o *MyOutput) Send(st *core.StructuredText) {
-    // Convert to universal format
-    universal := ConvertStructuredText(st)
-
-    // Convert to template data and apply mapping
-    templateData := universal.ToTemplateData()
-    mappedPayload := o.payloadMapper.MapPayload(templateData)
-
-    // Send mapped payload
-    o.sendPayload(mappedPayload)
-}
-```
-
-Configuration example with payload mapping:
-```json
-{
-  "type": "myoutput",
-  "name": "custom-api",
-  "settings": {
-    "payloadMapping": {
-      "song_name": "{{.title}}",
-      "performer": "{{.artist}}",
-      "current_time": "{{.updated_at}}",
-      "metadata_source": "{{.source}}"
-    }
-  }
-}
-```
-
-### Error Handling
-
-1. **Inputs**: Can return errors from Start(), should log errors during operation
-2. **Outputs**: Should NEVER return errors from Send methods, only log them
-3. **Formatters**: Should handle errors gracefully and transform fields safely
-4. **Metadata Conversion**: Use `ConvertStructuredText` instead of manual field mapping
-
-```go
-// Good - Output error handling
-func (o *MyOutput) Send(st *core.StructuredText) {
-    if err := o.send(st.String()); err != nil {
-        slog.Error("Send failed", "output", o.GetName(), "error", err)  // Log but don't return
-    }
-}
-
-// Bad - Don't do this in outputs
-func (o *MyOutput) Send(st *core.StructuredText) error {
-    return o.send(st.String())  // DON'T return errors!
-}
-```
-
-### HTTP Requests and User-Agent
-
-When making HTTP requests in inputs or outputs, always set a proper User-Agent header:
-
-```go
-import "zwfm-metadata/utils"
-
-// Create HTTP client with timeout
-httpClient := &http.Client{Timeout: 10 * time.Second}
-
-// Create request with context timeout
-ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-defer cancel()
-
-req, err := http.NewRequestWithContext(ctx, "POST", url, body)
-if err != nil {
+router := core.NewMetadataRouter()
+
+if err := router.AddInput(input, core.InputSpec{
+    Type:   "manual",
+    Prefix: "Now playing: ",
+}); err != nil {
     return err
 }
 
-// Set headers
-req.Header.Set("Content-Type", "application/json")
-req.Header.Set("User-Agent", utils.UserAgent())  // Returns "zwfm-metadata/{version}"
-
-// Send request
-resp, err := httpClient.Do(req)
-if err != nil {
-    return err
-}
-defer resp.Body.Close() //nolint:errcheck
-
-// Check for error responses and read body for debugging
-if resp.StatusCode >= 400 {
-    bodyBytes, _ := io.ReadAll(resp.Body)
-    return fmt.Errorf("HTTP error: status %d, response: %s", resp.StatusCode, string(bodyBytes))
-}
-```
-
-This ensures:
-- Proper identification of requests in server logs
-- Compliance with API best practices
-- Version tracking for debugging
-
-### Thread Safety
-
-The base classes handle thread safety for:
-- Metadata storage and retrieval
-- Subscription management
-- Change detection
-
-Your code should:
-- Use the provided SetMetadata/GetMetadata methods
-- Use `ConvertStructuredText` for consistent metadata handling
-- Not directly access shared state
-- Use mutexes for any additional shared state you add
-
-## Testing
-
-### Creating Test Configuration
-
-Create a minimal test configuration:
-
-```json
-{
-  "webServerPort": 9000,
-  "debug": true,
-  "stationName": "Test Station",
-  "inputs": [
-    {
-      "type": "yourcustominput",
-      "name": "test-input",
-      "settings": {
-        "yourSetting": "value"
-      }
+if err := router.AddOutput(output, core.OutputSpec{
+    Type:           "webhook",
+    Inputs:         []string{input.GetName()},
+    Formatters:     []core.Formatter{&formatters.UcwordsFormatter{}},
+    FormatterNames: []string{"ucwords"},
+    Timing: core.OutputTiming{
+        Delay:         2,
+        FallbackDelay: 20,
     },
-    {
-      "type": "text",
-      "name": "fallback",
-      "settings": {
-        "text": "No data"
-      }
-    }
-  ],
-  "outputs": [
-    {
-      "type": "yourcustomoutput",
-      "name": "test-output",
-      "inputs": ["test-input", "fallback"],
-      "formatters": ["yourcustomformatter"],
-      "settings": {
-        "delay": 0,
-        "yourSetting": "value"
-      }
-    }
-  ]
+}); err != nil {
+    return err
 }
 ```
 
-### Running Tests
+`AddOutput` rejects missing, duplicate, or unknown inputs and negative delays. The router copies its specs, so later slice changes do not reconfigure it. Calling `AddInput` or `AddOutput` after `Start` panics.
+
+## Reference implementations
+
+Prefer a nearby production implementation over inventing a new pattern:
+
+| Need | Implementation |
+| --- | --- |
+| Passive input and expiration | [`inputs/dynamic.go`](inputs/dynamic.go) |
+| Polling input and response parsing | [`inputs/url.go`](inputs/url.go) |
+| Simple file output | [`outputs/file.go`](outputs/file.go) |
+| Outbound HTTP output | [`outputs/url.go`](outputs/url.go) |
+| HTTP routes and atomic state | [`outputs/http.go`](outputs/http.go) |
+| WebSocket output | [`outputs/websocket.go`](outputs/websocket.go) |
+| Field-aware truncation | [`formatters/rds.go`](formatters/rds.go) |
+| Configurable filters | [`filters/registry.go`](filters/registry.go) |
+
+## Verification
+
+Run the repository checks after adding an extension:
 
 ```bash
-# Build the project
+go test ./...
+go vet ./...
 go build
-
-# Run with test configuration
-./zwfm-metadata -config test-config.json
-
-# Check the dashboard
-open http://localhost:9000
-
-# Test dynamic input via API
-curl "http://localhost:9000/input/dynamic?input=test-input&title=Test&artist=Artist"
+golangci-lint run --timeout=5m
 ```
 
-### Debugging Tips
-
-1. **Enable Debug Logging**: Set `"debug": true` in config
-2. **Check Dashboard**: View real-time status at http://localhost:9000
-3. **Add Debug Logs**: Use `slog.Debug()` liberally during development
-4. **Test Incrementally**: Test each component separately before combining
-
-## Best Practices
-
-1. **Naming**: Use descriptive names that indicate the component's purpose
-2. **Configuration**: Make settings configurable rather than hardcoded
-3. **Logging**: Use appropriate log levels:
-   - `slog.Debug()` - Detailed information for debugging
-   - `slog.Info()` - Important events (startup, shutdown)
-   - `slog.Error()` - Errors that don't stop operation
-4. **Resource Management**: Always clean up in Start() method:
-   ```go
-   defer client.Close()
-   defer ticker.Stop()
-   ```
-5. **Graceful Degradation**: Handle failures without crashing
-6. **Documentation**: Comment your configuration struct fields
-7. **Validation**: Validate configuration in constructors:
-   ```go
-   if settings.URL == "" {
-       return nil, fmt.Errorf("URL is required")
-   }
-   ```
-8. **StructuredText**: Access `st.Artist` and `st.Title` for field-level operations
-9. **Universal Metadata**: Use `ConvertStructuredText` for JSON/webhook payloads
-10. **Payload Mapping**: Use `NewPayloadMapper` for template-based mapping
-11. **HTTP Requests**: Use `http.NewRequestWithContext` with proper timeout context
-12. **HTTP Responses**: Always close response bodies with `defer resp.Body.Close() //nolint:errcheck`
-13. **Error Response Debugging**: Read response body for HTTP errors to aid debugging
-14. **Deduplication**: The router skips `Send` when the formatted text is unchanged — don't add your own change detection
-15. **Structured Logging**: Include "output"/"input" field in log messages for filtering
-16. **Position Calculations**: Use `st.ArtistRange()` and `st.TitleRange()` for DL Plus-style protocols
-
-This guide should help you create robust extensions for the ZuidWest FM metadata system. Happy coding!
+For a manual smoke test, copy `config-example.json`, add the component, start the binary with `./zwfm-metadata -config test-config.json`, and inspect the dashboard at <http://localhost:9000>.

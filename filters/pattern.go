@@ -1,11 +1,11 @@
 package filters
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"strings"
 
-	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 )
 
@@ -38,10 +38,7 @@ func NewPatternFilter(field, pattern, action string) (*PatternFilter, error) {
 		return nil, fmt.Errorf("invalid field %q: must be %s, %s, or %s", field, FieldArtist, FieldTitle, FieldBoth)
 	}
 
-	action = strings.ToLower(action)
-	if action == "" {
-		action = ActionClear
-	}
+	action = cmp.Or(strings.ToLower(action), ActionClear)
 	if action != ActionClear && action != ActionSkip {
 		return nil, fmt.Errorf("invalid action %q: must be %s or %s", action, ActionClear, ActionSkip)
 	}
@@ -56,12 +53,6 @@ func NewPatternFilter(field, pattern, action string) (*PatternFilter, error) {
 		pattern: re,
 		action:  action,
 	}, nil
-}
-
-func init() {
-	RegisterFilter("pattern", func(cfg *config.FilterConfig) (core.Filter, error) {
-		return NewPatternFilter(cfg.Field, cfg.Pattern, cfg.Action)
-	})
 }
 
 // Decide checks if the metadata matches the pattern and returns the action to take.

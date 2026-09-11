@@ -291,7 +291,6 @@ func TestWebSocketHubBroadcastMarshalFailure(t *testing.T) {
 func TestWebSocketHubOnConnectMarshalFailureRemovesClient(t *testing.T) {
 	hub := NewWebSocketHub("test")
 
-	// Return an un-marshalable value from onConnect.
 	hub.SetOnConnect(func() any {
 		return make(chan int)
 	})
@@ -390,7 +389,7 @@ func startMessageReader(conn *websocket.Conn) <-chan map[string]any {
 	return messages
 }
 
-func waitForClientCount(t *testing.T, hub *WebSocketHub, want int, timeout time.Duration) { //nolint:unparam // Timeout varies by caller intent
+func waitForClientCount(t *testing.T, hub *WebSocketHub, want int, timeout time.Duration) {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)

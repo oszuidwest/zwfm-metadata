@@ -1,9 +1,6 @@
 package core
 
-import (
-	"strings"
-	"time"
-)
+import "time"
 
 // IsExpired reports whether the metadata has expired.
 func (m *Metadata) IsExpired() bool {
@@ -16,26 +13,4 @@ func (m *Metadata) IsExpired() bool {
 // IsAvailable reports whether metadata has meaningful content and is not expired.
 func (m *Metadata) IsAvailable() bool {
 	return m != nil && m.Title != "" && !m.IsExpired()
-}
-
-// Clone duplicates the metadata including a copy of the expiration time.
-func (m *Metadata) Clone() *Metadata {
-	if m == nil {
-		return nil
-	}
-
-	clone := &Metadata{
-		SongID:    strings.Clone(m.SongID),
-		Artist:    strings.Clone(m.Artist),
-		Title:     strings.Clone(m.Title),
-		Duration:  strings.Clone(m.Duration),
-		UpdatedAt: m.UpdatedAt,
-	}
-
-	if m.ExpiresAt != nil {
-		expiresAt := *m.ExpiresAt
-		clone.ExpiresAt = &expiresAt
-	}
-
-	return clone
 }

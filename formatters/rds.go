@@ -15,14 +15,12 @@ import (
 
 const maxRDSLength = 64
 
-// Common patterns compiled once for reuse.
 var (
-	parenRegex    = regexp.MustCompile(`\s*\([^)]*\)`)
-	bracketRegex  = regexp.MustCompile(`\s*\[[^\]]*\]`)
-	featRegex     = regexp.MustCompile(`(?i)\s+(feat\.?|ft\.?|featuring|with)\s+.+$`)
-	ampFeatRegex  = regexp.MustCompile(`(?i)\s+&\s+.+$`)
-	remixRegex    = regexp.MustCompile(`(?i)\s*[-–]\s*.*(Remix|Mix|Edit|Version|Instrumental|Acoustic|Live|Remaster|Radio).*$`)
-	whitespaceReg = regexp.MustCompile(`\s+`)
+	parenRegex   = regexp.MustCompile(`\s*\([^)]*\)`)
+	bracketRegex = regexp.MustCompile(`\s*\[[^\]]*\]`)
+	featRegex    = regexp.MustCompile(`(?i)\s+(feat\.?|ft\.?|featuring|with)\s+.+$`)
+	ampFeatRegex = regexp.MustCompile(`(?i)\s+&\s+.+$`)
+	remixRegex   = regexp.MustCompile(`(?i)\s*[-–]\s*.*(Remix|Mix|Edit|Version|Instrumental|Acoustic|Live|Remaster|Radio).*$`)
 )
 
 // multiCharMappings maps Unicode characters that expand to multiple ASCII characters.
@@ -37,7 +35,14 @@ var multiCharMappings = map[rune]string{
 	'ǅ': "dz", 'ǆ': "Dz", 'Ǆ': "DZ",
 }
 
-// nonASCIIToASCII maps single non-ASCII characters to their ASCII equivalents.
+var multiCharReplacer = func() *strings.Replacer {
+	pairs := make([]string, 0, 2*len(multiCharMappings))
+	for r, mapped := range multiCharMappings {
+		pairs = append(pairs, string(r), mapped)
+	}
+	return strings.NewReplacer(pairs...)
+}()
+
 var nonASCIIToASCII = map[rune]rune{
 	// Nordic/Scandinavian
 	'ø': 'o', 'Ø': 'O', 'å': 'a', 'Å': 'A',
@@ -82,76 +87,41 @@ var nonASCIIToASCII = map[rune]rune{
 type RDSFormatter struct{}
 
 // Format transforms structured text to fit within RDS RadioText constraints.
+// Shortening steps run in order until the text fits; truncation is the last resort.
 func (r *RDSFormatter) Format(st *core.StructuredText) {
 	st.Artist = cleanField(st.Artist)
 	st.Title = cleanField(st.Title)
 
-	if st.Len() <= maxRDSLength {
-		return
+	steps := []struct {
+		field *string
+		re    *regexp.Regexp
+	}{
+		{&st.Title, parenRegex},
+		{&st.Artist, parenRegex},
+		{&st.Title, bracketRegex},
+		{&st.Artist, bracketRegex},
+		{&st.Artist, featRegex},
+		{&st.Artist, ampFeatRegex},
+		{&st.Title, featRegex},
+		{&st.Title, ampFeatRegex},
+		{&st.Title, remixRegex},
 	}
 
-	st.Title = removeParentheses(st.Title)
-	if st.Len() <= maxRDSLength {
-		return
+	for _, step := range steps {
+		if st.Len() <= maxRDSLength {
+			return
+		}
+		*step.field = strings.TrimSpace(step.re.ReplaceAllString(*step.field, ""))
 	}
 
-	st.Artist = removeParentheses(st.Artist)
-	if st.Len() <= maxRDSLength {
-		return
+	if st.Len() > maxRDSLength {
+		smartTruncate(st)
 	}
-
-	st.Title = removeBrackets(st.Title)
-	if st.Len() <= maxRDSLength {
-		return
-	}
-
-	st.Artist = removeBrackets(st.Artist)
-	if st.Len() <= maxRDSLength {
-		return
-	}
-
-	st.Artist = removeFeaturing(st.Artist)
-	if st.Len() <= maxRDSLength {
-		return
-	}
-
-	st.Title = removeFeaturing(st.Title)
-	if st.Len() <= maxRDSLength {
-		return
-	}
-
-	st.Title = removeRemixIndicators(st.Title)
-	if st.Len() <= maxRDSLength {
-		return
-	}
-
-	smartTruncate(st)
 }
 
 // cleanField converts text to RDS-safe ASCII with normalized spacing.
-// stripHTMLTags already transliterates to ASCII before filtering visible characters.
 func cleanField(s string) string {
-	s = stripHTMLTags(s)
-	s = whitespaceReg.ReplaceAllString(s, " ")
-	return strings.TrimSpace(s)
-}
-
-func removeParentheses(s string) string {
-	return strings.TrimSpace(parenRegex.ReplaceAllString(s, ""))
-}
-
-func removeBrackets(s string) string {
-	return strings.TrimSpace(bracketRegex.ReplaceAllString(s, ""))
-}
-
-func removeFeaturing(s string) string {
-	s = featRegex.ReplaceAllString(s, "")
-	s = ampFeatRegex.ReplaceAllString(s, "")
-	return strings.TrimSpace(s)
-}
-
-func removeRemixIndicators(s string) string {
-	return strings.TrimSpace(remixRegex.ReplaceAllString(s, ""))
+	return strings.Join(strings.Fields(stripHTMLTags(s)), " ")
 }
 
 // smartTruncate shortens artist and title to fit, preserving artist when possible.
@@ -193,7 +163,6 @@ func smartTruncate(st *core.StructuredText) {
 	}
 }
 
-// truncateAtWord shortens text to maxRunes, breaking at word boundaries when possible.
 func truncateAtWord(s string, maxRunes int) string {
 	if maxRunes <= 0 {
 		return ""
@@ -236,24 +205,24 @@ func extractText(n *html.Node) string {
 	return result.String()
 }
 
+// filterVisibleText keeps printable ASCII, turning line breaks and tabs into spaces.
 func filterVisibleText(text string) string {
-	text = transliterateToASCII(text)
-
-	var result strings.Builder
-	for _, r := range text {
-		if r >= 32 && r <= 126 {
-			result.WriteRune(r)
-		} else if r == '\n' || r == '\r' || r == '\t' {
-			result.WriteRune(' ')
+	visible := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 32 && r <= 126:
+			return r
+		case r == '\n', r == '\r', r == '\t':
+			return ' '
+		default:
+			return -1
 		}
-	}
+	}, transliterateToASCII(text))
 
-	return strings.TrimSpace(result.String())
+	return strings.TrimSpace(visible)
 }
 
-// transliterateToASCII converts non-ASCII characters to their closest ASCII equivalents.
 func transliterateToASCII(text string) string {
-	text = expandMultiCharMappings(text)
+	text = multiCharReplacer.Replace(text)
 
 	t := transform.Chain(
 		norm.NFD,
@@ -269,23 +238,6 @@ func transliterateToASCII(text string) string {
 	return result
 }
 
-// expandMultiCharMappings handles Unicode characters that expand to multiple ASCII characters.
-func expandMultiCharMappings(text string) string {
-	var result strings.Builder
-	result.Grow(len(text))
-
-	for _, r := range text {
-		if mapped, ok := multiCharMappings[r]; ok {
-			result.WriteString(mapped)
-		} else {
-			result.WriteRune(r)
-		}
-	}
-
-	return result.String()
-}
-
-// mapNonASCIIToASCII maps single non-ASCII characters to their ASCII equivalents.
 func mapNonASCIIToASCII(r rune) rune {
 	if r <= 127 {
 		return r
@@ -294,8 +246,4 @@ func mapNonASCIIToASCII(r rune) rune {
 		return mapped
 	}
 	return -1
-}
-
-func init() {
-	RegisterFormatter("rds", func() core.Formatter { return &RDSFormatter{} })
 }

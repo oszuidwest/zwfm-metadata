@@ -6,7 +6,7 @@ import (
 	"zwfm-metadata/core"
 )
 
-// UniversalMetadata represents the common metadata structure used across all outputs.
+// UniversalMetadata is the shared serialized output shape.
 type UniversalMetadata struct {
 	Type              string     `json:"type,omitzero"`
 	FormattedMetadata string     `json:"formatted_metadata"`
@@ -20,12 +20,10 @@ type UniversalMetadata struct {
 	SourceType        string     `json:"source_type,omitzero"`
 }
 
-// ConvertStructuredText converts a StructuredText to UniversalMetadata.
+// ConvertStructuredText preserves original timestamps and unformatted fields.
 func ConvertStructuredText(st *core.StructuredText) *UniversalMetadata {
 	if st == nil {
-		return &UniversalMetadata{
-			UpdatedAt: time.Now(),
-		}
+		return &UniversalMetadata{UpdatedAt: time.Now()}
 	}
 
 	um := &UniversalMetadata{
@@ -47,41 +45,24 @@ func ConvertStructuredText(st *core.StructuredText) *UniversalMetadata {
 	return um
 }
 
-// ConvertStructuredTextWithType converts StructuredText with a specific type.
-func ConvertStructuredTextWithType(st *core.StructuredText, metadataType string) *UniversalMetadata {
-	um := ConvertStructuredText(st)
-	um.Type = metadataType
-	return um
-}
-
 // ToTemplateData converts UniversalMetadata to template data for payload mapping.
+// Every key is always present so templates never render "<no value>".
 func (um *UniversalMetadata) ToTemplateData() map[string]any {
-	data := map[string]any{
+	expiresAt := ""
+	if um.ExpiresAt != nil {
+		expiresAt = um.ExpiresAt.Format(time.RFC3339)
+	}
+
+	return map[string]any{
+		"type":               um.Type,
 		"formatted_metadata": um.FormattedMetadata,
 		"songID":             um.SongID,
 		"title":              um.Title,
 		"artist":             um.Artist,
 		"duration":           um.Duration,
 		"updated_at":         um.UpdatedAt.Format(time.RFC3339),
+		"expires_at":         expiresAt,
+		"source":             um.Source,
+		"source_type":        um.SourceType,
 	}
-
-	if um.Type != "" {
-		data["type"] = um.Type
-	}
-
-	if um.Source != "" {
-		data["source"] = um.Source
-	}
-
-	if um.SourceType != "" {
-		data["source_type"] = um.SourceType
-	}
-
-	if um.ExpiresAt != nil {
-		data["expires_at"] = um.ExpiresAt.Format(time.RFC3339)
-	} else {
-		data["expires_at"] = ""
-	}
-
-	return data
 }

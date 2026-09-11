@@ -1,8 +1,8 @@
-// Package outputs provides various metadata output destinations including
-// files, HTTP endpoints, WebSockets, and radio broadcasting systems.
+// Package outputs delivers formatted metadata to external destinations.
 package outputs
 
 import (
+	"fmt"
 	"log/slog"
 
 	"zwfm-metadata/config"
@@ -23,11 +23,12 @@ func NewFileOutput(name string, settings config.FileOutputConfig) *FileOutput {
 }
 
 // Send writes metadata to the configured file.
-func (f *FileOutput) Send(st *core.StructuredText) {
-	if err := utils.WriteFile(f.settings.Filename, []byte(st.String())); err != nil {
-		slog.Error("Failed to write metadata to file", "output", f.GetName(), "error", err)
-		return
+func (f *FileOutput) Send(st *core.StructuredText) error {
+	content := st.String()
+	if err := utils.WriteFile(f.settings.Filename, []byte(content)); err != nil {
+		return fmt.Errorf("write metadata file: %w", err)
 	}
 
-	slog.Debug("Successfully wrote to file", "filename", f.settings.Filename, "metadata", st.String())
+	slog.Debug("Successfully wrote to file", "filename", f.settings.Filename, "metadata", content)
+	return nil
 }

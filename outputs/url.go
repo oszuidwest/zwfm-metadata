@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -22,151 +23,113 @@ type URLOutput struct {
 	core.PassiveComponent
 	settings      config.URLOutputConfig
 	payloadMapper *PayloadMapper
-	urlTemplate   *template.Template
+	pathTemplate  *template.Template
+	queryTemplate *template.Template
 }
 
 // NewURLOutput creates a URLOutput with the given name and settings.
 func NewURLOutput(name string, settings config.URLOutputConfig) (*URLOutput, error) {
-	var mapper *PayloadMapper
-	if settings.PayloadMapping != nil {
-		mapper = NewPayloadMapper(settings.PayloadMapping)
+	mapper, err := NewPayloadMapper(settings.PayloadMapping)
+	if err != nil {
+		return nil, err
 	}
 
 	settings.Method = strings.ToUpper(settings.Method)
-	if settings.Method != "GET" && settings.Method != "POST" {
+	if settings.Method != http.MethodGet && settings.Method != http.MethodPost {
 		return nil, fmt.Errorf("method must be GET or POST, got %q", settings.Method)
 	}
 
 	if err := utils.ValidateHTTPURL(settings.URL); err != nil {
 		return nil, err
 	}
+	if settings.BearerToken != "" && !strings.HasPrefix(settings.URL, "https:") {
+		return nil, errors.New("bearer token requires an HTTPS URL")
+	}
 
-	var tmpl *template.Template
-	if strings.Contains(settings.URL, "{{") {
-		var err error
-		tmpl, err = template.New("url").Funcs(TemplateFuncs).Parse(settings.URL)
+	var pathTmpl, queryTmpl *template.Template
+	if isTemplate(settings.URL) {
+		path, query, hasQuery := strings.Cut(settings.URL, "?")
+		pathTmpl, err = template.New("url path").Funcs(templateFuncs).Parse(path)
 		if err != nil {
 			return nil, fmt.Errorf("invalid URL template: %w", err)
 		}
+		if hasQuery {
+			queryTmpl, err = template.New("url query").Funcs(templateFuncs).Parse(query)
+			if err != nil {
+				return nil, fmt.Errorf("invalid URL template: %w", err)
+			}
+		}
 	}
 
-	output := &URLOutput{
+	return &URLOutput{
 		OutputBase:    core.NewOutputBase(name),
 		settings:      settings,
 		payloadMapper: mapper,
-		urlTemplate:   tmpl,
-	}
-	return output, nil
+		pathTemplate:  pathTmpl,
+		queryTemplate: queryTmpl,
+	}, nil
 }
 
 // Send sends metadata via the configured HTTP method.
-func (u *URLOutput) Send(st *core.StructuredText) {
+func (u *URLOutput) Send(st *core.StructuredText) error {
 	payload := ConvertStructuredText(st)
-	u.sendRequest(payload)
-}
-
-func (u *URLOutput) sendRequest(payload *UniversalMetadata) {
-	if u.settings.Method == "GET" {
-		u.sendGETRequest(payload)
-		return
+	if u.settings.Method == http.MethodGet {
+		return u.sendGETRequest(payload)
 	}
-	u.sendPOSTRequest(payload)
+	return u.sendPOSTRequest(payload)
 }
 
-func urlEncodeTemplateData(data map[string]any) map[string]any {
-	encoded := make(map[string]any)
+func escapeTemplateData(data map[string]any, escape func(string) string) map[string]any {
+	encoded := make(map[string]any, len(data))
 	for key, value := range data {
-		switch v := value.(type) {
-		case string:
-			encoded[key] = url.QueryEscape(v)
-		case map[string]any:
-			encoded[key] = urlEncodeTemplateData(v)
-		default:
-			encoded[key] = v
+		if s, ok := value.(string); ok {
+			encoded[key] = escape(s)
+		} else {
+			encoded[key] = value
 		}
 	}
 	return encoded
 }
 
-func (u *URLOutput) sendGETRequest(payload *UniversalMetadata) {
-	var requestURL string
+func (u *URLOutput) sendGETRequest(payload *UniversalMetadata) error {
+	requestURL := u.settings.URL
 
-	if u.urlTemplate != nil {
-		templateData := payload.ToTemplateData()
-		encodedData := urlEncodeTemplateData(templateData)
-
-		var urlBuffer strings.Builder
-		if err := u.urlTemplate.Execute(&urlBuffer, encodedData); err != nil {
-			slog.Error("Failed to execute URL template",
-				"output", u.GetName(),
-				"template", u.settings.URL,
-				"error", err,
-			)
-			return
+	if u.pathTemplate != nil {
+		data := payload.ToTemplateData()
+		var b strings.Builder
+		if err := u.pathTemplate.Execute(&b, escapeTemplateData(data, url.PathEscape)); err != nil {
+			return fmt.Errorf("execute URL template: %w", err)
 		}
-		requestURL = urlBuffer.String()
-	} else {
-		requestURL = u.settings.URL
+		if u.queryTemplate != nil {
+			b.WriteByte('?')
+			if err := u.queryTemplate.Execute(&b, escapeTemplateData(data, url.QueryEscape)); err != nil {
+				return fmt.Errorf("execute URL template: %w", err)
+			}
+		}
+		requestURL = b.String()
 	}
 
-	parsedURL, err := url.Parse(requestURL)
-	if err != nil {
-		slog.Error("Failed to parse URL", "output", u.GetName(), "url", requestURL, "error", err)
-		return
-	}
-
-	finalURL := parsedURL.String()
-
-	slog.Debug("Sending GET request", //nolint:gosec // Logging URL for diagnostics
+	slog.Debug("Sending GET request",
 		"output", u.GetName(),
-		"url", finalURL,
+		"url", requestURL,
 	)
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, finalURL, http.NoBody)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, http.NoBody)
 	if err != nil {
-		slog.Error("Failed to create GET request", "output", u.GetName(), "error", err)
-		return
+		return fmt.Errorf("create GET request: %w", err)
 	}
 
-	u.doRequest(req)
+	return u.doRequest(req)
 }
 
-// doRequest sets the configured auth header, executes the request, and logs the outcome.
-func (u *URLOutput) doRequest(req *http.Request) {
-	if u.settings.BearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+u.settings.BearerToken)
-	}
-
-	if err := utils.DoOK(req); err != nil {
-		slog.Error("Request failed", //nolint:gosec // Logging response for diagnostics
-			"output", u.GetName(),
-			"method", req.Method,
-			"error", err,
-		)
-		return
-	}
-
-	slog.Debug("Successfully sent request", //nolint:gosec // Logging URL for diagnostics
-		"output", u.GetName(),
-		"method", req.Method,
-		"url", req.URL.String(),
-	)
-}
-
-func (u *URLOutput) sendPOSTRequest(payload *UniversalMetadata) {
-	var payloadToSend any
-
+func (u *URLOutput) sendPOSTRequest(payload *UniversalMetadata) error {
 	if u.payloadMapper != nil {
 		payload.Type = "url"
-		payloadToSend = u.payloadMapper.MapPayload(payload.ToTemplateData())
-	} else {
-		payloadToSend = payload
 	}
 
-	jsonData, err := json.Marshal(payloadToSend)
+	jsonData, err := json.Marshal(u.payloadMapper.Apply(payload))
 	if err != nil {
-		slog.Error("Failed to marshal payload", "output", u.GetName(), "error", err)
-		return
+		return fmt.Errorf("marshal payload: %w", err)
 	}
 
 	slog.Debug("Sending POST request",
@@ -176,13 +139,33 @@ func (u *URLOutput) sendPOSTRequest(payload *UniversalMetadata) {
 	)
 
 	req, err := http.NewRequestWithContext(
-		context.Background(), http.MethodPost, u.settings.URL, bytes.NewBuffer(jsonData),
+		context.Background(), http.MethodPost, u.settings.URL, bytes.NewReader(jsonData),
 	)
 	if err != nil {
-		slog.Error("Failed to create POST request", "output", u.GetName(), "error", err)
-		return
+		return fmt.Errorf("create POST request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	u.doRequest(req)
+	return u.doRequest(req)
+}
+
+// doRequest sets the configured auth header, executes the request, and logs the outcome.
+func (u *URLOutput) doRequest(req *http.Request) error {
+	if u.settings.BearerToken != "" {
+		if req.URL.Scheme != "https" {
+			return errors.New("refusing bearer-token request over non-HTTPS URL")
+		}
+		req.Header.Set("Authorization", "Bearer "+u.settings.BearerToken)
+	}
+
+	if err := utils.DoOK(req); err != nil {
+		return fmt.Errorf("send %s request: %w", req.Method, err)
+	}
+
+	slog.Debug("Successfully sent request",
+		"output", u.GetName(),
+		"method", req.Method,
+		"url", req.URL.String(),
+	)
+	return nil
 }

@@ -13,7 +13,9 @@ linters:
     # Code quality
     - errorlint
     - gosec
+    - modernize
     - nilerr
+    - nolintlint
     - unparam
     - unconvert
     - bodyclose

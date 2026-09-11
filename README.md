@@ -851,8 +851,6 @@ Custom functions (added for payload mapping):
 - `{{.field | upper}}` - Convert to uppercase
 - `{{.field | lower}}` - Convert to lowercase
 - `{{.field | trim}}` - Remove leading/trailing whitespace
-- `{{.field | formatTime}}` - Format time.Time to RFC3339 (rarely needed as times are pre-formatted)
-- `{{.field | formatTimePtr}}` - Format *time.Time to RFC3339, returns empty string if nil
 
 Built-in Go template functions (also available):
 - `{{.field | urlquery}}` - URL-encode a value (useful if building URLs in JSON)
@@ -1142,6 +1140,8 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&artist=Art
 ```
 
 ## Development
+
+Development requires Go 1.27.1 or newer.
 
 ```bash
 go fmt ./...

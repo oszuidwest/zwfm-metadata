@@ -29,10 +29,8 @@ func NewStereoToolOutput(name string, settings config.StereoToolOutputConfig) *S
 }
 
 // Send updates Stereo Tool's RDS and streaming metadata fields.
-func (i *StereoToolOutput) Send(st *core.StructuredText) {
-	if err := i.sendToStereoTool(st.String()); err != nil {
-		slog.Error("Failed to update Stereo Tool metadata", "output", i.GetName(), "error", err)
-	}
+func (i *StereoToolOutput) Send(st *core.StructuredText) error {
+	return i.sendToStereoTool(st.String())
 }
 
 // Stereo Tool 10.75 and 11.05 use these metadata field IDs.
@@ -40,8 +38,8 @@ var stereoToolFields = []struct {
 	id   int
 	name string
 }{
-	{6751, "Streaming Output Song"},
-	{9985, "FM RDS Radio Text"},
+	{id: 6751, name: "Streaming Output Song"},
+	{id: 9985, name: "FM RDS Radio Text"},
 }
 
 func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
@@ -71,7 +69,8 @@ func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error
 	// Stereo Tool needs every reserved character percent-encoded (url.PathEscape would
 	// leave & and + literal) and spaces as %20 rather than QueryEscape's +.
 	escapedPayload := strings.ReplaceAll(url.QueryEscape(strings.TrimSuffix(payload.String(), "\n")), "+", "%20")
-	requestURL := fmt.Sprintf("http://%s:%d/json-1/lis%s", i.settings.Hostname, i.settings.Port, escapedPayload)
+	host := joinHostPort(i.settings.Hostname, i.settings.Port)
+	requestURL := "http://" + host + "/json-1/lis" + escapedPayload
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, http.NoBody)
 	if err != nil {

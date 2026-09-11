@@ -1,5 +1,4 @@
-// Package core provides the fundamental interfaces and types for the metadata
-// router, including input and output abstractions and metadata structures.
+// Package core defines metadata routing primitives.
 package core
 
 import (
@@ -9,6 +8,7 @@ import (
 )
 
 // Metadata carries song information with optional expiration for time-sensitive sources.
+// It is immutable once handed to InputBase.SetMetadata.
 type Metadata struct {
 	SongID    string
 	Artist    string
@@ -30,6 +30,7 @@ type MetadataRequest struct {
 
 // Input provides metadata from a source and notifies subscribers of changes.
 type Input interface {
+	// Start runs background work, if any, until ctx is canceled.
 	Start(ctx context.Context) error
 	GetName() string
 	GetMetadata() *Metadata
@@ -38,9 +39,11 @@ type Input interface {
 
 // Output receives formatted metadata and delivers it to a destination.
 type Output interface {
+	// Start runs background work, if any, until ctx is canceled.
 	Start(ctx context.Context) error
 	GetName() string
-	Send(st *StructuredText)
+	// Send must not mutate st.Original.
+	Send(st *StructuredText) error
 }
 
 // RouteRegistrar allows outputs to register HTTP handlers on the web server.
@@ -50,6 +53,7 @@ type RouteRegistrar interface {
 
 // Formatter modifies StructuredText fields before output delivery.
 type Formatter interface {
+	// Format may modify st but must not mutate st.Original.
 	Format(st *StructuredText)
 }
 
@@ -67,9 +71,7 @@ const (
 	FilterReject
 )
 
-// Filter examines metadata and decides whether it should proceed to outputs.
-// Unlike Formatter which transforms text, Filter determines if metadata passes through.
+// Filter accepts, rejects, or partially clears metadata before formatting.
 type Filter interface {
-	// Decide examines StructuredText and returns what action to take.
 	Decide(st *StructuredText) FilterAction
 }
