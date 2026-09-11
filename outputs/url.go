@@ -23,7 +23,8 @@ type URLOutput struct {
 	core.PassiveComponent
 	settings      config.URLOutputConfig
 	payloadMapper *PayloadMapper
-	urlTemplate   *template.Template
+	pathTemplate  *template.Template
+	queryTemplate *template.Template
 }
 
 // NewURLOutput creates a URLOutput with the given name and settings.
@@ -45,11 +46,18 @@ func NewURLOutput(name string, settings config.URLOutputConfig) (*URLOutput, err
 		return nil, errors.New("bearer token requires an HTTPS URL")
 	}
 
-	var tmpl *template.Template
+	var pathTmpl, queryTmpl *template.Template
 	if isTemplate(settings.URL) {
-		tmpl, err = template.New("url").Funcs(templateFuncs).Parse(settings.URL)
+		path, query, hasQuery := strings.Cut(settings.URL, "?")
+		pathTmpl, err = template.New("url path").Funcs(templateFuncs).Parse(path)
 		if err != nil {
 			return nil, fmt.Errorf("invalid URL template: %w", err)
+		}
+		if hasQuery {
+			queryTmpl, err = template.New("url query").Funcs(templateFuncs).Parse(query)
+			if err != nil {
+				return nil, fmt.Errorf("invalid URL template: %w", err)
+			}
 		}
 	}
 
@@ -57,7 +65,8 @@ func NewURLOutput(name string, settings config.URLOutputConfig) (*URLOutput, err
 		OutputBase:    core.NewOutputBase(name),
 		settings:      settings,
 		payloadMapper: mapper,
-		urlTemplate:   tmpl,
+		pathTemplate:  pathTmpl,
+		queryTemplate: queryTmpl,
 	}, nil
 }
 
@@ -70,12 +79,11 @@ func (u *URLOutput) Send(st *core.StructuredText) error {
 	return u.sendPOSTRequest(payload)
 }
 
-// urlEncodeTemplateData query-escapes every string so templates can splice values into a URL.
-func urlEncodeTemplateData(data map[string]any) map[string]any {
+func escapeTemplateData(data map[string]any, escape func(string) string) map[string]any {
 	encoded := make(map[string]any, len(data))
 	for key, value := range data {
 		if s, ok := value.(string); ok {
-			encoded[key] = url.QueryEscape(s)
+			encoded[key] = escape(s)
 		} else {
 			encoded[key] = value
 		}
@@ -86,10 +94,17 @@ func urlEncodeTemplateData(data map[string]any) map[string]any {
 func (u *URLOutput) sendGETRequest(payload *UniversalMetadata) error {
 	requestURL := u.settings.URL
 
-	if u.urlTemplate != nil {
+	if u.pathTemplate != nil {
+		data := payload.ToTemplateData()
 		var b strings.Builder
-		if err := u.urlTemplate.Execute(&b, urlEncodeTemplateData(payload.ToTemplateData())); err != nil {
+		if err := u.pathTemplate.Execute(&b, escapeTemplateData(data, url.PathEscape)); err != nil {
 			return fmt.Errorf("execute URL template: %w", err)
+		}
+		if u.queryTemplate != nil {
+			b.WriteByte('?')
+			if err := u.queryTemplate.Execute(&b, escapeTemplateData(data, url.QueryEscape)); err != nil {
+				return fmt.Errorf("execute URL template: %w", err)
+			}
 		}
 		requestURL = b.String()
 	}

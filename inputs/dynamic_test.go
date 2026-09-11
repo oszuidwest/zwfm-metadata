@@ -1,6 +1,7 @@
 package inputs
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -59,6 +60,15 @@ func TestNewDynamicInputRejectsUnknownExpiration(t *testing.T) {
 	settings.Expiration.Type = "typo"
 	_, err := NewDynamicInput("test", settings)
 	if err == nil || !strings.Contains(err.Error(), "expiration.type") {
+		t.Fatalf("NewDynamicInput() error = %v", err)
+	}
+}
+
+func TestNewDynamicInputRejectsExpirationOverflow(t *testing.T) {
+	var settings config.DynamicInputConfig
+	settings.Expiration.Minutes = int(math.MaxInt64/int64(time.Minute)) + 1
+	_, err := NewDynamicInput("test", settings)
+	if err == nil || !strings.Contains(err.Error(), "expiration.minutes") {
 		t.Fatalf("NewDynamicInput() error = %v", err)
 	}
 }

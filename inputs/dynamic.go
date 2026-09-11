@@ -24,6 +24,9 @@ func NewDynamicInput(name string, settings config.DynamicInputConfig) (*DynamicI
 	if settings.Expiration.Minutes < 0 {
 		return nil, errors.New("expiration.minutes must not be negative")
 	}
+	if int64(settings.Expiration.Minutes) > math.MaxInt64/int64(time.Minute) {
+		return nil, errors.New("expiration.minutes is too large")
+	}
 	switch settings.Expiration.Type {
 	case "dynamic", "fixed", "none", "":
 	default:
