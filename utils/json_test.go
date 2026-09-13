@@ -33,3 +33,10 @@ func TestParseJSONSettingsRejectsUnknownFields(t *testing.T) {
 		})
 	}
 }
+
+func TestParseJSONSettingsRejectsMultipleValues(t *testing.T) {
+	_, err := ParseJSONSettings[map[string]int](json.RawMessage(`{"first":1}{"second":2}`))
+	if err == nil {
+		t.Fatal("ParseJSONSettings() error = nil, want trailing data error")
+	}
+}
