@@ -222,7 +222,7 @@ metadata.Type = "custom"
 
 `InputBase.GetMetadata` now returns the stored pointer instead of a clone. `Metadata.Clone` and `StructuredText.Clone` were removed. Treat values passed to `SetMetadata`, returned by `GetMetadata`, received through subscriptions, and exposed as `StructuredText.Original` as read-only.
 
-If custom code needs a mutable value, copy it first. Copy `ExpiresAt` separately when a fully independent `Metadata` value is required. Call `core.NewStructuredText` only with a non-nil `*core.Metadata`.
+If custom code needs a mutable value, copy it first. Copy `ExpiresAt` separately when a fully independent `Metadata` value is required.
 
 `PassiveComponent.Start` now returns immediately instead of waiting for context cancellation. Components with background work must implement their own `Start` method and stop that work when the context is cancelled.
 
