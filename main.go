@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -134,12 +135,14 @@ func setupInput(router *core.MetadataRouter, inputCfg *config.InputConfig) error
 
 // setupOutput builds and registers an output and its formatters.
 func setupOutput(router *core.MetadataRouter, outputCfg *config.OutputConfig) error {
-	timing, err := utils.ParseJSONSettings[core.OutputTiming](outputCfg.Settings)
+	timing, settings, err := splitOutputTiming(outputCfg.Settings)
 	if err != nil {
-		return fmt.Errorf("failed to parse timing for output %q: %w", outputCfg.Name, err)
+		return fmt.Errorf("failed to parse settings for output %q: %w", outputCfg.Name, err)
 	}
 
-	output, err := createOutput(outputCfg)
+	componentCfg := *outputCfg
+	componentCfg.Settings = settings
+	output, err := createOutput(&componentCfg)
 	if err != nil {
 		return fmt.Errorf("failed to create output %q: %w", outputCfg.Name, err)
 	}
@@ -254,4 +257,21 @@ func createOutput(cfg *config.OutputConfig) (core.Output, error) {
 	default:
 		return nil, fmt.Errorf("unknown type: %s", cfg.Type)
 	}
+}
+
+// splitOutputTiming pops the shared delay/fallbackDelay keys out of an output's settings so
+// the timing and the output-specific remainder can each be decoded strictly.
+func splitOutputTiming(settings json.RawMessage) (core.OutputTiming, json.RawMessage, error) {
+	var timing core.OutputTiming
+	fields, err := utils.ParseJSONSettings[map[string]json.RawMessage](settings)
+	if err != nil || fields == nil {
+		return timing, nil, err
+	}
+	if err := json.Unmarshal(settings, &timing); err != nil { // lenient: ignores the output-specific keys
+		return timing, nil, fmt.Errorf("failed to parse timing: %w", err)
+	}
+	delete(fields, "delay")
+	delete(fields, "fallbackDelay")
+	rest, err := json.Marshal(fields)
+	return timing, rest, err
 }
