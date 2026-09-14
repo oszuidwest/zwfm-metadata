@@ -18,7 +18,7 @@ Remove `roundUpMinutes` from dynamic inputs:
 
 In v2, a missing or enabled `roundUpMinutes` rounded a track's duration up to the next full minute. In v3, a track expires at its reported duration. Inputs that already set `roundUpMinutes` to `false` keep the same behavior.
 
-The old setting may remain in the JSON file and is ignored. `expiration.minutes` still provides a fallback when the duration is missing, zero, or invalid. With no positive fallback, the update expires immediately.
+The old setting must be removed. V3 rejects unknown component settings during startup, so leaving `roundUpMinutes` in the JSON file prevents the dynamic input from being created. `expiration.minutes` still provides a fallback when the duration is missing, zero, or invalid. With no positive fallback, the update expires immediately.
 
 ## Output delays
 
@@ -47,6 +47,7 @@ If this output is showing `radio-live` when that input expires, `default-text` i
 
 V3 centralizes more validation at startup and rejects invalid or ambiguous settings instead of deferring failures until an update is processed. Check for:
 
+- unknown component setting keys, including the removed `roundUpMinutes` setting;
 - unknown dynamic `expiration.type` values;
 - an output `delay` or `fallbackDelay` below zero;
 - missing, duplicate, or unknown inputs on an output;

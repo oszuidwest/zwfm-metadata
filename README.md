@@ -37,6 +37,7 @@ Metadata routing middleware for radio stations that routes metadata from inputs 
   - [Available Formatters](#available-formatters)
 - [Features](#features)
 - [API](#api)
+- [Command-line options](#command-line-options)
 - [Development](#development)
 - [License](#license)
 
@@ -123,10 +124,10 @@ HTTP API for live updates
 
 #### Settings
 - `secret` (optional) - Authentication secret for API calls
-- `expiration.type` - `"dynamic"` (expires based on song duration), `"fixed"` (expires after a set number of minutes), or `"none"` (never expires)
-- `expiration.minutes` (required if type=fixed, optional for type=dynamic) - Number of minutes until expiration. When `type` is `"dynamic"`, this serves as a fallback when the duration parameter is missing or invalid
+- `expiration.type` (optional, default: `"none"`) - `"dynamic"` (expires based on song duration), `"fixed"` (expires after a set number of minutes), or `"none"` (never expires)
+- `expiration.minutes` (required if type=fixed, optional for type=dynamic) - Number of minutes until expiration. When `type` is `"dynamic"`, this serves as a fallback when the duration parameter is missing, zero, or invalid. A missing or zero value causes immediate expiration in both expiration modes
 
-Dynamic expiration is exact: a track with `duration=03:30` expires 3:30 after it was received. Short gaps between tracks (crossfades, jingles) are covered by the output's `fallbackDelay`, see [Delays and fallback](#delays-and-fallback).
+Dynamic expiration uses the reported duration at whole-second resolution: a track with `duration=03:30` expires 3:30 after it was received, while decimal seconds are rounded to the nearest whole second. Short gaps between tracks (crossfades, jingles) are covered by the output's `fallbackDelay`, see [Delays and fallback](#delays-and-fallback).
 
 #### API Usage
 ```bash
@@ -149,7 +150,7 @@ http://localhost:9000/input/dynamic?input=aeron-studio&title=<#Title>&artist=<#A
 - `songID` (optional) - Unique song identifier
 - `artist` (optional) - Artist name
 - `duration` (optional) - Song duration in multiple formats. Leading zeros are optional. Used for auto-expiration when `expiration.type` is `"dynamic"`. Supported formats:
-  - **Seconds**: `272` or `272.5` or `272,5` (whole or decimal seconds, comma or period separator)
+  - **Seconds**: `272` or `272.5` or `272,5` (whole or decimal seconds, comma or period separator; decimals are rounded to the nearest whole second)
   - **MM:SS**: `3:45` or `03:45` (minutes and seconds)
   - **HH:MM:SS**: `1:30:00` or `01:30:00` (hours, minutes, and seconds)
   - Invalid formats cause immediate expiration, or fallback to `expiration.minutes` if configured
@@ -180,7 +181,7 @@ Polls external APIs
 - `jsonParsing` (optional, default: false) - Parses the response as JSON
 - `jsonKey` (required if jsonParsing=true) - Dot-notation path to extract the value (e.g., `"data.song.title"`)
 - `expiryKey` (optional) - Dot-notation path to the expiry value in the JSON response. When set, the expiry is parsed and used for metadata expiration. When the expiry is reached, polling occurs immediately in addition to regular interval polling.
-- `expiryFormat` (optional) - Format string for parsing the expiry value (e.g., RFC3339). Defaults to RFC3339 if not specified.
+- `expiryFormat` (optional) - Go reference-time layout used to parse the expiry value, for example `"2006-01-02T15:04:05Z07:00"`. Omit it to use RFC3339.
 
 ### Text Input
 
@@ -415,8 +416,10 @@ All output types support:
 
 Every output has two timings:
 
-- `delay` - How long every metadata update waits before it is sent. Use this to line up metadata with the audio latency of the destination (an Icecast stream typically runs 10 to 30 seconds behind the studio).
-- `fallbackDelay` - Extra seconds, on top of `delay`, that the output waits before switching to an input lower in its priority list. Defaults to 0.
+- `delay` (optional, default: 0) - How many whole seconds every metadata update waits before it is sent. Use this to line up metadata with the audio latency of the destination (an Icecast stream typically runs 10 to 30 seconds behind the studio).
+- `fallbackDelay` (optional, default: 0) - Extra whole seconds, on top of `delay`, that the output waits before switching to an input lower in its priority list.
+
+Both values must be zero or greater.
 
 When the current input expires, the next available input is sent `delay + fallbackDelay` seconds later, so it never appears before the delayed audio has finished. The same wait applies when that lower-priority input changes its own metadata while the switch is pending: the pending switch is replaced and the full wait starts again from the change. When a new track arrives on the current input (or a higher-priority one) while the switch is waiting, the switch is cancelled and the new track is sent after the regular `delay`. The fallback delay is therefore a grace period: as long as the next track shows up within that window, short gaps such as crossfades and jingles never reach the output.
 
@@ -458,7 +461,7 @@ Updates streaming server metadata
 ```
 
 ##### Settings
-- `delay` (required) - Number of seconds to delay metadata updates
+- `delay` (optional, default: 0) - Number of seconds to delay metadata updates
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `server` (required) - Icecast server hostname/IP
 - `port` (required) - Icecast server port
@@ -484,7 +487,7 @@ Writes metadata to the filesystem.
 ```
 
 ##### Settings
-- `delay` (required) - Number of seconds to delay metadata updates
+- `delay` (optional, default: 0) - Number of seconds to delay metadata updates
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `filename` (required) - Full path to output file
 
@@ -539,11 +542,11 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 ```
 
 ##### Settings
-- `delay` (required) - Number of seconds to delay metadata updates
+- `delay` (optional, default: 0) - Number of seconds to delay metadata updates
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `url` (required) - Target URL (supports Go templates for GET requests)
 - `method` (required) - HTTP method: "GET" or "POST"
-- `bearerToken` (optional) - Authorization bearer token
+- `bearerToken` (optional) - Authorization bearer token. Configuring a token requires an HTTPS URL; HTTP URLs are rejected at startup
 - `payloadMapping` (optional) - Custom JSON payload structure for POST requests (see [Custom Payload Mapping](#custom-payload-mapping))
 
 ##### HTTP Methods
@@ -687,13 +690,13 @@ Serves metadata via GET endpoints with multiple response formats
 ```
 
 ##### Settings
-- `delay` (required) - Number of seconds to delay metadata updates
+- `delay` (optional, default: 0) - Number of seconds to delay metadata updates
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `endpoints` (required) - Array of HTTP endpoints to serve
 
 ##### Endpoint Configuration
 - `path` (required) - URL path for the endpoint
-- `responseType` (optional) - Response format: `json` (default), `xml`, or `plaintext`
+- `responseType` (optional) - Response format: `json` (default), `xml`, `plaintext`, or its alias `text`
 - `payloadMapping` (optional) - Custom response structure (see [Custom Payload Mapping](#custom-payload-mapping))
 
 ##### Response Types
@@ -720,7 +723,7 @@ Broadcasts metadata to connected clients with real-time updates.
 ```
 
 ##### Settings
-- `delay` (required) - Number of seconds to delay metadata updates
+- `delay` (optional, default: 0) - Number of seconds to delay metadata updates
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `path` (required) - URL path for WebSocket connections (e.g., "/metadata", "/ws")
 - `payloadMapping` (optional) - Custom JSON message structure (see [Custom Payload Mapping](#custom-payload-mapping))
@@ -763,7 +766,7 @@ Generates DL Plus format for DAB/DAB+ transmission
 ```
 
 ##### Settings
-- `delay` (required) - Number of seconds to delay metadata updates
+- `delay` (optional, default: 0) - Number of seconds to delay metadata updates
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `filename` (required) - Full path to output file
 
@@ -810,7 +813,7 @@ Updates Stereo Tool's RDS RadioText and streaming song metadata.
 
 ##### Settings
 
-- `delay` (required) - Number of seconds to delay metadata updates
+- `delay` (optional, default: 0) - Number of seconds to delay metadata updates
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `hostname` (required) - Stereo Tool server hostname/IP
 - `port` (required) - Stereo Tool HTTP server port (typically 8080)
@@ -841,7 +844,7 @@ Updates Stereo Tool's RDS RadioText and streaming song metadata.
 - `{{.duration}}` - Song duration
 - `{{.updated_at}}` - When the metadata was updated (RFC3339 format)
 - `{{.expires_at}}` - When the metadata expires (RFC3339 format, empty if no expiration)
-- `{{.type}}` - Message type (WebSocket only: "metadata_update")
+- `{{.type}}` - Output-specific message type: `"metadata_update"` for WebSocket, `"url"` for URL POST, and an empty string for HTTP
 - `{{.source}}` - Name of the input that provided this metadata
 - `{{.source_type}}` - Type of the input (e.g., "dynamic", "url", "text")
 
@@ -1055,13 +1058,12 @@ Smart processing for RDS compliance:
   - `Straße` → `Strasse`
 
 - **Single-line output**: Converts newlines (`\n`, `\r`) and tabs (`\t`) to spaces for RDS displays
-- **Smart truncation** (applied in order until under 64 chars):
-  1. Progressively removes content in parentheses from right to left: `Artist - Song (Important Info) (Extended Mix)` → `Artist - Song (Important Info)`
-  2. Progressively removes content in brackets from right to left: `Artist - Song [Live] [Remastered]` → `Artist - Song [Live]`
-  3. Removes featured artists: `feat.`, `ft.`, `featuring`, `with`, `&`
-  4. Removes remix indicators after second hyphen
-  5. Removes common suffixes: `Remix`, `Mix`, `Edit`, `Version`, `Instrumental`, `Acoustic`, `Live`, `Remaster`
-  6. Truncates at word boundaries with `...` if still too long
+- **Smart shortening**: Runs only while the complete output, including prefix and suffix, exceeds 64 characters. It rechecks the length after every step:
+  1. Removes all parenthesized segments from the title, then from the artist
+  2. Removes all bracketed segments from the title, then from the artist
+  3. Removes trailing featured-artist clauses (`feat.`, `ft.`, `featuring`, `with`, or `&`) from the artist, then from the title
+  4. Removes a final hyphen-delimited title segment when it contains `Remix`, `Mix`, `Edit`, `Version`, `Instrumental`, `Acoustic`, `Live`, `Remaster`, or `Radio`
+  5. Truncates at word boundaries with `...` if the output is still too long
 
 ### Usage
 
@@ -1127,7 +1129,7 @@ lowercase: "artist name - song title"
 - **Priority fallback**: Outputs use the first available input in the priority list
 - **Input filtering**: Suppress unwanted metadata (jingles, test tracks, placeholders) before it reaches outputs
 - **Configurable delays**: Synchronizes timing across different outputs, with a separate fallback delay that bridges short gaps between tracks
-- **Input expiration**: Dynamic inputs expire automatically
+- **Input expiration**: Dynamic inputs expire automatically; URL inputs can use an expiry field from their JSON response
 - **Prefix/suffix support**: Adds station branding to inputs
 - **Text formatting**: Transform metadata with formatters (uppercase, title case, RDS compliance)
 - **Web dashboard**: Real-time status at http://localhost:9000 with WebSocket updates and a connection status indicator
@@ -1139,14 +1141,37 @@ lowercase: "artist name - song title"
 curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&artist=Artist&duration=03:45"
 ```
 
+## Command-line options
+
+```text
+-config string
+    Path to the JSON configuration file (default: config.json)
+-healthcheck string
+    Request the given URL and exit successfully when it returns a status below 400
+-version
+    Print the version, commit, and build time, then exit
+```
+
+Run `./zwfm-metadata -help` to print the built-in help. Examples:
+
+```bash
+./zwfm-metadata -config /etc/zwfm-metadata/config.json
+./zwfm-metadata -healthcheck http://127.0.0.1:9000/
+./zwfm-metadata -version
+```
+
 ## Development
 
-Development requires Go 1.27.1 or newer.
+Development requires Go 1.27.1 or newer. Install Bun before changing the dashboard assets.
 
 ```bash
 go fmt ./...
+go test ./...
 go vet ./...
-go build
+go build ./...
+golangci-lint run --timeout=5m
+bun install --frozen-lockfile
+bun run lint
 ```
 
 Set `"debug": true` in `config.json` for detailed logging.
