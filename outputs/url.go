@@ -42,7 +42,7 @@ func NewURLOutput(name string, settings config.URLOutputConfig) (*URLOutput, err
 	if err := utils.ValidateHTTPURL(settings.URL); err != nil {
 		return nil, err
 	}
-	if settings.BearerToken != "" && !strings.HasPrefix(settings.URL, "https:") {
+	if settings.BearerToken != "" && !strings.EqualFold(settings.URL[:len("https:")], "https:") {
 		return nil, errors.New("bearer token requires an HTTPS URL")
 	}
 
