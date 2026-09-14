@@ -20,6 +20,17 @@ func TestNewURLOutput_BearerTokenRequiresHTTPS(t *testing.T) {
 	}
 }
 
+func TestNewURLOutput_BearerTokenAcceptsUppercaseHTTPS(t *testing.T) {
+	_, err := NewURLOutput("test", config.URLOutputConfig{
+		URL:         "HTTPS://example.com/metadata",
+		Method:      "POST",
+		BearerToken: "secret",
+	})
+	if err != nil {
+		t.Fatalf("NewURLOutput() error = %v, want nil", err)
+	}
+}
+
 func TestURLOutputEscapesTemplateValuesByURLComponent(t *testing.T) {
 	var escapedPath, rawQuery, title string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
