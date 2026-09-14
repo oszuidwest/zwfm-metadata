@@ -383,6 +383,37 @@ func TestBlockedOutputCoalescesBurstWithBoundedGoroutines(t *testing.T) {
 	})
 }
 
+func TestSupersededFiredTimerDoesNotSend(t *testing.T) {
+	router := NewMetadataRouter()
+	output := newMockOutput("output")
+	entry := &outputEntry{output: output, wake: make(chan struct{}, 1)}
+	pending := &outputUpdate{
+		inputName: "input",
+		metadata:  testMetadata("", "superseded"),
+		reason:    "test",
+		readyAt:   time.Now().Add(100 * time.Millisecond),
+	}
+	entry.pending = pending
+	go router.runOutputWorker(t.Context(), output.GetName(), entry)
+
+	// Give the worker time to observe pending, then let its timer fire while the
+	// router lock keeps the update from executing.
+	time.Sleep(20 * time.Millisecond)
+	router.mu.Lock()
+	if wait := time.Until(pending.readyAt); wait > 0 {
+		time.Sleep(wait)
+	}
+	time.Sleep(10 * time.Millisecond)
+	router.schedule(output.GetName(), entry, "input", testMetadata("", "current"), "test")
+	router.mu.Unlock()
+
+	st, ok := output.waitForSend(time.Second)
+	if !ok || st.Title != "current" {
+		t.Fatalf("expected only current metadata, got %q", st.String())
+	}
+	expectNoSend(t, output, 10*time.Millisecond)
+}
+
 func TestCancellationDropsQueuedOutputUpdate(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
