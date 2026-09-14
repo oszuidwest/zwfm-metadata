@@ -19,7 +19,12 @@ type StructuredText struct {
 }
 
 // NewStructuredText initializes a StructuredText with artist and title from the given metadata.
+// Nil metadata produces an empty StructuredText.
 func NewStructuredText(m *Metadata) *StructuredText {
+	if m == nil {
+		return &StructuredText{Separator: " - "}
+	}
+
 	return &StructuredText{
 		Original:  m,
 		Artist:    m.Artist,
