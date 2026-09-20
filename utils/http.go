@@ -2,30 +2,16 @@ package utils
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 )
 
 const maxErrorBodyBytes = 4 << 10
 
-var httpClient = &http.Client{
-	Timeout: 10 * time.Second,
-	CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return errors.New("stopped after 10 redirects")
-		}
-		if len(via) > 0 && strings.HasPrefix(via[0].Header.Get("Authorization"), "Bearer ") &&
-			req.URL.Scheme != "https" {
-			return errors.New("refusing to redirect bearer token to non-https url")
-		}
-		return nil
-	},
-}
+var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 // Get issues an HTTP GET through the shared client.
 func Get(ctx context.Context, rawURL string) (*http.Response, error) {

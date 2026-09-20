@@ -51,7 +51,6 @@ V3 centralizes more validation at startup and rejects invalid or ambiguous setti
 - unknown dynamic `expiration.type` values;
 - an output `delay` or `fallbackDelay` below zero;
 - missing, duplicate, or unknown inputs on an output;
-- bearer tokens configured for non-HTTPS URLs;
 - unknown HTTP `responseType` values; and
 - invalid payload templates.
 

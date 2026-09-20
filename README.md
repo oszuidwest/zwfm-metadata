@@ -546,7 +546,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `url` (required) - Target URL (supports Go templates for GET requests)
 - `method` (required) - HTTP method: "GET" or "POST"
-- `bearerToken` (optional) - Authorization bearer token. Configuring a token requires an HTTPS URL; HTTP URLs are rejected at startup
+- `bearerToken` (optional) - Authorization bearer token
 - `payloadMapping` (optional) - Custom JSON payload structure for POST requests (see [Custom Payload Mapping](#custom-payload-mapping))
 
 ##### HTTP Methods

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -41,9 +40,6 @@ func NewURLOutput(name string, settings config.URLOutputConfig) (*URLOutput, err
 
 	if err := utils.ValidateHTTPURL(settings.URL); err != nil {
 		return nil, err
-	}
-	if settings.BearerToken != "" && !strings.EqualFold(settings.URL[:len("https:")], "https:") {
-		return nil, errors.New("bearer token requires an HTTPS URL")
 	}
 
 	var pathTmpl, queryTmpl *template.Template
@@ -152,9 +148,6 @@ func (u *URLOutput) sendPOSTRequest(payload *UniversalMetadata) error {
 // doRequest sets the configured auth header, executes the request, and logs the outcome.
 func (u *URLOutput) doRequest(req *http.Request) error {
 	if u.settings.BearerToken != "" {
-		if req.URL.Scheme != "https" {
-			return errors.New("refusing bearer-token request over non-HTTPS URL")
-		}
 		req.Header.Set("Authorization", "Bearer "+u.settings.BearerToken)
 	}
 
