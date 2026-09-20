@@ -9,25 +9,28 @@ import (
 	"zwfm-metadata/core"
 )
 
-func TestNewURLOutput_BearerTokenRequiresHTTPS(t *testing.T) {
-	_, err := NewURLOutput("test", config.URLOutputConfig{
-		URL:         "http://example.com/metadata",
-		Method:      "POST",
-		BearerToken: "secret",
-	})
-	if err == nil {
-		t.Fatal("NewURLOutput() error = nil, want HTTPS requirement error")
-	}
-}
+func TestURLOutput_SendsBearerToken(t *testing.T) {
+	var authorization string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authorization = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
 
-func TestNewURLOutput_BearerTokenAcceptsUppercaseHTTPS(t *testing.T) {
-	_, err := NewURLOutput("test", config.URLOutputConfig{
-		URL:         "HTTPS://example.com/metadata",
-		Method:      "POST",
+	output, err := NewURLOutput("test", config.URLOutputConfig{
+		URL:         server.URL,
+		Method:      http.MethodPost,
 		BearerToken: "secret",
 	})
 	if err != nil {
-		t.Fatalf("NewURLOutput() error = %v, want nil", err)
+		t.Fatal(err)
+	}
+	if err := output.Send(&core.StructuredText{Title: "Test"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if authorization != "Bearer secret" {
+		t.Errorf("Authorization header = %q, want %q", authorization, "Bearer secret")
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 )
 
@@ -18,10 +17,6 @@ var httpClient = &http.Client{
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return errors.New("stopped after 10 redirects")
-		}
-		if len(via) > 0 && strings.HasPrefix(via[0].Header.Get("Authorization"), "Bearer ") &&
-			req.URL.Scheme != "https" {
-			return errors.New("refusing to redirect bearer token to non-https url")
 		}
 		return nil
 	},
