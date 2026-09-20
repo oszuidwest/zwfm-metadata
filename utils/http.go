@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,15 +11,7 @@ import (
 
 const maxErrorBodyBytes = 4 << 10
 
-var httpClient = &http.Client{
-	Timeout: 10 * time.Second,
-	CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return errors.New("stopped after 10 redirects")
-		}
-		return nil
-	},
-}
+var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 // Get issues an HTTP GET through the shared client.
 func Get(ctx context.Context, rawURL string) (*http.Response, error) {
