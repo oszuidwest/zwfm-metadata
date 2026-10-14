@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestInputBaseLogsDroppedSubscriberUpdate(t *testing.T) {
@@ -24,5 +25,32 @@ func TestInputBaseLogsDroppedSubscriberUpdate(t *testing.T) {
 	}
 	if !strings.Contains(logOutput, "input=input") {
 		t.Fatalf("log output = %q, want input name", logOutput)
+	}
+}
+
+func TestInputBaseNotifiesWhenSameContentBecomesAvailableAgain(t *testing.T) {
+	input := NewInputBase("input")
+	updates := make(chan *Metadata, 3)
+	input.Subscribe(updates)
+
+	input.SetMetadata(&Metadata{Title: "Song", ExpiresAt: new(time.Now().Add(-time.Second))})
+	<-updates
+
+	input.SetMetadata(&Metadata{Title: "Song", ExpiresAt: new(time.Now().Add(time.Minute))})
+	select {
+	case <-updates:
+	default:
+		t.Fatal("republishing expired content did not notify subscribers")
+	}
+
+	// Moving the expiry of available content must stay silent.
+	input.SetMetadata(&Metadata{Title: "Song", ExpiresAt: new(time.Now().Add(2 * time.Minute))})
+	select {
+	case metadata := <-updates:
+		t.Fatalf("expiry-only refresh notified subscribers: %#v", metadata)
+	default:
+	}
+	if got := input.GetMetadata().ExpiresAt; got == nil || time.Until(*got) < time.Minute {
+		t.Fatalf("stored expiry = %v, want the refreshed deadline", got)
 	}
 }
