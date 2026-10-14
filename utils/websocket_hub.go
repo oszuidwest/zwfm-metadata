@@ -33,6 +33,8 @@ type WebSocketHub struct {
 	upgrader       websocket.Upgrader
 	onConnect      func() any
 	onDisconnect   func()
+	heartbeat      []byte
+	heartbeatAfter time.Duration
 	pingInterval   time.Duration
 	pongWait       time.Duration
 	writeTimeout   time.Duration
@@ -59,6 +61,14 @@ func NewWebSocketHub(name string) *WebSocketHub {
 // SetOnConnect sets the callback that provides the initial payload for new connections.
 func (h *WebSocketHub) SetOnConnect(fn func() any) {
 	h.onConnect = fn
+}
+
+// SetHeartbeat sends msg to a client after it received nothing for the given
+// interval. Unlike ping frames, browser clients can see it and detect a dead
+// connection. A zero interval disables the heartbeat.
+func (h *WebSocketHub) SetHeartbeat(interval time.Duration, msg []byte) {
+	h.heartbeatAfter = interval
+	h.heartbeat = msg
 }
 
 // SetOnDisconnect sets the callback for disconnections.
@@ -147,17 +157,30 @@ func (h *WebSocketHub) writePump(client *hubClient) {
 	defer pings.Stop()
 	defer h.disconnectClient(client)
 
+	// Without a heartbeat the nil channel never fires.
+	var idle *time.Timer
+	var heartbeats <-chan time.Time
+	if h.heartbeatAfter > 0 {
+		idle = time.NewTimer(h.heartbeatAfter)
+		defer idle.Stop()
+		heartbeats = idle.C
+	}
+
 	for {
 		select {
 		case msg := <-client.send:
-			if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
-				slog.Debug("WebSocket write deadline failed", "hub", h.name, "error", err)
+			if !h.writeText(client, msg) {
 				return
 			}
-			if err := client.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-				slog.Debug("WebSocket write failed", "hub", h.name, "error", err)
+			if idle != nil {
+				idle.Reset(h.heartbeatAfter)
+			}
+
+		case <-heartbeats:
+			if !h.writeText(client, h.heartbeat) {
 				return
 			}
+			idle.Reset(h.heartbeatAfter)
 
 		case <-client.done:
 			// Best-effort close frame; errors are expected since the
@@ -178,6 +201,19 @@ func (h *WebSocketHub) writePump(client *hubClient) {
 			}
 		}
 	}
+}
+
+// writeText writes one text frame and reports whether the connection is still usable.
+func (h *WebSocketHub) writeText(client *hubClient, msg []byte) bool {
+	if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
+		slog.Debug("WebSocket write deadline failed", "hub", h.name, "error", err)
+		return false
+	}
+	if err := client.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+		slog.Debug("WebSocket write failed", "hub", h.name, "error", err)
+		return false
+	}
+	return true
 }
 
 // readPump reads from the WebSocket connection until an error occurs. All messages

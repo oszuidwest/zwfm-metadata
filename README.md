@@ -728,6 +728,7 @@ Broadcasts metadata to connected clients with real-time updates.
   "settings": {
     "delay": 0,
     "path": "/metadata",
+    "heartbeatInterval": 30,
     "payloadMapping": {...}  // See Custom Payload Mapping section
   }
 }
@@ -737,9 +738,16 @@ Broadcasts metadata to connected clients with real-time updates.
 - `delay` (optional, default: 0) - Number of seconds to delay metadata updates
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `path` (required) - URL path for WebSocket connections (e.g., "/metadata", "/ws")
+- `heartbeatInterval` (optional, default: 0) - Whole seconds without a message after which a client receives `{"type":"heartbeat"}`. `0` disables the heartbeat. The heartbeat is not affected by `payloadMapping`
 - `payloadMapping` (optional) - Custom JSON message structure (see [Custom Payload Mapping](#custom-payload-mapping))
 
 **Note**: WebSocket endpoints are served on the main web server port (default: 9000), not on a separate port. All WebSocket operations use write timeouts to prevent hanging connections.
+
+##### Heartbeat
+
+Metadata updates only arrive when something changes, and a programme name can stay the same for hours. The server already sends WebSocket ping frames, but browsers handle those internally and never expose them to JavaScript. When a connection dies without a close (sleep and resume, a network change), a browser client cannot tell a dead connection from a quiet one and keeps showing the last track.
+
+With `heartbeatInterval` set, every client receives a message at least that often. A client can treat a longer silence as a dead connection: show its own fallback and reconnect. Allow some slack, for example twice the interval.
 
 ##### Client Connection Example
 
@@ -760,6 +768,26 @@ ws.onopen = () => {
 ```
 
 Keep showing the last message until the next one arrives. Updates are already delayed to match the audio, and an output with an available lower-priority input sends it after the configured delays, so a client timer on `expires_at` would run ahead of the stream, see [Delays and fallback](#delays-and-fallback).
+
+With `heartbeatInterval` set to 30, a client can detect a dead connection:
+
+```javascript
+let watchdog;
+function resetWatchdog() {
+  clearTimeout(watchdog);
+  watchdog = setTimeout(() => ws.close(), 60000); // reconnect from your close handler
+}
+
+ws.onopen = resetWatchdog;
+ws.onmessage = (event) => {
+  resetWatchdog();
+  const message = JSON.parse(event.data);
+  if (message.type === 'heartbeat') {
+    return;
+  }
+  // Update your UI with the new metadata
+};
+```
 
 #### DL Plus Output
 

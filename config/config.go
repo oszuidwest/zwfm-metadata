@@ -99,8 +99,9 @@ type DLPlusOutputConfig struct {
 
 // WebSocketOutputConfig holds settings for real-time WebSocket metadata broadcasting.
 type WebSocketOutputConfig struct {
-	Path           string         `json:"path"`
-	PayloadMapping map[string]any `json:"payloadMapping,omitempty"`
+	Path              string         `json:"path"`
+	HeartbeatInterval int            `json:"heartbeatInterval,omitempty"`
+	PayloadMapping    map[string]any `json:"payloadMapping,omitempty"`
 }
 
 // HTTPOutputConfig holds settings for serving metadata via HTTP GET endpoints.
