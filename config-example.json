@@ -185,7 +185,8 @@
       "settings": {
         "delay": 0,
         "fallbackDelay": 20,
-        "path": "/ws/metadata"
+        "path": "/ws/metadata",
+        "heartbeatInterval": 30
       }
     },
     {

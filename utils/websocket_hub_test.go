@@ -352,6 +352,49 @@ func TestWebSocketHubOnDisconnectCalledOnce(t *testing.T) {
 	}
 }
 
+func TestWebSocketHubSendsHeartbeatWhenIdle(t *testing.T) {
+	hub := NewWebSocketHub("test")
+	hub.SetHeartbeat(20*time.Millisecond, []byte(`{"kind":"heartbeat"}`))
+
+	conn, server := dialTestWebSocket(t, hub)
+	defer server.Close()
+	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+
+	messages := startMessageReader(conn)
+	for _, message := range waitForMessages(t, messages, 2, time.Second) {
+		if message["kind"] != "heartbeat" {
+			t.Fatalf("message = %#v, want a heartbeat", message)
+		}
+	}
+}
+
+func TestWebSocketHubBroadcastPostponesHeartbeat(t *testing.T) {
+	hub := NewWebSocketHub("test")
+	hub.SetHeartbeat(250*time.Millisecond, []byte(`{"kind":"heartbeat"}`))
+
+	conn, server := dialTestWebSocket(t, hub)
+	defer server.Close()
+	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+
+	messages := startMessageReader(conn)
+	waitForClientCount(t, hub, 1, time.Second)
+
+	const broadcasts = 24
+	for i := range broadcasts {
+		hub.Broadcast(map[string]any{"id": fmt.Sprintf("busy-%d", i), "kind": "broadcast"})
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	received := waitForMessages(t, messages, broadcasts, time.Second)
+	if hasMessageKind(received, "heartbeat") {
+		t.Fatal("heartbeat sent while broadcasts kept the connection busy")
+	}
+
+	if last := waitForMessages(t, messages, 1, time.Second); last[0]["kind"] != "heartbeat" {
+		t.Fatalf("message after the broadcasts = %#v, want a heartbeat", last[0])
+	}
+}
+
 func dialTestWebSocket(t *testing.T, hub *WebSocketHub) (*websocket.Conn, *httptest.Server) {
 	t.Helper()
 

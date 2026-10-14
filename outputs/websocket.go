@@ -1,14 +1,19 @@
 package outputs
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync/atomic"
+	"time"
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
 )
+
+// heartbeatMessage is sent as is, without payload mapping.
+var heartbeatMessage = []byte(`{"type":"heartbeat"}`)
 
 // WebSocketOutput broadcasts metadata to connected WebSocket clients in real-time.
 type WebSocketOutput struct {
@@ -22,6 +27,10 @@ type WebSocketOutput struct {
 
 // NewWebSocketOutput creates a WebSocketOutput with the given name and settings.
 func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) (*WebSocketOutput, error) {
+	if settings.HeartbeatInterval < 0 {
+		return nil, fmt.Errorf("heartbeatInterval must not be negative, got %d", settings.HeartbeatInterval)
+	}
+
 	mapper, err := NewPayloadMapper(settings.PayloadMapping)
 	if err != nil {
 		return nil, err
@@ -34,6 +43,7 @@ func NewWebSocketOutput(name string, settings config.WebSocketOutputConfig) (*We
 		payloadMapper: mapper,
 	}
 
+	output.hub.SetHeartbeat(time.Duration(settings.HeartbeatInterval)*time.Second, heartbeatMessage)
 	output.hub.SetOnConnect(func() any {
 		if current := output.current.Load(); current != nil {
 			return output.payloadMapper.Apply(current)

@@ -728,6 +728,7 @@ Broadcasts metadata to connected clients with real-time updates.
   "settings": {
     "delay": 0,
     "path": "/metadata",
+    "heartbeatInterval": 30,
     "payloadMapping": {...}  // See Custom Payload Mapping section
   }
 }
@@ -737,29 +738,51 @@ Broadcasts metadata to connected clients with real-time updates.
 - `delay` (optional, default: 0) - Number of seconds to delay metadata updates
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `path` (required) - URL path for WebSocket connections (e.g., "/metadata", "/ws")
+- `heartbeatInterval` (optional, default: 0) - Whole seconds without a message after which a client receives `{"type":"heartbeat"}`. `0` disables the heartbeat. The heartbeat is not affected by `payloadMapping`
 - `payloadMapping` (optional) - Custom JSON message structure (see [Custom Payload Mapping](#custom-payload-mapping))
 
 **Note**: WebSocket endpoints are served on the main web server port (default: 9000), not on a separate port. All WebSocket operations use write timeouts to prevent hanging connections.
 
+##### Heartbeat
+
+Metadata updates only arrive when something changes, and a programme name can stay the same for hours. The server already sends WebSocket ping frames, but browsers handle those internally and never expose them to JavaScript. When a connection dies without a close (sleep and resume, a network change), a browser client cannot tell a dead connection from a quiet one and keeps showing the last track.
+
+With `heartbeatInterval` set, every client receives a message at least that often. A client can treat a longer silence as a dead connection: show its own fallback and reconnect. Allow some slack, for example twice the interval.
+
 ##### Client Connection Example
 
-JavaScript:
+JavaScript, with `heartbeatInterval` set to 30. Replace the console messages with your metadata display and unavailable-state UI:
 ```javascript
-const ws = new WebSocket('ws://localhost:9000/metadata');
-
-ws.onmessage = (event) => {
-  const metadata = JSON.parse(event.data);
-  console.log('Metadata update:', metadata);
-  // Update your UI with the new metadata
-};
-
-ws.onopen = () => {
-  console.log('Connected to metadata WebSocket');
-  // You'll immediately receive the current metadata
-};
+function connect() {
+  const ws = new WebSocket('ws://localhost:9000/metadata');
+  let watchdog;
+  function reconnect() {
+    clearTimeout(watchdog);
+    ws.onopen = ws.onmessage = ws.onclose = null;
+    ws.close();
+    console.log('Metadata unavailable');
+    setTimeout(connect, 3000); // Do not wait for the closing handshake.
+  }
+  function resetWatchdog() {
+    clearTimeout(watchdog);
+    watchdog = setTimeout(reconnect, 60000);
+  }
+  ws.onopen = resetWatchdog;
+  ws.onclose = reconnect;
+  ws.onmessage = (event) => {
+    resetWatchdog();
+    const message = JSON.parse(event.data);
+    if (message.type === 'heartbeat') {
+      return;
+    }
+    console.log('Metadata update:', message);
+  };
+  resetWatchdog(); // Also bound the initial connection attempt.
+}
+connect();
 ```
 
-Keep showing the last message until the next one arrives. Updates are already delayed to match the audio, and an output with an available lower-priority input sends it after the configured delays, so a client timer on `expires_at` would run ahead of the stream, see [Delays and fallback](#delays-and-fallback).
+Keep showing the last message while the connection is healthy. Updates are already delayed to match the audio, and an output with an available lower-priority input sends it after the configured delays, so a client timer on `expires_at` would run ahead of the stream, see [Delays and fallback](#delays-and-fallback).
 
 #### DL Plus Output
 
