@@ -425,6 +425,17 @@ When the current input expires, the next available input is sent `delay + fallba
 
 Outputs with a delay of 10 seconds or more usually need no `fallbackDelay`, because the regular delay already covers typical gaps. Outputs with a short delay (such as RDS RadioText) should set a `fallbackDelay` of around 15 to 30 seconds, otherwise every gap between tracks briefly shows the fallback text.
 
+`expires_at` is the optional deadline until which an input's metadata stays available, and it passes through every output unchanged. How it is set depends on the input:
+
+- dynamic input with `expiration.type` `"dynamic"`: the moment the update was received plus its duration, or plus `expiration.minutes` when the duration is missing or invalid
+- dynamic input with `expiration.type` `"fixed"`: the moment the update was received plus `expiration.minutes`
+- URL input with `expiryKey`: the timestamp from the upstream JSON
+- text input, or dynamic input with `expiration.type` `"none"`: no `expires_at`
+
+Outputs never add `delay` or `fallbackDelay` to it. An output with a 27 second delay delivers a track 27 seconds after it was received, but `expires_at` still marks the deadline at the input. A client that runs its own timer on `expires_at` therefore clears a track while the delayed audio can still be playing, and shows its own fallback during gaps that `fallbackDelay` would hide. Adding the output delay to the value would not fix this, because the next track can arrive later than any fixed offset.
+
+Clients should show the last update until the output sends the next one. When the current input expires, an available lower-priority input is sent after `delay + fallbackDelay`, unless a new update replaces that pending fallback. To end a track with a fallback text, list such an input on the output, for example a `text` input. Without an available lower-priority input, nothing is sent when the current input expires.
+
 ```json
 {
   "type": "stereotool",
@@ -575,7 +586,7 @@ When using GET requests, the URL output supports Go template syntax for dynamic 
 - `{{.source}}` - Name of the input providing this metadata
 - `{{.source_type}}` - Type of input (e.g., "dynamic", "url", "text")
 - `{{.updated_at}}` - Update timestamp (RFC3339)
-- `{{.expires_at}}` - Expiration timestamp (RFC3339, empty if none)
+- `{{.expires_at}}` - Expiration timestamp of the input (RFC3339, empty if none). Excludes the output `delay`, see [Delays and fallback](#delays-and-fallback)
 
 **Template Functions:**
 
@@ -748,6 +759,8 @@ ws.onopen = () => {
 };
 ```
 
+Keep showing the last message until the next one arrives. Updates are already delayed to match the audio, and an output with an available lower-priority input sends it after the configured delays, so a client timer on `expires_at` would run ahead of the stream, see [Delays and fallback](#delays-and-fallback).
+
 #### DL Plus Output
 
 Generates DL Plus format for DAB/DAB+ transmission
@@ -843,7 +856,7 @@ Updates Stereo Tool's RDS RadioText and streaming song metadata.
 - `{{.artist}}` - Artist name
 - `{{.duration}}` - Song duration
 - `{{.updated_at}}` - When the metadata was updated (RFC3339 format)
-- `{{.expires_at}}` - When the metadata expires (RFC3339 format, empty if no expiration)
+- `{{.expires_at}}` - When the metadata expires at the input (RFC3339 format, empty if no expiration). Excludes the output `delay`, see [Delays and fallback](#delays-and-fallback)
 - `{{.type}}` - Output-specific message type: `"metadata_update"` for WebSocket, `"url"` for URL POST, and an empty string for HTTP
 - `{{.source}}` - Name of the input that provided this metadata
 - `{{.source_type}}` - Type of the input (e.g., "dynamic", "url", "text")

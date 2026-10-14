@@ -6,7 +6,8 @@ import (
 	"zwfm-metadata/core"
 )
 
-// UniversalMetadata is the shared serialized output shape.
+// UniversalMetadata is the shared serialized output shape. ExpiresAt is the
+// input's expiry and excludes the output delay.
 type UniversalMetadata struct {
 	Type              string     `json:"type,omitzero"`
 	FormattedMetadata string     `json:"formatted_metadata"`
