@@ -751,43 +751,38 @@ With `heartbeatInterval` set, every client receives a message at least that ofte
 
 ##### Client Connection Example
 
-JavaScript:
+JavaScript, with `heartbeatInterval` set to 30. Replace the console messages with your metadata display and unavailable-state UI:
 ```javascript
-const ws = new WebSocket('ws://localhost:9000/metadata');
-
-ws.onmessage = (event) => {
-  const metadata = JSON.parse(event.data);
-  console.log('Metadata update:', metadata);
-  // Update your UI with the new metadata
-};
-
-ws.onopen = () => {
-  console.log('Connected to metadata WebSocket');
-  // You'll immediately receive the current metadata
-};
-```
-
-Keep showing the last message until the next one arrives. Updates are already delayed to match the audio, and an output with an available lower-priority input sends it after the configured delays, so a client timer on `expires_at` would run ahead of the stream, see [Delays and fallback](#delays-and-fallback).
-
-With `heartbeatInterval` set to 30, a client can detect a dead connection:
-
-```javascript
-let watchdog;
-function resetWatchdog() {
-  clearTimeout(watchdog);
-  watchdog = setTimeout(() => ws.close(), 60000); // reconnect from your close handler
-}
-
-ws.onopen = resetWatchdog;
-ws.onmessage = (event) => {
-  resetWatchdog();
-  const message = JSON.parse(event.data);
-  if (message.type === 'heartbeat') {
-    return;
+function connect() {
+  const ws = new WebSocket('ws://localhost:9000/metadata');
+  let watchdog;
+  function reconnect() {
+    clearTimeout(watchdog);
+    ws.onopen = ws.onmessage = ws.onclose = null;
+    ws.close();
+    console.log('Metadata unavailable');
+    setTimeout(connect, 3000); // Do not wait for the closing handshake.
   }
-  // Update your UI with the new metadata
-};
+  function resetWatchdog() {
+    clearTimeout(watchdog);
+    watchdog = setTimeout(reconnect, 60000);
+  }
+  ws.onopen = resetWatchdog;
+  ws.onclose = reconnect;
+  ws.onmessage = (event) => {
+    resetWatchdog();
+    const message = JSON.parse(event.data);
+    if (message.type === 'heartbeat') {
+      return;
+    }
+    console.log('Metadata update:', message);
+  };
+  resetWatchdog(); // Also bound the initial connection attempt.
+}
+connect();
 ```
+
+Keep showing the last message while the connection is healthy. Updates are already delayed to match the audio, and an output with an available lower-priority input sends it after the configured delays, so a client timer on `expires_at` would run ahead of the stream, see [Delays and fallback](#delays-and-fallback).
 
 #### DL Plus Output
 
