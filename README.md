@@ -1162,7 +1162,7 @@ Run `./zwfm-metadata -help` to print the built-in help. Examples:
 
 ## Development
 
-Development requires Go 1.27.1 or newer. Install Bun before changing the dashboard assets.
+Development requires Go 1.27.2 or newer. Install Bun before changing the dashboard assets.
 
 ```bash
 go fmt ./...
