@@ -30,27 +30,37 @@ func TestInputBaseLogsDroppedSubscriberUpdate(t *testing.T) {
 
 func TestInputBaseNotifiesWhenSameContentBecomesAvailableAgain(t *testing.T) {
 	input := NewInputBase("input")
-	updates := make(chan *Metadata, 3)
+	updates := make(chan *Metadata, 1)
 	input.Subscribe(updates)
+	notified := func() bool {
+		select {
+		case <-updates:
+			return true
+		default:
+			return false
+		}
+	}
 
-	input.SetMetadata(&Metadata{Title: "Song", ExpiresAt: new(time.Now().Add(-time.Second))})
-	<-updates
+	now := time.Now()
 
-	input.SetMetadata(&Metadata{Title: "Song", ExpiresAt: new(time.Now().Add(time.Minute))})
-	select {
-	case <-updates:
-	default:
+	input.SetMetadata(&Metadata{Title: "Song", UpdatedAt: now, ExpiresAt: new(now.Add(-time.Second))})
+	if !notified() {
+		t.Fatal("initial metadata did not notify subscribers")
+	}
+
+	input.SetMetadata(&Metadata{Title: "Song", UpdatedAt: now, ExpiresAt: new(now.Add(time.Minute))})
+	if !notified() {
 		t.Fatal("republishing expired content did not notify subscribers")
 	}
 
-	// Moving the expiry of available content must stay silent.
-	input.SetMetadata(&Metadata{Title: "Song", ExpiresAt: new(time.Now().Add(2 * time.Minute))})
-	select {
-	case metadata := <-updates:
-		t.Fatalf("expiry-only refresh notified subscribers: %#v", metadata)
-	default:
+	// A poller refresh of available content moves only the timestamps; it must
+	// stay silent but still be stored.
+	refreshed := &Metadata{Title: "Song", UpdatedAt: now.Add(time.Second), ExpiresAt: new(now.Add(2 * time.Minute))}
+	input.SetMetadata(refreshed)
+	if notified() {
+		t.Fatal("timestamp-only refresh notified subscribers")
 	}
-	if got := input.GetMetadata().ExpiresAt; got == nil || time.Until(*got) < time.Minute {
-		t.Fatalf("stored expiry = %v, want the refreshed deadline", got)
+	if input.GetMetadata() != refreshed {
+		t.Fatal("timestamp-only refresh was not stored")
 	}
 }

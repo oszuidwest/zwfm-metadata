@@ -61,13 +61,12 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 
 	hasChanged := (b.metadata == nil) != (metadata == nil)
 	if b.metadata != nil && metadata != nil {
-		// Identical content arriving after the stored copy expired makes the input
-		// available again. Expiry-only refreshes of available content stay silent,
-		// so they cannot keep postponing pending output updates.
 		hasChanged = b.metadata.Title != metadata.Title ||
 			b.metadata.Artist != metadata.Artist ||
 			b.metadata.SongID != metadata.SongID ||
 			b.metadata.Duration != metadata.Duration ||
+			// ExpiresAt alone is ignored so refreshes cannot keep postponing pending
+			// output updates, unless the refresh makes expired content available.
 			(!b.metadata.IsAvailable() && metadata.IsAvailable())
 	}
 

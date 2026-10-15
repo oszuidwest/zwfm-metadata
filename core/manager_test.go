@@ -725,18 +725,30 @@ func TestFallbackWithDuplicateContentUpdatesCurrentInputWithoutSending(t *testin
 }
 
 func TestReturningPrimaryIsNotDelayedByFallbackDelay(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		primary, _, output := setupFallbackRouter(t)
+	tests := []struct {
+		name  string
+		title string
+	}{
+		{name: "new track", title: "Next Song"},
+		{name: "same track republished", title: "Song"},
+	}
 
-		primary.SetMetadata(expiringMetadata("Song"))
-		expectSent(t, output, "Song")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				primary, _, output := setupFallbackRouter(t)
 
-		synctest.Sleep(trackLength + fallbackSeconds*time.Second)
-		expectSent(t, output, "Station Name")
+				primary.SetMetadata(expiringMetadata("Song"))
+				expectSent(t, output, "Song")
 
-		primary.SetMetadata(expiringMetadata("Next Song"))
-		expectSent(t, output, "Next Song")
-	})
+				synctest.Sleep(trackLength + fallbackSeconds*time.Second)
+				expectSent(t, output, "Station Name")
+
+				primary.SetMetadata(expiringMetadata(tt.title))
+				expectSent(t, output, tt.title)
+			})
+		})
+	}
 }
 
 func TestRepublishedPrimaryCancelsPendingFallback(t *testing.T) {
@@ -754,38 +766,6 @@ func TestRepublishedPrimaryCancelsPendingFallback(t *testing.T) {
 	})
 }
 
-func TestRepublishedPrimaryReplacesSentFallback(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		primary, _, output := setupFallbackRouter(t)
-
-		primary.SetMetadata(expiringMetadata("Song"))
-		expectSent(t, output, "Song")
-
-		synctest.Sleep(trackLength + fallbackSeconds*time.Second)
-		expectSent(t, output, "Station Name")
-
-		primary.SetMetadata(expiringMetadata("Song"))
-		expectSent(t, output, "Song")
-	})
-}
-
-func TestExpiryOnlyRefreshDoesNotPostponePendingUpdate(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		primary, _, output := setupFallbackRouter(t)
-
-		// A poller refreshes the same track with a moving expiry faster than the output delay.
-		primary.SetMetadata(expiringMetadata("Song"))
-		for range 10 {
-			synctest.Sleep(2 * time.Second)
-			primary.SetMetadata(expiringMetadata("Song"))
-		}
-
-		if st, ok := output.waitForSend(time.Second); !ok || st.Title != "Song" {
-			t.Fatalf("expected the pending %q to be sent, got %q", "Song", st.String())
-		}
-	})
-}
-
 func TestRepublishedOnlyInputRestoresCurrentInput(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		router := NewMetadataRouter()
@@ -798,14 +778,12 @@ func TestRepublishedOnlyInputRestoresCurrentInput(t *testing.T) {
 		expectSent(t, output, "Song")
 
 		synctest.Sleep(trackLength + time.Second)
-		synctest.Wait()
 		if got := router.GetOutputStatus()[0].CurrentInput; got != "" {
 			t.Fatalf("current input after expiry = %q, want none", got)
 		}
 
 		primary.SetMetadata(expiringMetadata("Song"))
 		synctest.Sleep(time.Second)
-		synctest.Wait()
 		if got := router.GetOutputStatus()[0].CurrentInput; got != "primary" {
 			t.Fatalf("current input after republish = %q, want %q", got, "primary")
 		}
