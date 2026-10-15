@@ -725,16 +725,67 @@ func TestFallbackWithDuplicateContentUpdatesCurrentInputWithoutSending(t *testin
 }
 
 func TestReturningPrimaryIsNotDelayedByFallbackDelay(t *testing.T) {
+	tests := []struct {
+		name  string
+		title string
+	}{
+		{name: "new track", title: "Next Song"},
+		{name: "same track republished", title: "Song"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				primary, _, output := setupFallbackRouter(t)
+
+				primary.SetMetadata(expiringMetadata("Song"))
+				expectSent(t, output, "Song")
+
+				synctest.Sleep(trackLength + fallbackSeconds*time.Second)
+				expectSent(t, output, "Station Name")
+
+				primary.SetMetadata(expiringMetadata(tt.title))
+				expectSent(t, output, tt.title)
+			})
+		})
+	}
+}
+
+func TestRepublishedPrimaryCancelsPendingFallback(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		primary, _, output := setupFallbackRouter(t)
 
 		primary.SetMetadata(expiringMetadata("Song"))
 		expectSent(t, output, "Song")
 
-		synctest.Sleep(trackLength + fallbackSeconds*time.Second)
-		expectSent(t, output, "Station Name")
+		// The same track arrives again after it expired, while the fallback is pending.
+		synctest.Sleep(trackLength + 5*time.Second)
+		primary.SetMetadata(expiringMetadata("Song"))
 
-		primary.SetMetadata(expiringMetadata("Next Song"))
-		expectSent(t, output, "Next Song")
+		expectNoSend(t, output, time.Minute)
+	})
+}
+
+func TestRepublishedOnlyInputRestoresCurrentInput(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		router := NewMetadataRouter()
+		primary := newMockInput("primary")
+		addInput(t, router, primary, InputSpec{})
+		output := newMockOutput("output")
+		startRouter(t, router, output, OutputTiming{}, primary)
+
+		primary.SetMetadata(expiringMetadata("Song"))
+		expectSent(t, output, "Song")
+
+		synctest.Sleep(trackLength + time.Second)
+		if got := router.GetOutputStatus()[0].CurrentInput; got != "" {
+			t.Fatalf("current input after expiry = %q, want none", got)
+		}
+
+		primary.SetMetadata(expiringMetadata("Song"))
+		synctest.Sleep(time.Second)
+		if got := router.GetOutputStatus()[0].CurrentInput; got != "primary" {
+			t.Fatalf("current input after republish = %q, want %q", got, "primary")
+		}
 	})
 }

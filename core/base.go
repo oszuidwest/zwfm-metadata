@@ -49,7 +49,8 @@ func (b *InputBase) Subscribe(ch chan<- *Metadata) {
 	b.subscribers = append(b.subscribers, ch)
 }
 
-// SetMetadata stores new metadata and notifies subscribers if content changed.
+// SetMetadata stores new metadata and notifies subscribers if content changed
+// or the input became available again.
 func (b *InputBase) SetMetadata(metadata *Metadata) {
 	if metadata != nil {
 		metadata.Title = html.UnescapeString(metadata.Title)
@@ -63,7 +64,10 @@ func (b *InputBase) SetMetadata(metadata *Metadata) {
 		hasChanged = b.metadata.Title != metadata.Title ||
 			b.metadata.Artist != metadata.Artist ||
 			b.metadata.SongID != metadata.SongID ||
-			b.metadata.Duration != metadata.Duration
+			b.metadata.Duration != metadata.Duration ||
+			// ExpiresAt alone is ignored so refreshes cannot keep postponing pending
+			// output updates, unless the refresh makes expired content available.
+			(!b.metadata.IsAvailable() && metadata.IsAvailable())
 	}
 
 	b.metadata = metadata
