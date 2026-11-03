@@ -65,3 +65,44 @@ func TestURLOutputEscapesTemplateValuesByURLComponent(t *testing.T) {
 		t.Errorf("title query value = %q, want %q", title, "Foo Bar/Baz+Q")
 	}
 }
+
+func TestURLOutputEscapesAfterTemplateFunctions(t *testing.T) {
+	tests := []struct {
+		template string
+		want     string
+	}{
+		{template: `{{.title | upper}}`, want: "+CAF%C3%89INE+"},
+		{template: `{{.title | trim}}`, want: "Caf%C3%A9ine"},
+		{template: `{{printf "%.5s" .title}}`, want: "+Caf%C3%A9"},
+		{template: `{{len .title}}`, want: "10"},
+		{template: `{{$t := .title}}{{$t}}`, want: "+Caf%C3%A9ine+"},
+		{template: `{{if .title}}{{.title}}{{end}}`, want: "+Caf%C3%A9ine+"},
+		{template: `{{if .artist}}x{{else}}{{.title}}{{end}}`, want: "+Caf%C3%A9ine+"},
+		{template: `{{with .title}}{{.}}{{end}}`, want: "+Caf%C3%A9ine+"},
+		{template: `{{with .artist}}x{{else}}{{.title}}{{end}}`, want: "+Caf%C3%A9ine+"},
+		{template: `{{range 1}}{{$.title}}{{end}}`, want: "+Caf%C3%A9ine+"},
+		{template: `{{range 0}}x{{else}}{{.title}}{{end}}`, want: "+Caf%C3%A9ine+"},
+		{template: `{{define "t"}}{{.title}}{{end}}{{template "t" .}}`, want: "+Caf%C3%A9ine+"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.template, func(t *testing.T) {
+			var rawQuery string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				rawQuery = r.URL.RawQuery
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			t.Cleanup(server.Close)
+
+			output, err := NewURLOutput("test", config.URLOutputConfig{URL: server.URL + "?t=" + tt.template, Method: http.MethodGet})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := output.Send(&core.StructuredText{Title: " Caféine "}); err != nil {
+				t.Fatal(err)
+			}
+			if want := "t=" + tt.want; rawQuery != want {
+				t.Errorf("raw query = %q, want %q", rawQuery, want)
+			}
+		})
+	}
+}

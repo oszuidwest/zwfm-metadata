@@ -176,12 +176,14 @@ Polls external APIs
 ```
 
 #### Settings
-- `url` (required) - URL to poll for metadata
+- `url` (required) - URL to poll for metadata. A response over 1 MiB after decompression counts as a failed poll
 - `pollingInterval` (required) - Number of seconds between HTTP requests
 - `jsonParsing` (optional, default: false) - Parses the response as JSON
 - `jsonKey` (required if jsonParsing=true) - Dot-notation path to extract the value (e.g., `"data.song.title"`)
 - `expiryKey` (optional) - Dot-notation path to the expiry value in the JSON response. When set, the expiry is parsed and used for metadata expiration. When the expiry is reached, polling occurs immediately in addition to regular interval polling.
 - `expiryFormat` (optional) - Go reference-time layout used to parse the expiry value, for example `"2006-01-02T15:04:05Z07:00"`. Omit it to use RFC3339.
+
+Redirects are not followed. A 3xx response counts as a failed poll, so set `url` to the final address.
 
 ### Text Input
 
@@ -575,7 +577,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 
 ##### URL Templates (GET Requests)
 
-When using GET requests, the URL output supports Go template syntax for dynamic URL construction. **All template values are automatically URL-encoded** for safety with special characters.
+When using GET requests, the URL output supports Go template syntax for dynamic URL construction. **Every value a `{{ }}` action prints is automatically URL-encoded**, after any template functions have run. Text outside the actions is not escaped by the template.
 
 **Available Template Fields:**
 - `{{.title}}` - Song/track title
@@ -596,7 +598,7 @@ Custom formatting functions:
 - `{{.title | trim}}` - Remove leading/trailing whitespace
 
 Built-in Go template functions for formatting:
-- `{{.title | urlquery}}` - URL-encode a value (automatic for GET requests)
+- `{{.title | urlquery}}` - URL-encode a value (for GET requests this encodes twice, so leave it out)
 - `{{.title | html}}` - HTML-escape special characters
 - `{{.title | js}}` - JavaScript-escape for safe inclusion in JS strings
 - `{{printf "%.20s" .title}}` - Format with printf (truncate to 20 chars)
@@ -610,7 +612,7 @@ Conditional logic (built-in):
 
 **Automatic URL Encoding for GET Requests:**
 
-For GET requests, all template values are automatically URL-encoded. This means special characters like `&`, `?`, `=`, `#` are handled safely without manual intervention:
+For GET requests, every printed value is automatically URL-encoded. This means special characters like `&`, `?`, `=`, `#` are handled safely without manual intervention:
 
 - With `title: "Rock & Roll"` and `artist: "AC/DC"`
 - Template: `?title={{.title}}&artist={{.artist}}`
@@ -1183,7 +1185,7 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&artist=Art
 -config string
     Path to the JSON configuration file (default: config.json)
 -healthcheck string
-    Request the given URL and exit successfully when it returns a status below 400
+    Request the given URL and exit successfully when it returns a 2xx status. Redirects are not followed
 -version
     Print the version, commit, and build time, then exit
 ```
