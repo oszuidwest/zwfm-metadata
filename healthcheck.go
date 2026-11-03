@@ -27,7 +27,7 @@ func runHealthcheck(ctx context.Context, targetURL string) error {
 	defer resp.Body.Close() //nolint:errcheck // Healthcheck response close errors do not affect readiness.
 
 	// utils.Get does not follow redirects, so a 3xx says nothing about the target.
-	if resp.StatusCode >= http.StatusMultipleChoices {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("healthcheck returned status %s", resp.Status)
 	}
 
