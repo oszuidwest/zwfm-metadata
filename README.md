@@ -476,7 +476,7 @@ Updates streaming server metadata
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `server` (required) - Icecast server hostname/IP
 - `port` (required) - Icecast server port
-- `username` (required) - Icecast username (usually "source"). Icecast 2.4 refuses updates with source credentials from another IP than the encoder; use the admin user then
+- `username` (required) - Icecast username (usually "source"). Icecast 2.4 refuses updates with source credentials from another IP than the encoder
 - `password` (required) - Icecast password
 - `mountpoint` (required) - Stream mountpoint (e.g., "/stream")
 - `tls` (optional, default: false) - Connect over HTTPS, so the credentials are not sent in clear text. The Icecast port must be a TLS listener

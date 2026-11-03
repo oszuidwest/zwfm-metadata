@@ -29,26 +29,44 @@ func do(req *http.Request) (*http.Response, error) {
 
 // DoOK reports non-2xx responses with up to 4 KiB of response body.
 func DoOK(req *http.Request) error {
-	_, err := DoOKBody(req)
-	return err
+	resp, err := doStatusOK(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
+	return nil
 }
 
 // DoOKBody is DoOK that also returns up to 4 KiB of a 2xx response body.
 func DoOKBody(req *http.Request) ([]byte, error) {
-	resp, err := do(req)
+	resp, err := doStatusOK(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
 
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if readErr != nil {
-			return nil, fmt.Errorf("status %d: read response body: %w", resp.StatusCode, readErr)
-		}
-		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
 	}
 	return body, nil
+}
+
+func doStatusOK(req *http.Request) (*http.Response, error) {
+	resp, err := do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return resp, nil
+	}
+	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("status %d: read response body: %w", resp.StatusCode, err)
+	}
+	return nil, fmt.Errorf("status %d: %s", resp.StatusCode, body)
 }
 
 // ValidateHTTPURL accepts absolute HTTP and HTTPS URLs.

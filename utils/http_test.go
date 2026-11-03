@@ -31,3 +31,19 @@ func TestDoOKLimitsErrorResponseBody(t *testing.T) {
 		t.Fatalf("DoOK() error length = %d, want bounded response body", len(err.Error()))
 	}
 }
+
+func TestDoOKBodyReportsReadError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", "10")
+		_, _ = w.Write([]byte("short"))
+	}))
+	t.Cleanup(server.Close)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := DoOKBody(req); err == nil {
+		t.Fatal("DoOKBody() error = nil, want read error")
+	}
+}
