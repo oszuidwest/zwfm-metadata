@@ -44,9 +44,10 @@ func DoOK(req *http.Request) error {
 	return nil
 }
 
-// DoOKBody is DoOK that also returns up to 4 KiB of a 2xx response body.
+// DoOKBody is DoOK that also returns up to 4 KiB of a 2xx response body. It does not
+// follow redirects, so credentials on the request only go to the requested address.
 func DoOKBody(req *http.Request) ([]byte, error) {
-	resp, err := doStatusOK(httpClient, req)
+	resp, err := doStatusOK(noRedirectClient, req)
 	if err != nil {
 		return nil, err
 	}
