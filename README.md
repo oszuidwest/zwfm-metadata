@@ -183,6 +183,8 @@ Polls external APIs
 - `expiryKey` (optional) - Dot-notation path to the expiry value in the JSON response. When set, the expiry is parsed and used for metadata expiration. When the expiry is reached, polling occurs immediately in addition to regular interval polling.
 - `expiryFormat` (optional) - Go reference-time layout used to parse the expiry value, for example `"2006-01-02T15:04:05Z07:00"`. Omit it to use RFC3339.
 
+Redirects are not followed. A 3xx response counts as a failed poll, so set `url` to the final address.
+
 ### Text Input
 
 A static fallback
