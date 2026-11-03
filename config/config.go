@@ -77,6 +77,7 @@ type IcecastOutputConfig struct {
 	Username   string `json:"username"`
 	Password   string `json:"password"`
 	Mountpoint string `json:"mountpoint"`
+	TLS        bool   `json:"tls"`
 }
 
 // FileOutputConfig holds settings for writing metadata to local files.

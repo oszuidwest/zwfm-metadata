@@ -1,6 +1,8 @@
 package outputs
 
 import (
+	"crypto/tls"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -23,12 +25,26 @@ func TestIcecastOutputChecksResponseMessage(t *testing.T) {
 				_, _ = w.Write([]byte("<?xml version=\"1.0\"?>\n<iceresponse><message>" + tt.message + "</message><return>1</return></iceresponse>\n"))
 			}))
 			t.Cleanup(server.Close)
-			addr := server.Listener.Addr().(*net.TCPAddr)
-
-			output := NewIcecastOutput("test", config.IcecastOutputConfig{Server: addr.IP.String(), Port: addr.Port, Mountpoint: "/live"})
-			if err := output.sendToIcecast("Artist - Title"); (err != nil) != tt.wantErr {
+			if err := newTestIcecastOutput(server, false).sendToIcecast("Artist - Title"); (err != nil) != tt.wantErr {
 				t.Fatalf("sendToIcecast() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
+}
+
+func TestIcecastOutputTLS(t *testing.T) {
+	server := httptest.NewTLSServer(http.NotFoundHandler())
+	t.Cleanup(server.Close)
+
+	// The shared client does not trust the test certificate, so a certificate
+	// error shows that the request was made over TLS.
+	var certErr *tls.CertificateVerificationError
+	if err := newTestIcecastOutput(server, true).sendToIcecast("Artist - Title"); !errors.As(err, &certErr) {
+		t.Fatalf("sendToIcecast() error = %v, want a certificate verification error", err)
+	}
+}
+
+func newTestIcecastOutput(server *httptest.Server, useTLS bool) *IcecastOutput {
+	addr := server.Listener.Addr().(*net.TCPAddr)
+	return NewIcecastOutput("test", &config.IcecastOutputConfig{Server: addr.IP.String(), Port: addr.Port, Mountpoint: "/live", TLS: useTLS})
 }

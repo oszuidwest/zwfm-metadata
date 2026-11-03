@@ -24,8 +24,8 @@ type IcecastOutput struct {
 }
 
 // NewIcecastOutput creates an IcecastOutput with the given name and settings.
-func NewIcecastOutput(name string, settings config.IcecastOutputConfig) *IcecastOutput {
-	return &IcecastOutput{OutputBase: core.NewOutputBase(name), settings: settings}
+func NewIcecastOutput(name string, settings *config.IcecastOutputConfig) *IcecastOutput {
+	return &IcecastOutput{OutputBase: core.NewOutputBase(name), settings: *settings}
 }
 
 // Send updates the Icecast server with new metadata.
@@ -34,8 +34,12 @@ func (i *IcecastOutput) Send(st *core.StructuredText) error {
 }
 
 func (i *IcecastOutput) sendToIcecast(metadata string) error {
+	scheme := "http"
+	if i.settings.TLS {
+		scheme = "https"
+	}
 	reqURL := &url.URL{
-		Scheme: "http",
+		Scheme: scheme,
 		Host:   joinHostPort(i.settings.Server, i.settings.Port),
 		Path:   "/admin/metadata",
 	}

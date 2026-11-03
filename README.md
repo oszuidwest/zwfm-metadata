@@ -479,6 +479,7 @@ Updates streaming server metadata
 - `username` (required) - Icecast username (usually "source"). Icecast 2.4 refuses updates with source credentials from another IP than the encoder; use the admin user then
 - `password` (required) - Icecast password
 - `mountpoint` (required) - Stream mountpoint (e.g., "/stream")
+- `tls` (optional, default: false) - Connect over HTTPS, so the credentials are not sent in clear text. The Icecast port must be a TLS listener
 
 #### File Output
 
