@@ -90,7 +90,9 @@ func main() {
 	if err := router.Start(ctx); err != nil {
 		slog.Error("Failed to start metadata router", "error", err)
 		stop()
-		<-serverDone
+		if err := <-serverDone; err != nil {
+			slog.Error("Web server encountered an error", "error", err)
+		}
 		os.Exit(1)
 	}
 
