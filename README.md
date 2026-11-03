@@ -176,7 +176,7 @@ Polls external APIs
 ```
 
 #### Settings
-- `url` (required) - URL to poll for metadata
+- `url` (required) - URL to poll for metadata. A response over 1 MiB after decompression counts as a failed poll
 - `pollingInterval` (required) - Number of seconds between HTTP requests
 - `jsonParsing` (optional, default: false) - Parses the response as JSON
 - `jsonKey` (required if jsonParsing=true) - Dot-notation path to extract the value (e.g., `"data.song.title"`)
@@ -578,7 +578,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 
 ##### URL Templates (GET Requests)
 
-When using GET requests, the URL output supports Go template syntax for dynamic URL construction. **All template values are automatically URL-encoded** for safety with special characters.
+When using GET requests, the URL output supports Go template syntax for dynamic URL construction. **Every value a `{{ }}` action prints is automatically URL-encoded**, after any template functions have run. Text outside the actions is not escaped by the template.
 
 **Available Template Fields:**
 - `{{.title}}` - Song/track title
@@ -599,7 +599,7 @@ Custom formatting functions:
 - `{{.title | trim}}` - Remove leading/trailing whitespace
 
 Built-in Go template functions for formatting:
-- `{{.title | urlquery}}` - URL-encode a value (automatic for GET requests)
+- `{{.title | urlquery}}` - URL-encode a value (for GET requests this encodes twice, so leave it out)
 - `{{.title | html}}` - HTML-escape special characters
 - `{{.title | js}}` - JavaScript-escape for safe inclusion in JS strings
 - `{{printf "%.20s" .title}}` - Format with printf (truncate to 20 chars)
@@ -613,7 +613,7 @@ Conditional logic (built-in):
 
 **Automatic URL Encoding for GET Requests:**
 
-For GET requests, all template values are automatically URL-encoded. This means special characters like `&`, `?`, `=`, `#` are handled safely without manual intervention:
+For GET requests, every printed value is automatically URL-encoded. This means special characters like `&`, `?`, `=`, `#` are handled safely without manual intervention:
 
 - With `title: "Rock & Roll"` and `artist: "AC/DC"`
 - Template: `?title={{.title}}&artist={{.artist}}`

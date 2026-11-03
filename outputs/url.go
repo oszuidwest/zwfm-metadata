@@ -10,11 +10,15 @@ import (
 	"net/url"
 	"strings"
 	"text/template"
+	"text/template/parse"
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
 	"zwfm-metadata/utils"
 )
+
+// urlEscapeFunc is the template function that parseURLTemplate adds to each action.
+const urlEscapeFunc = "urlEscape"
 
 // URLOutput sends metadata via configurable HTTP GET or POST requests.
 type URLOutput struct {
@@ -45,14 +49,14 @@ func NewURLOutput(name string, settings config.URLOutputConfig) (*URLOutput, err
 	var pathTmpl, queryTmpl *template.Template
 	if isTemplate(settings.URL) {
 		path, query, hasQuery := strings.Cut(settings.URL, "?")
-		pathTmpl, err = template.New("url path").Funcs(templateFuncs).Parse(path)
+		pathTmpl, err = parseURLTemplate("url path", path, url.PathEscape)
 		if err != nil {
-			return nil, fmt.Errorf("invalid URL template: %w", err)
+			return nil, err
 		}
 		if hasQuery {
-			queryTmpl, err = template.New("url query").Funcs(templateFuncs).Parse(query)
+			queryTmpl, err = parseURLTemplate("url query", query, url.QueryEscape)
 			if err != nil {
-				return nil, fmt.Errorf("invalid URL template: %w", err)
+				return nil, err
 			}
 		}
 	}
@@ -75,16 +79,48 @@ func (u *URLOutput) Send(st *core.StructuredText) error {
 	return u.sendPOSTRequest(payload)
 }
 
-func escapeTemplateData(data map[string]any, escape func(string) string) map[string]any {
-	encoded := make(map[string]any, len(data))
-	for key, value := range data {
-		if s, ok := value.(string); ok {
-			encoded[key] = escape(s)
-		} else {
-			encoded[key] = value
-		}
+// parseURLTemplate parses text so that every printed value is escaped last, after
+// the template functions have run on the raw metadata.
+func parseURLTemplate(name, text string, escape func(string) string) (*template.Template, error) {
+	tmpl, err := template.New(name).Funcs(templateFuncs).Funcs(template.FuncMap{
+		urlEscapeFunc: func(value any) string { return escape(fmt.Sprint(value)) },
+	}).Parse(text)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL template: %w", err)
 	}
-	return encoded
+	for _, t := range tmpl.Templates() {
+		appendURLEscape(t.Root)
+	}
+	return tmpl, nil
+}
+
+// appendURLEscape adds the escape function to the pipeline of every action that
+// prints a value, like html/template does. Variable declarations print nothing.
+func appendURLEscape(node parse.Node) {
+	switch n := node.(type) {
+	case *parse.ListNode:
+		if n != nil {
+			for _, child := range n.Nodes {
+				appendURLEscape(child)
+			}
+		}
+	case *parse.ActionNode:
+		if len(n.Pipe.Decl) == 0 {
+			n.Pipe.Cmds = append(n.Pipe.Cmds, &parse.CommandNode{
+				NodeType: parse.NodeCommand,
+				Args:     []parse.Node{parse.NewIdentifier(urlEscapeFunc)},
+			})
+		}
+	case *parse.IfNode:
+		appendURLEscape(n.List)
+		appendURLEscape(n.ElseList)
+	case *parse.RangeNode:
+		appendURLEscape(n.List)
+		appendURLEscape(n.ElseList)
+	case *parse.WithNode:
+		appendURLEscape(n.List)
+		appendURLEscape(n.ElseList)
+	}
 }
 
 func (u *URLOutput) sendGETRequest(payload *UniversalMetadata) error {
@@ -93,12 +129,12 @@ func (u *URLOutput) sendGETRequest(payload *UniversalMetadata) error {
 	if u.pathTemplate != nil {
 		data := payload.ToTemplateData()
 		var b strings.Builder
-		if err := u.pathTemplate.Execute(&b, escapeTemplateData(data, url.PathEscape)); err != nil {
+		if err := u.pathTemplate.Execute(&b, data); err != nil {
 			return fmt.Errorf("execute URL template: %w", err)
 		}
 		if u.queryTemplate != nil {
 			b.WriteByte('?')
-			if err := u.queryTemplate.Execute(&b, escapeTemplateData(data, url.QueryEscape)); err != nil {
+			if err := u.queryTemplate.Execute(&b, data); err != nil {
 				return fmt.Errorf("execute URL template: %w", err)
 			}
 		}

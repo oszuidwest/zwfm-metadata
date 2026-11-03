@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,6 +62,37 @@ func TestURLInputPollRejectsUnsuccessfulStatus(t *testing.T) {
 	input.poll(context.Background())
 	if input.GetMetadata() != nil {
 		t.Fatal("unsuccessful response replaced metadata")
+	}
+}
+
+func TestURLInputPollBodyLimit(t *testing.T) {
+	for _, size := range []int{maxBodyBytes, maxBodyBytes + 1} {
+		// The handler only ends an oversized response once the client hangs up,
+		// so reading past the limit runs into the deadline below.
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(strings.Repeat("a", size)))
+			if size > maxBodyBytes {
+				w.(http.Flusher).Flush()
+				<-r.Context().Done()
+			}
+		}))
+		t.Cleanup(server.Close)
+
+		input, err := NewURLInput("test", &config.URLInputConfig{URL: server.URL, PollingInterval: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.SetMetadata(&core.Metadata{Title: "previous"})
+
+		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+		input.poll(ctx)
+		if ctx.Err() != nil {
+			t.Errorf("%d-byte response was read past the limit", size)
+		}
+		cancel()
+		if accepted := input.GetMetadata().Title != "previous"; accepted != (size <= maxBodyBytes) {
+			t.Errorf("%d-byte response accepted = %v", size, accepted)
+		}
 	}
 }
 
