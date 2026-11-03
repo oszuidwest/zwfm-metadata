@@ -82,13 +82,14 @@ func (u *URLInput) poll(ctx context.Context) {
 	}
 	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		slog.Error("URL input returned unsuccessful status", "input", u.GetName(), "status", resp.Status)
+		return
+	}
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if err != nil {
 		slog.Error("Failed to read response from URL input", "input", u.GetName(), "error", err)
-		return
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		slog.Error("URL input returned unsuccessful status", "input", u.GetName(), "status", resp.Status)
 		return
 	}
 	if len(body) > maxBodyBytes {
