@@ -13,9 +13,9 @@ const maxErrorBodyBytes = 4 << 10
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
-// getClient returns redirects as is, so a polled URL cannot send the request
-// on to another host.
-var getClient = &http.Client{
+// noRedirectClient returns redirects as is, so the target cannot send the request
+// on to another address.
+var noRedirectClient = &http.Client{
 	Timeout:       httpClient.Timeout,
 	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 }
@@ -26,7 +26,7 @@ func Get(ctx context.Context, rawURL string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	return do(getClient, req)
+	return do(noRedirectClient, req)
 }
 
 func do(client *http.Client, req *http.Request) (*http.Response, error) {
