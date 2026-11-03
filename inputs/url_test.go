@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,6 +62,24 @@ func TestURLInputPollRejectsUnsuccessfulStatus(t *testing.T) {
 	input.poll(context.Background())
 	if input.GetMetadata() != nil {
 		t.Fatal("unsuccessful response replaced metadata")
+	}
+}
+
+func TestURLInputPollBodyLimit(t *testing.T) {
+	for _, size := range []int{maxBodyBytes, maxBodyBytes + 1} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(strings.Repeat("a", size)))
+		}))
+		t.Cleanup(server.Close)
+
+		input, err := NewURLInput("test", &config.URLInputConfig{URL: server.URL, PollingInterval: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		input.poll(context.Background())
+		if accepted := input.GetMetadata() != nil; accepted != (size <= maxBodyBytes) {
+			t.Errorf("%d-byte response accepted = %v", size, accepted)
+		}
 	}
 }
 
