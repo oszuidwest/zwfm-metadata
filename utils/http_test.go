@@ -47,3 +47,21 @@ func TestDoOKBodyReportsReadError(t *testing.T) {
 		t.Fatal("DoOKBody() error = nil, want read error")
 	}
 }
+
+func TestGetDoesNotFollowRedirects(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("redirect was followed")
+	}))
+	t.Cleanup(target.Close)
+	feed := httptest.NewServer(http.RedirectHandler(target.URL, http.StatusFound))
+	t.Cleanup(feed.Close)
+
+	resp, err := Get(t.Context(), feed.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
+	}
+}

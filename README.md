@@ -183,6 +183,8 @@ Polls external APIs
 - `expiryKey` (optional) - Dot-notation path to the expiry value in the JSON response. When set, the expiry is parsed and used for metadata expiration. When the expiry is reached, polling occurs immediately in addition to regular interval polling.
 - `expiryFormat` (optional) - Go reference-time layout used to parse the expiry value, for example `"2006-01-02T15:04:05Z07:00"`. Omit it to use RFC3339.
 
+Redirects are not followed. A 3xx response counts as a failed poll, so set `url` to the final address.
+
 ### Text Input
 
 A static fallback
@@ -476,7 +478,7 @@ Updates streaming server metadata
 - `fallbackDelay` (optional, default: 0) - Extra seconds, on top of `delay`, before switching to a lower-priority input, see [Delays and fallback](#delays-and-fallback)
 - `server` (required) - Icecast server hostname/IP
 - `port` (required) - Icecast server port
-- `username` (required) - Icecast username (usually "source"). Icecast 2.4 refuses updates with source credentials from another IP than the encoder
+- `username` (required) - Icecast username (usually "source"). Icecast 2.4 refuses updates with source credentials from another IP than the encoder; use the admin user then, with `tls` on when the network is not trusted
 - `password` (required) - Icecast password
 - `mountpoint` (required) - Stream mountpoint (e.g., "/stream")
 - `tls` (optional, default: false) - Connect over HTTPS, so the credentials are not sent in clear text. The Icecast port must be a TLS listener

@@ -44,6 +44,19 @@ func TestIcecastOutputTLS(t *testing.T) {
 	}
 }
 
+func TestIcecastOutputDoesNotFollowRedirects(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("redirect was followed")
+	}))
+	t.Cleanup(target.Close)
+	server := httptest.NewServer(http.RedirectHandler(target.URL, http.StatusFound))
+	t.Cleanup(server.Close)
+
+	if err := newTestIcecastOutput(server, false).sendToIcecast("Artist - Title"); err == nil {
+		t.Fatal("sendToIcecast() error = nil, want status error")
+	}
+}
+
 func newTestIcecastOutput(server *httptest.Server, useTLS bool) *IcecastOutput {
 	addr := server.Listener.Addr().(*net.TCPAddr)
 	return NewIcecastOutput("test", &config.IcecastOutputConfig{Server: addr.IP.String(), Port: addr.Port, Mountpoint: "/live", TLS: useTLS})
