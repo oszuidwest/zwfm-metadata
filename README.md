@@ -176,7 +176,7 @@ Polls external APIs
 ```
 
 #### Settings
-- `url` (required) - URL to poll for metadata
+- `url` (required) - URL to poll for metadata. A response over 1 MiB after decompression counts as a failed poll
 - `pollingInterval` (required) - Number of seconds between HTTP requests
 - `jsonParsing` (optional, default: false) - Parses the response as JSON
 - `jsonKey` (required if jsonParsing=true) - Dot-notation path to extract the value (e.g., `"data.song.title"`)
