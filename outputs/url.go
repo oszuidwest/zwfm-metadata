@@ -183,6 +183,9 @@ func (u *URLOutput) sendPOSTRequest(payload *UniversalMetadata) error {
 
 // doRequest sets the configured auth header, executes the request, and logs the outcome.
 func (u *URLOutput) doRequest(req *http.Request) error {
+	// Go sends the query as written, and a raw space makes the request line invalid.
+	req.URL.RawQuery = strings.ReplaceAll(req.URL.RawQuery, " ", "%20")
+
 	if u.settings.BearerToken != "" {
 		req.Header.Set("Authorization", "Bearer "+u.settings.BearerToken)
 	}

@@ -578,7 +578,7 @@ Sends metadata via HTTP GET or POST requests. Supports both GET requests with UR
 
 ##### URL Templates (GET Requests)
 
-When using GET requests, the URL output supports Go template syntax for dynamic URL construction. **Every value a `{{ }}` action prints is automatically URL-encoded**, after any template functions have run. Text outside the actions is not escaped by the template.
+When using GET requests, the URL output supports Go template syntax for dynamic URL construction. **Every value a `{{ }}` action prints is automatically URL-encoded**, after any template functions have run. Text outside the actions is not escaped by the template, except that a space in the query is sent as `%20`.
 
 **Available Template Fields:**
 - `{{.title}}` - Song/track title
