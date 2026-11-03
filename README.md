@@ -1186,7 +1186,7 @@ curl "http://localhost:9000/input/dynamic?input=radio-live&title=Song&artist=Art
 -config string
     Path to the JSON configuration file (default: config.json)
 -healthcheck string
-    Request the given URL and exit successfully when it returns a status below 400
+    Request the given URL and exit successfully when it returns a 2xx status. Redirects are not followed
 -version
     Print the version, commit, and build time, then exit
 ```
