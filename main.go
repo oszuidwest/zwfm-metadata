@@ -212,7 +212,7 @@ func createOutput(cfg *config.OutputConfig) (core.Output, error) {
 		if err != nil {
 			return nil, err
 		}
-		return outputs.NewIcecastOutput(cfg.Name, &settings), nil
+		return outputs.NewIcecastOutput(cfg.Name, settings), nil
 
 	case "file":
 		settings, err := utils.ParseJSONSettings[config.FileOutputConfig](cfg.Settings)

@@ -59,5 +59,5 @@ func TestIcecastOutputDoesNotFollowRedirects(t *testing.T) {
 
 func newTestIcecastOutput(server *httptest.Server, useTLS bool) *IcecastOutput {
 	addr := server.Listener.Addr().(*net.TCPAddr)
-	return NewIcecastOutput("test", &config.IcecastOutputConfig{Server: addr.IP.String(), Port: addr.Port, Mountpoint: "/live", TLS: useTLS})
+	return NewIcecastOutput("test", config.IcecastOutputConfig{Server: addr.IP.String(), Port: addr.Port, Mountpoint: "/live", TLS: useTLS})
 }

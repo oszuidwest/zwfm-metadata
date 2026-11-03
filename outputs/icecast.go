@@ -24,8 +24,10 @@ type IcecastOutput struct {
 }
 
 // NewIcecastOutput creates an IcecastOutput with the given name and settings.
-func NewIcecastOutput(name string, settings *config.IcecastOutputConfig) *IcecastOutput {
-	return &IcecastOutput{OutputBase: core.NewOutputBase(name), settings: *settings}
+//
+//nolint:gocritic // By value like the other output constructors, see MIGRATING.md.
+func NewIcecastOutput(name string, settings config.IcecastOutputConfig) *IcecastOutput {
+	return &IcecastOutput{OutputBase: core.NewOutputBase(name), settings: settings}
 }
 
 // Send updates the Icecast server with new metadata.
