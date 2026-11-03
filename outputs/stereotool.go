@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
 	"zwfm-metadata/config"
 	"zwfm-metadata/core"
@@ -42,13 +44,18 @@ var stereoToolFields = []struct {
 	{id: 9985, name: "FM RDS Radio Text"},
 }
 
+// sendToStereoTool updates the fields concurrently because they are independent;
+// a failing field does not stop the others.
 func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
-	for _, field := range stereoToolFields {
-		if err := i.updateField(field.id, field.name, metadata); err != nil {
-			return err
-		}
+	errs := make([]error, len(stereoToolFields))
+	var wg sync.WaitGroup
+	for n, field := range stereoToolFields {
+		wg.Go(func() {
+			errs[n] = i.updateField(field.id, field.name, metadata)
+		})
 	}
-	return nil
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error {
