@@ -1,6 +1,7 @@
 package outputs
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -54,8 +55,13 @@ func (i *IcecastOutput) sendToIcecast(metadata string) error {
 	req.SetBasicAuth(i.settings.Username, i.settings.Password)
 	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
 
-	if err := utils.DoOK(req); err != nil {
+	body, err := utils.DoOKBody(req)
+	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
+	}
+	// Icecast also answers a refused update with 200 and <return>1</return>.
+	if !bytes.Contains(body, []byte("Metadata update successful")) {
+		return fmt.Errorf("icecast refused the update: %s", body)
 	}
 
 	slog.Debug("Successfully updated Icecast", "output", i.GetName(), "metadata", metadata)

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const maxErrorBodyBytes = 4 << 10
+const maxBodyBytes = 4 << 10
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
@@ -29,20 +29,26 @@ func do(req *http.Request) (*http.Response, error) {
 
 // DoOK reports non-2xx responses with up to 4 KiB of response body.
 func DoOK(req *http.Request) error {
+	_, err := DoOKBody(req)
+	return err
+}
+
+// DoOKBody is DoOK that also returns up to 4 KiB of a 2xx response body.
+func DoOKBody(req *http.Request) ([]byte, error) {
 	resp, err := do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close() //nolint:errcheck // Best-effort cleanup
 
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
 		if readErr != nil {
-			return fmt.Errorf("status %d: read response body: %w", resp.StatusCode, readErr)
+			return nil, fmt.Errorf("status %d: read response body: %w", resp.StatusCode, readErr)
 		}
-		return fmt.Errorf("status %d: %s", resp.StatusCode, body)
+		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, body)
 	}
-	return nil
+	return body, nil
 }
 
 // ValidateHTTPURL accepts absolute HTTP and HTTPS URLs.
