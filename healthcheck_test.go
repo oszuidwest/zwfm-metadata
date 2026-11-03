@@ -20,8 +20,14 @@ func TestRunHealthcheck(t *testing.T) {
 			status: http.StatusOK,
 		},
 		{
-			name:   "redirect status",
-			status: http.StatusTemporaryRedirect,
+			name:    "switching protocols status",
+			status:  http.StatusSwitchingProtocols,
+			wantErr: true,
+		},
+		{
+			name:    "redirect status",
+			status:  http.StatusTemporaryRedirect,
+			wantErr: true,
 		},
 		{
 			name:    "bad request status",

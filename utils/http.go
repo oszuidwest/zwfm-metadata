@@ -13,23 +13,30 @@ const maxErrorBodyBytes = 4 << 10
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
-// Get issues an HTTP GET through the shared client.
+// noRedirectClient returns redirects as is, so the target cannot send the request
+// on to another address.
+var noRedirectClient = &http.Client{
+	Timeout:       httpClient.Timeout,
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
+
+// Get issues an HTTP GET that does not follow redirects.
 func Get(ctx context.Context, rawURL string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
-	return do(req)
+	return do(noRedirectClient, req)
 }
 
-func do(req *http.Request) (*http.Response, error) {
+func do(client *http.Client, req *http.Request) (*http.Response, error) {
 	req.Header.Set("User-Agent", UserAgent())
-	return httpClient.Do(req) //nolint:gosec // Targets are supplied by the operator.
+	return client.Do(req) //nolint:gosec // Targets are supplied by the operator.
 }
 
 // DoOK reports non-2xx responses with up to 4 KiB of response body.
 func DoOK(req *http.Request) error {
-	resp, err := do(req)
+	resp, err := do(httpClient, req)
 	if err != nil {
 		return err
 	}
