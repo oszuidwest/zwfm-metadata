@@ -7,6 +7,14 @@ import (
 	"zwfm-metadata/core"
 )
 
+func TestRDSFormatterDigraphCase(t *testing.T) {
+	st := core.NewStructuredText(&core.Metadata{Title: "\u01c8 \u01c9 \u01cb \u01cc \u01c5 \u01c6"})
+	new(RDSFormatter).Format(st)
+	if want := "Lj lj Nj nj Dz dz"; st.Title != want {
+		t.Errorf("Title = %q, want %q", st.Title, want)
+	}
+}
+
 func TestRDSFormatterOverBudget(t *testing.T) {
 	const artist = "Primary Artist"
 	const title = "A Moderately Long Song Title For Radio"

@@ -31,9 +31,9 @@ var multiCharMappings = map[rune]string{
 	'ﬁ': "fi", 'ﬂ': "fl", 'ﬀ': "ff", 'ﬃ': "ffi", 'ﬄ': "ffl",
 	'…': "...", '€': "EUR",
 	'ﬅ': "st", 'ﬆ': "st",
-	'ǈ': "lj", 'ǉ': "Lj", 'Ǉ': "LJ",
-	'ǋ': "nj", 'ǌ': "Nj", 'Ǌ': "NJ",
-	'ǅ': "dz", 'ǆ': "Dz", 'Ǆ': "DZ",
+	'ǈ': "Lj", 'ǉ': "lj", 'Ǉ': "LJ",
+	'ǋ': "Nj", 'ǌ': "nj", 'Ǌ': "NJ",
+	'ǅ': "Dz", 'ǆ': "dz", 'Ǆ': "DZ",
 }
 
 var multiCharReplacer = func() *strings.Replacer {
