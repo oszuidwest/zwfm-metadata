@@ -29,15 +29,55 @@ func TestStereoToolOutput_FieldIDs(t *testing.T) {
 
 	// Pins the wire contract: Streaming Output Song and FM RDS Radio Text, each as
 	// {"<id>":{"forced":"1","new_value":...}} percent-encoded with spaces as %20.
-	requestURI := func(id string) string {
+	// Only RadioText escapes the "/", as %5C%2F.
+	requestURI := func(id, slash string) string {
 		return "/json-1/lis%7B%22" + id + "%22%3A%7B%22forced%22%3A%221%22%2C" +
-			"%22new_value%22%3A%22Artist%2FTitle%20%26%20More%20%2B%20100%25%3F%22%7D%7D"
+			"%22new_value%22%3A%22Artist" + slash + "Title%20%26%20More%20%2B%20100%25%3F%22%7D%7D"
 	}
 	gotRequestURIsMu.Lock()
 	got := slices.Sorted(slices.Values(gotRequestURIs))
 	gotRequestURIsMu.Unlock()
-	if want := []string{requestURI("6751"), requestURI("9985")}; !slices.Equal(got, want) {
+	if want := []string{requestURI("6751", "%2F"), requestURI("9985", "%5C%2F")}; !slices.Equal(got, want) {
 		t.Errorf("request URIs = %q, want %q", got, want)
+	}
+}
+
+func TestStereoToolOutput_SendsValuesLiterally(t *testing.T) {
+	tests := []struct {
+		metadata string
+		wantSong string
+		wantRT   string
+	}{
+		{metadata: `A/B: <C> D|E\F`, wantSong: `"A/B: <C> D|E\F"`, wantRT: `"A\/B\: \<C\> D\|E\\F"`},
+		{metadata: `Say "Hello"`, wantSong: `'Say "Hello"'`, wantRT: `'Say "Hello"'`},
+		{metadata: `Don't "Stop"`, wantSong: `"Don't 'Stop'"`, wantRT: `"Don't 'Stop'"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.metadata, func(t *testing.T) {
+			var mu sync.Mutex
+			var got []string
+			server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				defer mu.Unlock()
+				got = append(got, r.URL.Path)
+			}))
+			defer server.Close()
+
+			if err := NewStereoToolOutput("test", stereoToolTestSettings(server)).sendToStereoTool(tt.metadata); err != nil {
+				t.Fatalf("sendToStereoTool() error = %v", err)
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for _, want := range []string{
+				`/json-1/lis{"6751":{"forced":"1","new_value":` + tt.wantSong + `}}`,
+				`/json-1/lis{"9985":{"forced":"1","new_value":` + tt.wantRT + `}}`,
+			} {
+				if !slices.Contains(got, want) {
+					t.Errorf("no request for %q, got %q", want, got)
+				}
+			}
+		})
 	}
 }
 

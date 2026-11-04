@@ -1,9 +1,7 @@
 package outputs
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -37,12 +35,17 @@ func (i *StereoToolOutput) Send(st *core.StructuredText) error {
 
 // Stereo Tool 10.75 and 11.05 use these metadata field IDs.
 var stereoToolFields = []struct {
-	id   int
-	name string
+	id     int
+	name   string
+	format func(string) string
 }{
-	{id: 6751, name: "Streaming Output Song"},
-	{id: 9985, name: "FM RDS Radio Text"},
+	{id: 6751, name: "Streaming Output Song", format: func(s string) string { return s }},
+	{id: 9985, name: "FM RDS Radio Text", format: rdsTextEscaper.Replace},
 }
+
+// rdsTextEscaper escapes what Stereo Tool reads as RDS text formatting: "/" separates
+// texts, ":" ends a display time, "<", ">" and "|" scroll and wrap, "\\" starts a command.
+var rdsTextEscaper = strings.NewReplacer(`\`, `\\`, `/`, `\/`, `:`, `\:`, `<`, `\<`, `>`, `\>`, `|`, `\|`)
 
 // sendToStereoTool updates the fields concurrently because they are independent;
 // a failing field does not stop the others.
@@ -51,31 +54,30 @@ func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 	var wg sync.WaitGroup
 	for n, field := range stereoToolFields {
 		wg.Go(func() {
-			errs[n] = i.updateField(field.id, field.name, metadata)
+			errs[n] = i.updateField(field.id, field.name, field.format(metadata))
 		})
 	}
 	wg.Wait()
 	return errors.Join(errs...)
 }
 
-func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error {
-	// json.Marshal would escape & as \u0026; Stereo Tool's undocumented parser gets
-	// the literal character, as it always has.
-	var payload bytes.Buffer
-	encoder := json.NewEncoder(&payload)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(map[string]map[string]string{
-		strconv.Itoa(id): {
-			"forced":    "1",
-			"new_value": metadata,
-		},
-	}); err != nil {
-		return fmt.Errorf("failed to encode request for %s: %w", fieldName, err)
+// stereoToolQuote quotes a value for Stereo Tool's JSON reader, which decodes no escapes
+// and ends a value at its quote character. It accepts single quotes too, so a double
+// quote survives unless the value also holds an apostrophe; then it becomes one.
+func stereoToolQuote(value string) string {
+	if !strings.Contains(value, `"`) {
+		return `"` + value + `"`
 	}
+	if !strings.Contains(value, `'`) {
+		return `'` + value + `'`
+	}
+	return `"` + strings.ReplaceAll(value, `"`, `'`) + `"`
+}
 
-	// Stereo Tool needs every reserved character percent-encoded (url.PathEscape would
-	// leave & and + literal) and spaces as %20 rather than QueryEscape's +.
-	escapedPayload := strings.ReplaceAll(url.QueryEscape(strings.TrimSuffix(payload.String(), "\n")), "+", "%20")
+func (i *StereoToolOutput) updateField(id int, fieldName, value string) error {
+	payload := `{"` + strconv.Itoa(id) + `":{"forced":"1","new_value":` + stereoToolQuote(value) + `}}`
+
+	escapedPayload := strings.ReplaceAll(url.QueryEscape(payload), "+", "%20")
 	host := joinHostPort(i.settings.Hostname, i.settings.Port)
 	requestURL := "http://" + host + "/json-1/lis" + escapedPayload
 
@@ -88,6 +90,6 @@ func (i *StereoToolOutput) updateField(id int, fieldName, metadata string) error
 		return fmt.Errorf("failed to update %s: %w", fieldName, err)
 	}
 
-	slog.Debug("Updated Stereo Tool field", "output", i.GetName(), "field", fieldName, "metadata", metadata)
+	slog.Debug("Updated Stereo Tool field", "output", i.GetName(), "field", fieldName, "value", value)
 	return nil
 }
