@@ -106,3 +106,37 @@ func TestURLOutputEscapesAfterTemplateFunctions(t *testing.T) {
 		})
 	}
 }
+
+func TestURLOutputEncodesLiteralQuerySpaces(t *testing.T) {
+	tests := []struct {
+		name   string
+		method string
+		query  string
+		want   string
+	}{
+		{name: "template", method: http.MethodGet, query: "t={{.title}} - x", want: "t=Song%20-%20x"},
+		{name: "static", method: http.MethodGet, query: "t=a b", want: "t=a%20b"},
+		{name: "post", method: http.MethodPost, query: "t=a b", want: "t=a%20b"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var rawQuery string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				rawQuery = r.URL.RawQuery
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			t.Cleanup(server.Close)
+
+			output, err := NewURLOutput("test", config.URLOutputConfig{URL: server.URL + "?" + tt.query, Method: tt.method})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := output.Send(&core.StructuredText{Title: "Song"}); err != nil {
+				t.Fatal(err)
+			}
+			if rawQuery != tt.want {
+				t.Errorf("raw query = %q, want %q", rawQuery, tt.want)
+			}
+		})
+	}
+}
