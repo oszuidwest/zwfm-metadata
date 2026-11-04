@@ -91,6 +91,8 @@ type RDSFormatter struct{}
 func (r *RDSFormatter) Format(st *core.StructuredText) {
 	st.Artist = cleanField(st.Artist)
 	st.Title = cleanField(st.Title)
+	st.Prefix = cleanAffix(st.Prefix)
+	st.Suffix = cleanAffix(st.Suffix)
 
 	steps := []struct {
 		field *string
@@ -122,6 +124,22 @@ func (r *RDSFormatter) Format(st *core.StructuredText) {
 // cleanField converts text to RDS-safe ASCII with normalized spacing.
 func cleanField(s string) string {
 	return strings.Join(strings.Fields(stripHTMLTags(s)), " ")
+}
+
+// cleanAffix cleans a prefix or suffix but keeps the outer space that separates it from
+// the metadata.
+func cleanAffix(s string) string {
+	cleaned := filterVisibleText(s)
+	if cleaned == "" {
+		return ""
+	}
+	if strings.TrimLeftFunc(s, unicode.IsSpace) != s {
+		cleaned = " " + cleaned
+	}
+	if strings.TrimRightFunc(s, unicode.IsSpace) != s {
+		cleaned += " "
+	}
+	return cleaned
 }
 
 // smartTruncate shortens artist and title to fit, preserving artist when possible.
