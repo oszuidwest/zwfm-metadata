@@ -64,7 +64,7 @@ These checks do not replace validation of every external service or application-
 
 V3 targets Stereo Tool 11. It writes Streaming Output Song to field `6751` and FM RDS RadioText to field `9985`.
 
-Upgrade Stereo Tool before deploying v3 and add the `rds` formatter to every Stereo Tool output. The formatter keeps RadioText within 64 characters and transliterates characters that Stereo Tool's RDS encoder does not handle correctly.
+Upgrade Stereo Tool before deploying v3 and add the `rds` formatter to every Stereo Tool output. The formatter keeps RadioText within 64 characters and converts characters that Stereo Tool 11.06 does not send correctly. Keep Stereo Tool's `Input character encoding` on UTF-8.
 
 V3 fixes request encoding for metadata containing `/`, `&`, `+`, `%`, or `?`. Check both Song and Current RadioText after the upgrade.
 

@@ -15,6 +15,18 @@ import (
 
 const maxRDSLength = 64
 
+// rdsCharset holds the non-ASCII characters of the basic RDS character set (IEC 62106-4
+// Table 4) that Stereo Tool 11.06 puts on air with the code from that table, measured
+// on its composite output. One row per table column. Other characters are transliterated.
+const rdsCharset = "áàéèíìóòúùÑÇŞßĲ" +
+	"âäêëîïôöûüñçşğĳ" +
+	"α©‰Ğěňőπ£" +
+	"¹²³±İńűµ¿÷°¼½¾§" +
+	"ÁÀÉÈÍÌÓÒÚÙŘČŠŽĐĿ" +
+	"ÂÄÊËÎÏÔÖÛÜřčšžđŀ" +
+	"ÃÅÆŒÝÕØÞŊŔĆŚŹŦ" +
+	"ãåæœŵýõøþŋŕćśźŧ"
+
 var (
 	parenRegex   = regexp.MustCompile(`\s*\([^)]*\)`)
 	bracketRegex = regexp.MustCompile(`\s*\[[^\]]*\]`)
@@ -25,9 +37,6 @@ var (
 
 // multiCharMappings maps Unicode characters that expand to multiple ASCII characters.
 var multiCharMappings = map[rune]string{
-	'ß': "ss", 'þ': "th", 'Þ': "TH",
-	'æ': "ae", 'Æ': "AE", 'œ': "oe", 'Œ': "OE",
-	'ĳ': "ij", 'Ĳ': "IJ",
 	'ﬁ': "fi", 'ﬂ': "fl", 'ﬀ': "ff", 'ﬃ': "ffi", 'ﬄ': "ffl",
 	'ﬅ': "st", 'ﬆ': "st",
 	'ǈ': "lj", 'ǉ': "Lj", 'Ǉ': "LJ",
@@ -119,7 +128,7 @@ func (r *RDSFormatter) Format(st *core.StructuredText) {
 	}
 }
 
-// cleanField converts text to RDS-safe ASCII with normalized spacing.
+// cleanField converts text to the RDS character set with normalized spacing.
 func cleanField(s string) string {
 	return strings.Join(strings.Fields(stripHTMLTags(s)), " ")
 }
@@ -205,20 +214,34 @@ func extractText(n *html.Node) string {
 	return result.String()
 }
 
-// filterVisibleText keeps printable ASCII, turning line breaks and tabs into spaces.
+// filterVisibleText keeps printable ASCII and rdsCharset, turning line breaks and tabs
+// into spaces.
 func filterVisibleText(text string) string {
 	visible := strings.Map(func(r rune) rune {
 		switch {
-		case r >= 32 && r <= 126:
+		case r >= 32 && r <= 126, strings.ContainsRune(rdsCharset, r):
 			return r
 		case r == '\n', r == '\r', r == '\t':
 			return ' '
 		default:
 			return -1
 		}
-	}, transliterateToASCII(text))
+	}, toRDSCharset(text))
 
 	return strings.TrimSpace(visible)
+}
+
+// toRDSCharset keeps what rdsCharset holds and transliterates the rest per character.
+func toRDSCharset(text string) string {
+	var b strings.Builder
+	for _, r := range norm.NFC.String(text) {
+		if r <= 127 || strings.ContainsRune(rdsCharset, r) {
+			b.WriteRune(r)
+		} else {
+			b.WriteString(transliterateToASCII(string(r)))
+		}
+	}
+	return b.String()
 }
 
 func transliterateToASCII(text string) string {

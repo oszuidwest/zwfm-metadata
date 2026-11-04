@@ -861,7 +861,8 @@ Updates Stereo Tool's RDS RadioText and streaming song metadata.
 
 - Uses Stereo Tool 11's undocumented JSON API: `9985` for RadioText and `6751` for Song. Both IDs were verified against 11.05 and 10.75; v3 only supports Stereo Tool 11.
 - Requires the `rds` formatter to enforce the 64-character RadioText limit and clean the input.
-- The formatter transliterates extended Latin characters to ASCII because Stereo Tool's RDS encoder corrupts them; verified in 10.71, 10.75, and 11.05.
+- Keep `Input character encoding` in Stereo Tool on UTF-8. In Raw RDS characters mode the UTF-8 this output sends goes on air unconverted.
+- Stereo Tool's Current RadioText monitor shows the raw RDS bytes, so `ø` shows as `�` there while the signal is correct. See [#39](https://github.com/oszuidwest/zwfm-metadata/issues/39).
 
 ### Custom Payload Mapping
 
@@ -1091,10 +1092,10 @@ Radio Data System formatter (64-character limit)
 
 Smart processing for RDS compliance:
 - **HTML cleaning**: Strips all HTML tags (`<b>`, `<i>`, `<span>`, `<script>`) and decodes entities (`&amp;` → `&`, `&lt;` → `<`, `&quot;` → `"`, `&shy;` → soft hyphen, `&nbsp;` → non-breaking space)
-- **ASCII transliteration**: Converts extended Latin characters to ASCII. Examples:
-  - `BLØF` → `BLOF`
-  - `Café` → `Cafe`
-  - `Straße` → `Strasse`
+- **RDS character set**: Keeps the characters of the basic RDS character set that Stereo Tool 11.06 sends correctly, and converts the rest to the closest match. Examples:
+  - `BLØF`, `Café` and `Straße` stay as they are
+  - `Ł` → `L`, while `ódź` stays as it is
+  - Characters without a match are dropped
 
 - **Single-line output**: Converts newlines (`\n`, `\r`) and tabs (`\t`) to spaces for RDS displays
 - **Smart shortening**: Runs only while the complete output, including prefix and suffix, exceeds 64 characters. It rechecks the length after every step:
@@ -1141,13 +1142,13 @@ rds:      "John Lennon - Imagine"
 **Example 2: RDS Compliance + Uppercase**
 ```json
 {
-  "formatters": ["rds", "uppercase"]
+  "formatters": ["uppercase", "rds"]
 }
 ```
 ```
 Input:      "very long artist name feat. someone - very long song title (extended remix)"
-rds:        "Very Long Artist Name - Very Long Song Title"
-uppercase:  "VERY LONG ARTIST NAME - VERY LONG SONG TITLE"
+uppercase:  "VERY LONG ARTIST NAME FEAT. SOMEONE - VERY LONG SONG TITLE (EXTENDED REMIX)"
+rds:        "VERY LONG ARTIST NAME - VERY LONG SONG TITLE"
 ```
 
 **Example 3: Lowercase Only**
@@ -1161,7 +1162,7 @@ Input:     "Artist Name - Song Title"
 lowercase: "artist name - song title"
 ```
 
-**Note:** The order of formatters matters. For example, `["rds", "uppercase"]` first truncates to 64 characters, then converts to uppercase, while `["uppercase", "rds"]` first converts to uppercase, then truncates.
+**Note:** The order of formatters matters. For example, `["rds", "uppercase"]` first truncates to 64 characters, then converts to uppercase, while `["uppercase", "rds"]` first converts to uppercase, then truncates. Keep `rds` last: `uppercase` after it can create capitals outside the RDS character set, such as `Ŵ`.
 
 ## Features
 

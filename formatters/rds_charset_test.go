@@ -1,0 +1,41 @@
+package formatters
+
+import (
+	"strings"
+	"testing"
+
+	"zwfm-metadata/core"
+)
+
+func TestRDSFormatterCharacters(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "keeps Dutch letters", in: "Zoë Brontë - BLØF Citroën", want: "Zoë Brontë - BLØF Citroën"},
+		{name: "keeps other table letters", in: "Straße Dvořák Čapek ñ å", want: "Straße Dvořák Čapek ñ å"},
+		{name: "composes decomposed letters", in: "Cafe\u0301", want: "Café"},
+		{name: "transliterates letters outside the table", in: "Łódź Ñandú ą", want: "Lódź Ñandú a"},
+		{name: "transliterates letters sent with the wrong code", in: "ð ŷ ı", want: "d y i"},
+		{name: "drops what has no mapping", in: "Кино 日本 🎵 end", want: "end"},
+		{name: "keeps table symbols", in: "£5 20° §", want: "£5 20° §"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := core.NewStructuredText(&core.Metadata{Title: tt.in})
+			new(RDSFormatter).Format(st)
+			if st.Title != tt.want {
+				t.Errorf("Title = %q, want %q", st.Title, tt.want)
+			}
+		})
+	}
+}
+
+func TestRDSFormatterCountsCharacters(t *testing.T) {
+	st := core.NewStructuredText(&core.Metadata{Title: strings.Repeat("é", maxRDSLength)})
+	new(RDSFormatter).Format(st)
+	if st.Title != strings.Repeat("é", maxRDSLength) {
+		t.Errorf("Title = %q, want %d times é", st.Title, maxRDSLength)
+	}
+}
