@@ -1,6 +1,7 @@
 package outputs
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -38,14 +39,18 @@ var stereoToolFields = []struct {
 	id     int
 	name   string
 	format func(string) string
+	// optional fields may not exist: the generic plugin build has no Song field.
+	optional bool
 }{
-	{id: 6751, name: "Streaming Output Song", format: func(s string) string { return s }},
+	{id: 6751, name: "Streaming Output Song", format: func(s string) string { return s }, optional: true},
 	{id: 9985, name: "FM RDS Radio Text", format: rdsTextEscaper.Replace},
 }
 
 // rdsTextEscaper escapes what Stereo Tool reads as RDS text formatting: "/" separates
 // texts, ":" ends a display time, "<", ">" and "|" scroll and wrap, "\\" starts a command.
 var rdsTextEscaper = strings.NewReplacer(`\`, `\\`, `/`, `\/`, `:`, `\:`, `<`, `\<`, `>`, `\>`, `|`, `\|`)
+
+var errStereoToolUnknownField = errors.New("stereo tool does not know this field")
 
 // sendToStereoTool updates the fields concurrently because they are independent;
 // a failing field does not stop the others.
@@ -54,7 +59,12 @@ func (i *StereoToolOutput) sendToStereoTool(metadata string) error {
 	var wg sync.WaitGroup
 	for n, field := range stereoToolFields {
 		wg.Go(func() {
-			errs[n] = i.updateField(field.id, field.name, field.format(metadata))
+			err := i.updateField(field.id, field.name, field.format(metadata))
+			if field.optional && errors.Is(err, errStereoToolUnknownField) {
+				slog.Debug("Skipped Stereo Tool field", "output", i.GetName(), "field", field.name)
+				return
+			}
+			errs[n] = err
 		})
 	}
 	wg.Wait()
@@ -86,8 +96,16 @@ func (i *StereoToolOutput) updateField(id int, fieldName, value string) error {
 		return fmt.Errorf("failed to create request for %s: %w", fieldName, err)
 	}
 
-	if err := utils.DoOK(req); err != nil {
+	body, err := utils.DoOKBody(req)
+	if err != nil {
 		return fmt.Errorf("failed to update %s: %w", fieldName, err)
+	}
+	// Stereo Tool answers a refused update with 200 too, and only a stored value has value_text.
+	if !bytes.Contains(body, []byte(`"value_text"`)) {
+		if bytes.Contains(body, []byte("ERROR_UNKNOWN_ID")) {
+			return fmt.Errorf("failed to update %s: %w", fieldName, errStereoToolUnknownField)
+		}
+		return fmt.Errorf("failed to update %s: %s", fieldName, body)
 	}
 
 	slog.Debug("Updated Stereo Tool field", "output", i.GetName(), "field", fieldName, "value", value)
