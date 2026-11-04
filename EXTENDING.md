@@ -22,7 +22,7 @@ The router also handles expiration, fallback delays, and output deduplication. A
 - Embed `core.PassiveComponent` when a component has no background work.
 - Treat metadata as immutable after calling `InputBase.SetMetadata`. `GetMetadata`, subscribers, and `StructuredText.Original` share pointers.
 - Return constructor errors for invalid configuration.
-- Return delivery errors from `Output.Send`. The router logs the error and does not update its deduplication state. It does not automatically retry.
+- Return delivery errors from `Output.Send`. The router logs the error and does not update its deduplication state. It does not automatically retry. The one exception is the fallback: while the input an output last used stays unavailable, the router schedules the fallback again after each failed send.
 - Use `log/slog` and include the component name as an `input` or `output` field.
 - Use `utils.DoOK` for requests where only success matters. It sets the standard User-Agent, applies the shared timeout, closes the response body, and returns non-2xx responses as errors.
 - Run `go test ./...`, `go vet ./...`, and `go build` before committing.

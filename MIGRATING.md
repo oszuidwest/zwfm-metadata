@@ -168,7 +168,7 @@ type Output interface {
 }
 ```
 
-Change every custom `Send` method to return its delivery error. The router logs that error and does not update its deduplication state. It does not automatically retry failed deliveries.
+Change every custom `Send` method to return its delivery error. The router logs that error and does not update its deduplication state. It does not automatically retry failed deliveries. The one exception is the fallback: while the input an output last used stays unavailable, the router schedules the fallback again after each failed send.
 
 `OutputBase` now stores only the name. Remove calls to `SetDelay`; remove custom uses of `GetDelay` where they are no longer needed. Shared timing belongs in `OutputSpec.Timing`, not in an output-specific config struct.
 
