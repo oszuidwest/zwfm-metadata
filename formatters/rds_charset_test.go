@@ -35,9 +35,11 @@ func TestRDSFormatterCharacters(t *testing.T) {
 }
 
 func TestRDSFormatterCountsCharacters(t *testing.T) {
-	st := core.NewStructuredText(&core.Metadata{Title: strings.Repeat("é", maxRDSLength)})
+	// 57 characters but 107 bytes, so counting bytes would remove the parentheses.
+	title := strings.Repeat("é", 50) + " (Live)"
+	st := core.NewStructuredText(&core.Metadata{Title: title})
 	new(RDSFormatter).Format(st)
-	if st.Title != strings.Repeat("é", maxRDSLength) {
-		t.Errorf("Title = %q, want %d times é", st.Title, maxRDSLength)
+	if st.Title != title {
+		t.Errorf("Title = %q, want %q", st.Title, title)
 	}
 }

@@ -91,7 +91,7 @@
       "type": "icecast",
       "name": "secondary-stream",
       "inputs": ["radio-live", "default-text"],
-      "formatters": ["uppercase", "rds"],
+      "formatters": ["rds", "uppercase"],
       "settings": {
         "delay": 2,
         "fallbackDelay": 20,
