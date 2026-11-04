@@ -66,3 +66,26 @@ func TestRDSFormatterOverBudget(t *testing.T) {
 		})
 	}
 }
+
+func TestRDSFormatterKeepsPunctuationReadable(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{in: "Don\u2019t \u2018Stop\u2019 \u201aa\u201b", want: "Don't 'Stop' 'a'"},
+		{in: "\u201cHello\u201d \u201eWorld\u201d", want: `"Hello" "World"`},
+		{in: "Now \u2013 Then \u2014 Later \u2010a \u2011b \u2015c", want: "Now - Then - Later -a -b -c"},
+		{in: "Wait\u2026", want: "Wait..."},
+		{in: "\u20ac5", want: "EUR5"},
+		{in: "a\u00a0b\u2002c\u2003d\u2009e\u200af\u202fg", want: "a b c d e f g"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			st := core.NewStructuredText(&core.Metadata{Title: tt.in})
+			new(RDSFormatter).Format(st)
+			if st.Title != tt.want {
+				t.Errorf("Title = %q, want %q", st.Title, tt.want)
+			}
+		})
+	}
+}

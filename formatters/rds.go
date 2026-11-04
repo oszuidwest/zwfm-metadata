@@ -29,6 +29,7 @@ var multiCharMappings = map[rune]string{
 	'æ': "ae", 'Æ': "AE", 'œ': "oe", 'Œ': "OE",
 	'ĳ': "ij", 'Ĳ': "IJ",
 	'ﬁ': "fi", 'ﬂ': "fl", 'ﬀ': "ff", 'ﬃ': "ffi", 'ﬄ': "ffl",
+	'…': "...", '€': "EUR",
 	'ﬅ': "st", 'ﬆ': "st",
 	'ǈ': "lj", 'ǉ': "Lj", 'Ǉ': "LJ",
 	'ǋ': "nj", 'ǌ': "Nj", 'Ǌ': "NJ",
@@ -44,6 +45,12 @@ var multiCharReplacer = func() *strings.Replacer {
 }()
 
 var nonASCIIToASCII = map[rune]rune{
+	// Punctuation
+	'‘': '\'', '’': '\'', '‚': '\'', '‛': '\'',
+	'“': '"', '”': '"', '„': '"',
+	'‐': '-', '‑': '-', '–': '-', '—': '-', '―': '-',
+	// Spaces
+	'\u00a0': ' ', '\u2002': ' ', '\u2003': ' ', '\u2009': ' ', '\u200a': ' ', '\u202f': ' ',
 	// Nordic/Scandinavian
 	'ø': 'o', 'Ø': 'O', 'å': 'a', 'Å': 'A',
 	// Icelandic
