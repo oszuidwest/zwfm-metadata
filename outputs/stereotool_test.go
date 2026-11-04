@@ -12,13 +12,16 @@ import (
 	"zwfm-metadata/config"
 )
 
+const stereoToolStored = `{ "9985": { "enabled": "1", "active": "1", "value_text": "x", "value": "x", "type": "string", "text": "RadioText"} }`
+
 func TestStereoToolOutput_FieldIDs(t *testing.T) {
 	var gotRequestURIsMu sync.Mutex
 	var gotRequestURIs []string
-	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotRequestURIsMu.Lock()
 		defer gotRequestURIsMu.Unlock()
 		gotRequestURIs = append(gotRequestURIs, r.RequestURI)
+		_, _ = w.Write([]byte(stereoToolStored))
 	}))
 	defer server.Close()
 
@@ -56,10 +59,11 @@ func TestStereoToolOutput_SendsValuesLiterally(t *testing.T) {
 		t.Run(tt.metadata, func(t *testing.T) {
 			var mu sync.Mutex
 			var got []string
-			server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				mu.Lock()
 				defer mu.Unlock()
 				got = append(got, r.URL.Path)
+				_, _ = w.Write([]byte(stereoToolStored))
 			}))
 			defer server.Close()
 
@@ -92,6 +96,45 @@ func TestStereoToolOutput_ReturnsFieldErrors(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), field.name) {
 			t.Errorf("sendToStereoTool() error = %v, want an error for %s", err, field.name)
 		}
+	}
+}
+
+func TestStereoToolOutput_ChecksResponseBody(t *testing.T) {
+	const (
+		unknownID   = `{ "6751": "ERROR_UNKNOWN_ID" }`
+		parserError = `{ "error 0": "ERROR_REACHED_END_WITHOUT_CLOSING_QUOTE", "error 1": "ERROR_NOT_ALL_BRACKETS_MATCHED" }`
+	)
+	tests := []struct {
+		name      string
+		song      string
+		radioText string
+		wantErr   string
+	}{
+		{name: "both stored", song: stereoToolStored, radioText: stereoToolStored},
+		{name: "plugin build without Song", song: unknownID, radioText: stereoToolStored},
+		{name: "unknown RadioText", song: stereoToolStored, radioText: unknownID, wantErr: "FM RDS Radio Text"},
+		{name: "refused RadioText", song: stereoToolStored, radioText: parserError, wantErr: "ERROR_REACHED_END"},
+		{name: "refused Song", song: parserError, radioText: stereoToolStored, wantErr: "Streaming Output Song"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body := tt.radioText
+				if strings.Contains(r.URL.Path, "6751") {
+					body = tt.song
+				}
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+
+			err := NewStereoToolOutput("test", stereoToolTestSettings(server)).sendToStereoTool("Artist - Title")
+			switch {
+			case tt.wantErr == "" && err != nil:
+				t.Fatalf("sendToStereoTool() error = %v", err)
+			case tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)):
+				t.Fatalf("sendToStereoTool() error = %v, want it to contain %q", err, tt.wantErr)
+			}
+		})
 	}
 }
 

@@ -859,7 +859,7 @@ Updates Stereo Tool's RDS RadioText and streaming song metadata.
 
 ##### Notes
 
-- Uses Stereo Tool 11's undocumented JSON API: `9985` for RadioText and `6751` for Song. Both IDs were verified against 11.05 and 10.75; v3 only supports Stereo Tool 11.
+- Uses Stereo Tool 11's undocumented JSON API: `9985` for RadioText and `6751` for Song. Stereo Tool answers a refused update with HTTP 200, so the output reads the response and reports it as an error. The generic plugin build has no Song field, and that is not reported.
 - Escapes the characters Stereo Tool reads as RDS text formatting (`/`, `:`, `<`, `>`, `|` and `\`) in the RadioText field, so they are sent as text. Stereo Tool's JSON API cuts text off at its quote character, so a title with both a double quote and an apostrophe has its double quote sent as `'`.
 - Requires the `rds` formatter to enforce the 64-character RadioText limit and clean the input.
 - The formatter transliterates extended Latin characters to ASCII because Stereo Tool's RDS encoder corrupts them; verified in 10.71, 10.75, and 11.05.
