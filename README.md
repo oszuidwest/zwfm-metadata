@@ -1096,6 +1096,7 @@ Smart processing for RDS compliance:
   - `Café` → `Cafe`
   - `Straße` → `Strasse`
 
+- **Punctuation**: Converts typographic quotes, dashes, ellipses and non-breaking spaces to ASCII (`Don’t` → `Don't`), and `€` to `EUR`
 - **Single-line output**: Converts newlines (`\n`, `\r`) and tabs (`\t`) to spaces for RDS displays
 - **Smart shortening**: Runs only while the complete output, including prefix and suffix, exceeds 64 characters. It rechecks the length after every step:
   1. Removes all parenthesized segments from the title, then from the artist
