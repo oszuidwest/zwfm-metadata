@@ -15,6 +15,8 @@ func TestRDSFormatterCharacters(t *testing.T) {
 	}{
 		{name: "keeps Dutch letters", in: "Zoë Brontë - BLØF Citroën", want: "Zoë Brontë - BLØF Citroën"},
 		{name: "keeps other table letters", in: "Straße Dvořák Čapek ñ å", want: "Straße Dvořák Čapek ñ å"},
+		{name: "keeps every measured character", in: "áàéèíìóòúùÑÇŞßĲâäêëîïôöûüñçşğĳα©‰Ğěňőπ£¹²³±İńűµ¿÷°¼½¾§ÁÀÉÈÍÌ", want: "áàéèíìóòúùÑÇŞßĲâäêëîïôöûüñçşğĳα©‰Ğěňőπ£¹²³±İńűµ¿÷°¼½¾§ÁÀÉÈÍÌ"},
+		{name: "keeps every measured character, part two", in: "ÓÒÚÙŘČŠŽĐĿÂÄÊËÎÏÔÖÛÜřčšžđŀÃÅÆŒÝÕØÞŊŔĆŚŹŦãåæœŵýõøþŋŕćśźŧ", want: "ÓÒÚÙŘČŠŽĐĿÂÄÊËÎÏÔÖÛÜřčšžđŀÃÅÆŒÝÕØÞŊŔĆŚŹŦãåæœŵýõøþŋŕćśźŧ"},
 		{name: "composes decomposed letters", in: "Cafe\u0301", want: "Café"},
 		{name: "transliterates letters outside the table", in: "Łódź Ñandú ą", want: "Lódź Ñandú a"},
 		{name: "transliterates letters sent with the wrong code", in: "ð ŷ ı", want: "d y i"},

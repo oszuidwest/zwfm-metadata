@@ -1148,7 +1148,7 @@ rds:      "John Lennon - Imagine"
 ```
 Input:      "very long artist name feat. someone - very long song title (extended remix)"
 uppercase:  "VERY LONG ARTIST NAME FEAT. SOMEONE - VERY LONG SONG TITLE (EXTENDED REMIX)"
-rds:        "VERY LONG ARTIST NAME - VERY LONG SONG TITLE"
+rds:        "VERY LONG ARTIST NAME FEAT. SOMEONE - VERY LONG SONG TITLE"
 ```
 
 **Example 3: Lowercase Only**
