@@ -3,9 +3,6 @@
 # Build stage
 FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.24 AS builder
 
-# Install build dependencies
-RUN apk add --no-cache ca-certificates git
-
 WORKDIR /src
 
 # Copy go mod files
