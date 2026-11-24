@@ -1,22 +1,27 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 )
 
 const defaultSendBufferSize = 256
 
 type hubClient struct {
-	conn      *websocket.Conn
-	send      chan []byte
-	done      chan struct{}
-	closeOnce sync.Once
+	conn       *websocket.Conn
+	remoteAddr string
+	send       chan []byte
+	done       chan struct{}
+	closeOnce  sync.Once
 }
 
 func (c *hubClient) signalDone() {
@@ -30,7 +35,6 @@ type WebSocketHub struct {
 	name           string
 	clients        map[*websocket.Conn]*hubClient
 	mu             sync.RWMutex
-	upgrader       websocket.Upgrader
 	onConnect      func() any
 	onDisconnect   func()
 	heartbeat      []byte
@@ -44,15 +48,10 @@ type WebSocketHub struct {
 // NewWebSocketHub returns a new WebSocketHub with the given name.
 func NewWebSocketHub(name string) *WebSocketHub {
 	return &WebSocketHub{
-		name:    name,
-		clients: make(map[*websocket.Conn]*hubClient),
-		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool {
-				return true
-			},
-		},
+		name:           name,
+		clients:        make(map[*websocket.Conn]*hubClient),
 		pingInterval:   30 * time.Second,
-		pongWait:       60 * time.Second,
+		pongWait:       30 * time.Second,
 		writeTimeout:   10 * time.Second,
 		sendBufferSize: defaultSendBufferSize,
 	}
@@ -96,29 +95,32 @@ func (h *WebSocketHub) disconnectClient(client *hubClient) {
 
 	client.signalDone()
 
-	if err := client.conn.Close(); err != nil {
-		slog.Debug("WebSocket close error", "hub", h.name, "error", err)
-	}
-
 	if h.onDisconnect != nil {
 		h.onDisconnect()
 	}
 
 	slog.Debug("WebSocket client disconnected", "hub", h.name, "clients", clientCount)
+
+	// Close comes last because it waits a few seconds for a peer that does not
+	// answer the close frame. Errors are expected since the connection may
+	// already be closed by the remote peer.
+	_ = client.conn.Close(websocket.StatusNormalClosure, "")
 }
 
 // HandleConnection upgrades an HTTP connection to WebSocket and manages its lifecycle.
 func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) {
-	conn, err := h.upgrader.Upgrade(w, r, nil)
+	// InsecureSkipVerify accepts connections from any origin.
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
 		slog.Error("Failed to upgrade WebSocket connection", "hub", h.name, "error", err)
 		return
 	}
 
 	client := &hubClient{
-		conn: conn,
-		send: make(chan []byte, h.sendBufferSize),
-		done: make(chan struct{}),
+		conn:       conn,
+		remoteAddr: r.RemoteAddr,
+		send:       make(chan []byte, h.sendBufferSize),
+		done:       make(chan struct{}),
 	}
 
 	// Enqueue the onConnect payload before registering the client in the map.
@@ -131,7 +133,7 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 			msg, err := json.Marshal(data)
 			if err != nil {
 				slog.Warn("Failed to marshal initial WebSocket data", "hub", h.name, "error", err)
-				conn.Close() //nolint:errcheck,gosec // Best-effort cleanup on marshal failure
+				conn.CloseNow() //nolint:errcheck,gosec // Best-effort cleanup on marshal failure
 				return
 			}
 			client.send <- msg
@@ -150,8 +152,8 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 }
 
 // writePump sends messages from the client's send channel to the WebSocket connection.
-// It is the only goroutine that writes to the connection, guaranteeing single-writer
-// safety by construction. Pings and close frames are also handled here.
+// It is the only goroutine that writes messages, which keeps them in order. Pings are
+// started and the connection is closed here too.
 func (h *WebSocketHub) writePump(client *hubClient) {
 	pings := time.NewTicker(h.pingInterval)
 	defer pings.Stop()
@@ -183,33 +185,34 @@ func (h *WebSocketHub) writePump(client *hubClient) {
 			idle.Reset(h.heartbeatAfter)
 
 		case <-client.done:
-			// Best-effort close frame; errors are expected since the
-			// connection may already be closed by the remote peer.
-			_ = client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout))
-			_ = client.conn.WriteMessage(websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			return
 
 		case <-pings.C:
-			if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
-				slog.Debug("WebSocket ping deadline failed", "hub", h.name, "error", err)
-				return
-			}
-			if err := client.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				slog.Debug("WebSocket ping failed", "hub", h.name, "error", err)
-				return
-			}
+			// Ping waits for the pong, which must not hold up messages.
+			go h.ping(client)
 		}
+	}
+}
+
+// ping sends a ping and signals the write pump to stop if no pong arrives in time.
+func (h *WebSocketHub) ping(client *hubClient) {
+	ctx, cancel := context.WithTimeout(context.Background(), h.pongWait)
+	defer cancel()
+
+	if err := client.conn.Ping(ctx); err != nil {
+		if !errors.Is(err, net.ErrClosed) {
+			slog.Debug("WebSocket ping failed", "hub", h.name, "error", err)
+		}
+		client.signalDone()
 	}
 }
 
 // writeText writes one text frame and reports whether the connection is still usable.
 func (h *WebSocketHub) writeText(client *hubClient, msg []byte) bool {
-	if err := client.conn.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil {
-		slog.Debug("WebSocket write deadline failed", "hub", h.name, "error", err)
-		return false
-	}
-	if err := client.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), h.writeTimeout)
+	defer cancel()
+
+	if err := client.conn.Write(ctx, websocket.MessageText, msg); err != nil {
 		slog.Debug("WebSocket write failed", "hub", h.name, "error", err)
 		return false
 	}
@@ -221,21 +224,17 @@ func (h *WebSocketHub) writeText(client *hubClient, msg []byte) bool {
 func (h *WebSocketHub) readPump(client *hubClient) {
 	defer client.signalDone()
 
-	if err := client.conn.SetReadDeadline(time.Now().Add(h.pongWait)); err != nil {
-		slog.Warn("Failed to set read deadline", "hub", h.name, "error", err)
-	}
-	client.conn.SetPongHandler(func(string) error {
-		err := client.conn.SetReadDeadline(time.Now().Add(h.pongWait))
-		if err != nil {
-			slog.Debug("WebSocket pong deadline failed", "hub", h.name, "error", err)
-		}
-		return err
-	})
+	// Messages are discarded without buffering, so their size does not matter.
+	client.conn.SetReadLimit(-1)
 
 	for {
-		_, _, err := client.conn.ReadMessage()
+		_, r, err := client.conn.Reader(context.Background())
+		if err == nil {
+			_, err = io.Copy(io.Discard, r)
+		}
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+			status := websocket.CloseStatus(err)
+			if status != websocket.StatusNormalClosure && status != websocket.StatusGoingAway && !errors.Is(err, net.ErrClosed) {
 				slog.Debug("WebSocket read error", "hub", h.name, "error", err)
 			}
 			return
@@ -270,7 +269,7 @@ func (h *WebSocketHub) BroadcastMessage(msg []byte) {
 			case <-client.done:
 			default:
 				slog.Warn("WebSocket client too slow, disconnecting",
-					"hub", h.name, "remote_addr", client.conn.RemoteAddr())
+					"hub", h.name, "remote_addr", client.remoteAddr)
 				client.signalDone()
 			}
 		}

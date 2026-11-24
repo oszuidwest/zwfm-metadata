@@ -1,13 +1,14 @@
 package outputs
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 
 	"zwfm-metadata/config"
 )
@@ -34,19 +35,18 @@ func TestWebSocketOutputSendsUnmappedHeartbeat(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	conn, resp, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/ws", nil)
+	conn, resp, err := websocket.Dial(t.Context(), "ws"+strings.TrimPrefix(server.URL, "http")+"/ws", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 	if resp != nil && resp.Body != nil {
 		resp.Body.Close() //nolint:errcheck,gosec // Best-effort cleanup
 	}
 
-	if err := conn.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	_, msg, err := conn.ReadMessage()
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	_, msg, err := conn.Read(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
