@@ -3,10 +3,9 @@ package utils
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -95,16 +94,14 @@ func (h *WebSocketHub) disconnectClient(client *hubClient) {
 
 	client.signalDone()
 
+	// CloseNow, because Close waits without a limit for a peer that keeps sending.
+	client.conn.CloseNow() //nolint:errcheck,gosec // The peer may have closed it already
+
 	if h.onDisconnect != nil {
 		h.onDisconnect()
 	}
 
 	slog.Debug("WebSocket client disconnected", "hub", h.name, "clients", clientCount)
-
-	// Close comes last because it waits a few seconds for a peer that does not
-	// answer the close frame. Errors are expected since the connection may
-	// already be closed by the remote peer.
-	_ = client.conn.Close(websocket.StatusNormalClosure, "")
 }
 
 // HandleConnection upgrades an HTTP connection to WebSocket and manages its lifecycle.
@@ -112,7 +109,8 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	// InsecureSkipVerify accepts connections from any origin.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
-		slog.Error("Failed to upgrade WebSocket connection", "hub", h.name, "error", err)
+		// The error repeats request headers, which can be very long.
+		slog.Error("Failed to upgrade WebSocket connection", "hub", h.name, "error", fmt.Sprintf("%.200s", err))
 		return
 	}
 
@@ -194,15 +192,14 @@ func (h *WebSocketHub) writePump(client *hubClient) {
 	}
 }
 
-// ping sends a ping and signals the write pump to stop if no pong arrives in time.
+// ping sends a ping and signals the write pump to stop if it cannot be sent or no pong
+// arrives in time.
 func (h *WebSocketHub) ping(client *hubClient) {
 	ctx, cancel := context.WithTimeout(context.Background(), h.pongWait)
 	defer cancel()
 
 	if err := client.conn.Ping(ctx); err != nil {
-		if !errors.Is(err, net.ErrClosed) {
-			slog.Debug("WebSocket ping failed", "hub", h.name, "error", err)
-		}
+		slog.Debug("WebSocket ping failed", "hub", h.name, "error", err)
 		client.signalDone()
 	}
 }
@@ -234,7 +231,7 @@ func (h *WebSocketHub) readPump(client *hubClient) {
 		}
 		if err != nil {
 			status := websocket.CloseStatus(err)
-			if status != websocket.StatusNormalClosure && status != websocket.StatusGoingAway && !errors.Is(err, net.ErrClosed) {
+			if status != websocket.StatusNormalClosure && status != websocket.StatusGoingAway {
 				slog.Debug("WebSocket read error", "hub", h.name, "error", err)
 			}
 			return
