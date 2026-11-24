@@ -35,7 +35,7 @@ func TestWebSocketOutputSendsUnmappedHeartbeat(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	conn, resp, err := websocket.Dial(t.Context(), "ws"+strings.TrimPrefix(server.URL, "http")+"/ws", nil)
+	conn, resp, err := websocket.Dial(t.Context(), server.URL+"/ws", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,9 +46,12 @@ func TestWebSocketOutputSendsUnmappedHeartbeat(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
-	_, msg, err := conn.Read(ctx)
+	msgType, msg, err := conn.Read(ctx)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if msgType != websocket.MessageText {
+		t.Fatalf("message type = %v, want text", msgType)
 	}
 	if got := string(msg); got != `{"type":"heartbeat"}` {
 		t.Fatalf("message = %s, want {\"type\":\"heartbeat\"}", got)
