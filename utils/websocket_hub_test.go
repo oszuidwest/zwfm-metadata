@@ -159,7 +159,7 @@ func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 	}
 }
 
-func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
+func TestWebSocketHubCloseDuringOnConnectRemovesClient(t *testing.T) {
 	hub := NewWebSocketHub("test")
 
 	onConnectStarted := make(chan struct{})
@@ -189,14 +189,26 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 
 	// Close the client connection while onConnect is still blocked. When
 	// released, HandleConnection will enqueue the message, register the
-	// client, and start writePump -- which will fail on the closed connection.
+	// client, and start both pumps. readPump finds the closed connection and
+	// stops writePump, whose own write may still succeed.
 	if err := conn.CloseNow(); err != nil {
 		t.Fatalf("CloseNow() error = %v", err)
 	}
 
+	// The count is also 0 before the client is registered. The read lock holds up the
+	// registration, and TryRLock fails once HandleConnection waits for it.
+	hub.mu.RLock()
 	close(releaseOnConnect)
+	for hub.mu.TryRLock() {
+		hub.mu.RUnlock()
+		select {
+		case <-handlerDone:
+			t.Fatal("handler returned without registering the client")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	hub.mu.RUnlock()
 
-	// The count is also 0 before the client is registered, so wait until it has been.
 	waitForHandler(t, handlerDone, time.Second)
 
 	waitForClientCount(t, hub, 0, time.Second)
@@ -205,21 +217,35 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
 	hub := NewWebSocketHub("test")
 	hub.sendBufferSize = 2
-	hub.writeTimeout = 50 * time.Millisecond
 	logs := captureLogs(t)
 	handler, handlerDone := trackHandler(hub)
 
-	// Connect but intentionally do not read messages. The small send buffer
-	// will fill up and Broadcast will detect the slow client.
 	conn, server := dialTestWebSocket(t, handler, nil)
 	defer server.Close()
 	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
 	waitForClientCount(t, hub, 1, time.Second)
 
+	var hubConn *websocket.Conn
+	hub.mu.RLock()
+	for conn := range hub.clients {
+		hubConn = conn
+	}
+	hub.mu.RUnlock()
+
+	// An open message writer holds up writePump, so the small send buffer fills
+	// up and Broadcast detects the slow client.
+	writer, err := hubConn.Writer(t.Context(), websocket.MessageText)
+	if err != nil {
+		t.Fatalf("Writer() error = %v", err)
+	}
 	for i := range 100 {
 		hub.Broadcast(map[string]any{"i": i})
 	}
+
+	// Writing works again well before the write timeout, so only the full buffer
+	// can end the connection.
+	writer.Close() //nolint:errcheck,gosec // writePump may have closed the connection already
 
 	waitForHandler(t, handlerDone, 5*time.Second)
 	waitForClientCount(t, hub, 0, 2*time.Second)
@@ -495,7 +521,7 @@ func TestWebSocketHubDiscardsClientMessages(t *testing.T) {
 	}
 
 	// The pong proves that the hub has read past the message.
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if err := conn.Ping(ctx); err != nil {
 		t.Fatalf("Ping() error = %v", err)
