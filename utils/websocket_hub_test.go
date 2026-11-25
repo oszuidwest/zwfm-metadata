@@ -63,8 +63,11 @@ func TestWebSocketHubBroadcastSerializesConcurrentWriters(t *testing.T) {
 }
 
 func TestWebSocketHubBroadcastSerializesWithPingWriter(t *testing.T) {
+	const broadcasts = 300
+
 	hub := NewWebSocketHub("test")
 	hub.pingInterval = 5 * time.Millisecond
+	hub.sendBufferSize = broadcasts // the burst never makes the client too slow
 
 	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
@@ -73,7 +76,6 @@ func TestWebSocketHubBroadcastSerializesWithPingWriter(t *testing.T) {
 	messages := startMessageReader(conn)
 	waitForClientCount(t, hub, 1, time.Second)
 
-	const broadcasts = 300
 	for i := range broadcasts {
 		hub.Broadcast(map[string]any{
 			"id":   fmt.Sprintf("ping-race-%d", i),
