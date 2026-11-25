@@ -43,7 +43,7 @@ func NewWebSocketHub(name string) *WebSocketHub {
 		name:           name,
 		clients:        make(map[*websocket.Conn]*hubClient),
 		pingInterval:   30 * time.Second,
-		pongWait:       30 * time.Second,
+		pongWait:       60 * time.Second,
 		writeTimeout:   10 * time.Second,
 		sendBufferSize: defaultSendBufferSize,
 	}
@@ -76,8 +76,11 @@ func (h *WebSocketHub) disconnectClient(client *hubClient) {
 
 // HandleConnection upgrades an HTTP connection to WebSocket and manages its lifecycle.
 func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) {
-	// InsecureSkipVerify accepts connections from any origin.
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+	var pongDeadline *time.Timer // set before readPump, which handles the pongs
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true, // any origin may connect
+		OnPongReceived:     func(context.Context, []byte) { pongDeadline.Reset(h.pongWait) },
+	})
 	if err != nil {
 		// The error repeats request headers, which can be very long.
 		slog.Error("Failed to upgrade WebSocket connection", "hub", h.name, "error", fmt.Sprintf("%.200s", err))
@@ -119,6 +122,9 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	h.mu.Unlock()
 
 	slog.Debug("WebSocket client connected", "hub", h.name, "clients", clientCount)
+
+	pongDeadline = time.AfterFunc(h.pongWait, client.signalDone)
+	defer pongDeadline.Stop()
 
 	go h.writePump(client)
 	h.readPump(client)
@@ -167,15 +173,14 @@ func (h *WebSocketHub) writePump(client *hubClient) {
 	}
 }
 
-// ping sends a ping and signals the write pump to stop if it cannot be sent or no pong
-// arrives in time.
+// ping sends a ping and waits a moment for the pong. It does not drop the client, because
+// a later pong still counts. The pong deadline drops a client that stays silent.
 func (h *WebSocketHub) ping(client *hubClient) {
-	ctx, cancel := context.WithTimeout(context.Background(), h.pongWait)
+	ctx, cancel := context.WithTimeout(context.Background(), h.writeTimeout)
 	defer cancel()
 
 	if err := client.conn.Ping(ctx); err != nil {
 		slog.Debug("WebSocket ping failed", "hub", h.name, "error", err)
-		client.signalDone()
 	}
 }
 

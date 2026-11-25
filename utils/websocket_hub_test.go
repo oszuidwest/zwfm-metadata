@@ -1,9 +1,11 @@
 package utils
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/coder/websocket"
@@ -63,8 +66,11 @@ func TestWebSocketHubBroadcastSerializesConcurrentWriters(t *testing.T) {
 }
 
 func TestWebSocketHubBroadcastSerializesWithPingWriter(t *testing.T) {
+	const broadcasts = 300
+
 	hub := NewWebSocketHub("test")
 	hub.pingInterval = 5 * time.Millisecond
+	hub.sendBufferSize = broadcasts // the burst never makes the client too slow
 
 	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
@@ -73,7 +79,6 @@ func TestWebSocketHubBroadcastSerializesWithPingWriter(t *testing.T) {
 	messages := startMessageReader(conn)
 	waitForClientCount(t, hub, 1, time.Second)
 
-	const broadcasts = 300
 	for i := range broadcasts {
 		hub.Broadcast(map[string]any{
 			"id":   fmt.Sprintf("ping-race-%d", i),
@@ -342,40 +347,96 @@ func TestWebSocketHubDropsPeerThatStopsAnsweringPings(t *testing.T) {
 	waitForClientCount(t, hub, 0, time.Second)
 }
 
+// pipeResponse hands one end of a pipe to the handler as its connection.
+type pipeResponse struct {
+	*httptest.ResponseRecorder
+	conn net.Conn
+}
+
+func (p pipeResponse) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return p.conn, bufio.NewReadWriter(bufio.NewReader(p.conn), bufio.NewWriter(p.conn)), nil
+}
+
+func TestWebSocketHubCountsDeadlineFromLastPong(t *testing.T) {
+	tests := []struct {
+		name  string
+		pongs []time.Duration
+		want  time.Duration
+	}{
+		{"no pong", nil, 60 * time.Second},
+		{"pong 10 seconds after the ping, then silence", []time.Duration{40 * time.Second}, 100 * time.Second},
+		{"pongs 29 and 58 seconds after the ping", []time.Duration{59 * time.Second, 118 * time.Second}, 178 * time.Second},
+		{"unsolicited pong before the first ping", []time.Duration{time.Second}, 61 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				hub := NewWebSocketHub("test")
+				server, client := net.Pipe()
+				defer client.Close() //nolint:errcheck // Best-effort cleanup
+
+				r := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+				r.Header.Set("Connection", "Upgrade")
+				r.Header.Set("Upgrade", "websocket")
+				r.Header.Set("Sec-WebSocket-Version", "13")
+				r.Header.Set("Sec-WebSocket-Key", "AAAAAAAAAAAAAAAAAAAAAA==")
+
+				start := time.Now()
+				go io.Copy(io.Discard, client) //nolint:errcheck // Ends when the hub closes the pipe
+				for i, at := range tt.pongs {
+					time.AfterFunc(at, func() {
+						client.Write([]byte{0x8a, 0x81, 0, 0, 0, 0, byte('1' + i)}) //nolint:errcheck,gosec // The hub may have closed the pipe
+					})
+				}
+
+				hub.HandleConnection(pipeResponse{httptest.NewRecorder(), server}, r)
+				if got := time.Since(start); got != tt.want {
+					t.Fatalf("dropped after %v, want %v", got, tt.want)
+				}
+			})
+		})
+	}
+}
+
 func TestWebSocketHubDropsPeerInEndlessFrame(t *testing.T) {
-	hub := NewWebSocketHub("test")
-	hub.pingInterval = 20 * time.Millisecond
-	hub.pongWait = 50 * time.Millisecond
+	for name, keepsSending := range map[string]bool{"keeps sending": true, "stops sending": false} {
+		t.Run(name, func(t *testing.T) {
+			hub := NewWebSocketHub("test")
+			hub.pingInterval = 20 * time.Millisecond
+			hub.pongWait = 50 * time.Millisecond
 
-	handler, handlerDone := trackHandler(hub)
-	server := httptest.NewServer(handler)
-	defer server.Close()
+			handler, handlerDone := trackHandler(hub)
+			server := httptest.NewServer(handler)
+			defer server.Close()
 
-	conn, err := net.Dial("tcp", server.Listener.Addr().String())
-	if err != nil {
-		t.Fatalf("Dial() error = %v", err)
-	}
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
-
-	// A binary frame header that announces 1 TiB, followed by payload without end.
-	// The peer cannot answer a ping or a close frame in the middle of a frame.
-	request := "GET / HTTP/1.1\r\nHost: test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n" +
-		"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: AAAAAAAAAAAAAAAAAAAAAA==\r\n\r\n"
-	header := "\x82\xff\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-	if _, err := conn.Write([]byte(request + header)); err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-	go func() {
-		payload := make([]byte, 1024)
-		for {
-			if _, err := conn.Write(payload); err != nil {
-				return
+			conn, err := net.Dial("tcp", server.Listener.Addr().String())
+			if err != nil {
+				t.Fatalf("Dial() error = %v", err)
 			}
-			time.Sleep(time.Millisecond)
-		}
-	}()
+			defer conn.Close() //nolint:errcheck // Best-effort cleanup
 
-	waitForHandler(t, handlerDone, 2*time.Second)
+			// A binary frame header that announces 1 TiB. The peer cannot answer a ping
+			// or a close frame in the middle of a frame.
+			request := "GET / HTTP/1.1\r\nHost: test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n" +
+				"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: AAAAAAAAAAAAAAAAAAAAAA==\r\n\r\n"
+			header := "\x82\xff\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+			if _, err := conn.Write([]byte(request + header)); err != nil {
+				t.Fatalf("Write() error = %v", err)
+			}
+			go func() {
+				payload := make([]byte, 1024)
+				for keepsSending {
+					if _, err := conn.Write(payload); err != nil {
+						return
+					}
+					time.Sleep(time.Millisecond)
+				}
+			}()
+
+			waitForHandler(t, handlerDone, 2*time.Second)
+		})
+	}
 }
 
 func TestWebSocketHubPendingPongDoesNotHoldUpMessages(t *testing.T) {
