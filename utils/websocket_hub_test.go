@@ -4,16 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/coder/websocket"
@@ -164,7 +161,7 @@ func TestWebSocketHubCloseDuringOnConnectRemovesClient(t *testing.T) {
 
 	onConnectStarted := make(chan struct{})
 	releaseOnConnect := make(chan struct{})
-	disconnected := make(chan struct{}, 1)
+	handler, handlerDone := trackHandler(hub)
 
 	hub.SetOnConnect(func() any {
 		close(onConnectStarted)
@@ -175,14 +172,7 @@ func TestWebSocketHubCloseDuringOnConnectRemovesClient(t *testing.T) {
 		}
 	})
 
-	hub.SetOnDisconnect(func() {
-		select {
-		case disconnected <- struct{}{}:
-		default:
-		}
-	})
-
-	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
+	conn, server := dialTestWebSocket(t, handler, nil)
 	defer server.Close()
 	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
@@ -204,75 +194,69 @@ func TestWebSocketHubCloseDuringOnConnectRemovesClient(t *testing.T) {
 
 	close(releaseOnConnect)
 
-	select {
-	case <-disconnected:
-	case <-time.After(time.Second):
-		t.Fatal("expected onDisconnect callback for a client that left during onConnect")
-	}
+	// The count is also 0 before the client is registered, so wait until it has been.
+	waitForHandler(t, handlerDone, time.Second)
 
 	waitForClientCount(t, hub, 0, time.Second)
 }
 
 func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		hub := NewWebSocketHub("test")
-		hub.sendBufferSize = 1
-		logs := captureLogs(t)
+	hub := NewWebSocketHub("test")
+	hub.sendBufferSize = 2
+	logs := captureLogs(t)
+	handler, handlerDone := trackHandler(hub)
 
-		var disconnects atomic.Int32
-		hub.SetOnDisconnect(func() { disconnects.Add(1) })
+	conn, server := dialTestWebSocket(t, handler, nil)
+	defer server.Close()
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
-		_, _, stall := dialStalledClient(t, hub)
-		overflowSendBuffer(hub)
+	waitForClientCount(t, hub, 1, time.Second)
 
-		// Writing works again, so only the overflow can end the connection.
-		if err := stall.Close(); err != nil {
-			t.Fatalf("Close() error = %v", err)
-		}
-		synctest.Wait()
+	var hubConn *websocket.Conn
+	hub.mu.RLock()
+	for conn := range hub.clients {
+		hubConn = conn
+	}
+	hub.mu.RUnlock()
 
-		if got := disconnects.Load(); got != 1 {
-			t.Fatalf("onDisconnect called %d times, want 1", got)
-		}
-		if got := hub.ClientCount(); got != 0 {
-			t.Fatalf("ClientCount() = %d, want 0", got)
-		}
-		if got := strings.Count(logs.String(), "too slow"); got != 1 {
-			t.Fatalf("logged %d slow client warnings, want 1", got)
-		}
-		if !strings.Contains(logs.String(), "remote_addr=192.0.2.1:") {
-			t.Fatalf("log = %s, want the client address", logs)
-		}
-	})
+	// An open message writer holds up writePump, so the small send buffer fills
+	// up and Broadcast detects the slow client.
+	writer, err := hubConn.Writer(t.Context(), websocket.MessageText)
+	if err != nil {
+		t.Fatalf("Writer() error = %v", err)
+	}
+	for i := range 100 {
+		hub.Broadcast(map[string]any{"i": i})
+	}
+
+	// Writing works again well before the write timeout, so only the full buffer
+	// can end the connection.
+	writer.Close() //nolint:errcheck,gosec // writePump may have closed the connection already
+
+	waitForHandler(t, handlerDone, 5*time.Second)
+	waitForClientCount(t, hub, 0, 2*time.Second)
+
+	if got := strings.Count(logs.String(), "too slow"); got != 1 {
+		t.Fatalf("logged %d slow client warnings, want 1", got)
+	}
+	if !strings.Contains(logs.String(), "remote_addr=127.0.0.1:") {
+		t.Fatalf("log = %s, want the client address", logs)
+	}
 }
 
 func TestWebSocketHubClientInitiatedClose(t *testing.T) {
 	hub := NewWebSocketHub("test")
-
-	disconnected := make(chan struct{}, 1)
-	hub.SetOnDisconnect(func() {
-		select {
-		case disconnected <- struct{}{}:
-		default:
-		}
-	})
 
 	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
 
 	waitForClientCount(t, hub, 1, time.Second)
 
-	// Client-initiated close: readPump detects the closed connection,
-	// signals done, writePump exits via its deferred disconnectClient.
+	// Client-initiated close: readPump detects the closed connection and
+	// returns, which makes writePump exit via its deferred disconnectClient.
 	conn.Close(websocket.StatusNormalClosure, "") //nolint:errcheck,gosec // Best-effort cleanup
 
-	select {
-	case <-disconnected:
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected onDisconnect after client-initiated close")
-	}
-
-	waitForClientCount(t, hub, 0, time.Second)
+	waitForClientCount(t, hub, 0, 2*time.Second)
 }
 
 func TestWebSocketHubBroadcastMarshalFailure(t *testing.T) {
@@ -315,36 +299,6 @@ func TestWebSocketHubOnConnectMarshalFailureRemovesClient(t *testing.T) {
 	if got := hub.ClientCount(); got != 0 {
 		t.Fatalf("ClientCount() = %d after onConnect marshal failure, want 0", got)
 	}
-}
-
-func TestWebSocketHubOnDisconnectCalledOnce(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		hub := NewWebSocketHub("test")
-		hub.sendBufferSize = 1
-
-		var disconnects atomic.Int32
-		hub.SetOnDisconnect(func() { disconnects.Add(1) })
-
-		// A slow client that also goes away ends the connection in three ways:
-		// Broadcast and readPump signal done, and the stalled write times out.
-		conn, client, _ := dialStalledClient(t, hub)
-		overflowSendBuffer(hub)
-		if err := conn.CloseNow(); err != nil {
-			t.Fatalf("CloseNow() error = %v", err)
-		}
-		time.Sleep(hub.writeTimeout)
-		synctest.Wait()
-
-		if got := hub.ClientCount(); got != 0 {
-			t.Fatalf("ClientCount() = %d, want 0", got)
-		}
-
-		// A second cleanup of the same client must not report it again.
-		hub.disconnectClient(client)
-		if got := disconnects.Load(); got != 1 {
-			t.Fatalf("onDisconnect called %d times, want 1", got)
-		}
-	})
 }
 
 func TestWebSocketHubSendsHeartbeatWhenIdle(t *testing.T) {
@@ -395,19 +349,14 @@ func TestWebSocketHubDropsPeerThatStopsAnsweringPings(t *testing.T) {
 	hub.pingInterval = 20 * time.Millisecond
 	hub.pongWait = 50 * time.Millisecond
 
-	disconnected := make(chan struct{}, 1)
-	hub.SetOnDisconnect(func() { disconnected <- struct{}{} })
-
 	// A client that does not read does not answer pings either.
-	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
+	handler, handlerDone := trackHandler(hub)
+	conn, server := dialTestWebSocket(t, handler, nil)
 	defer server.Close()
 	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
-	select {
-	case <-disconnected:
-	case <-time.After(time.Second):
-		t.Fatal("expected a peer that does not answer pings to be disconnected")
-	}
+	waitForHandler(t, handlerDone, time.Second)
+	waitForClientCount(t, hub, 0, time.Second)
 }
 
 func TestWebSocketHubDropsPeerInEndlessFrame(t *testing.T) {
@@ -415,11 +364,8 @@ func TestWebSocketHubDropsPeerInEndlessFrame(t *testing.T) {
 	hub.pingInterval = 20 * time.Millisecond
 	hub.pongWait = 50 * time.Millisecond
 
-	handlerDone := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer close(handlerDone)
-		hub.HandleConnection(w, r)
-	}))
+	handler, handlerDone := trackHandler(hub)
+	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	conn, err := net.Dial("tcp", server.Listener.Addr().String())
@@ -446,11 +392,7 @@ func TestWebSocketHubDropsPeerInEndlessFrame(t *testing.T) {
 		}
 	}()
 
-	select {
-	case <-handlerDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected a peer in an endless frame to be disconnected")
-	}
+	waitForHandler(t, handlerDone, 2*time.Second)
 }
 
 func TestWebSocketHubPendingPongDoesNotHoldUpMessages(t *testing.T) {
@@ -569,45 +511,24 @@ func dialTestWebSocket(t *testing.T, handler http.HandlerFunc, opts *websocket.D
 	return conn, server
 }
 
-// dialStalledClient connects a client to which the hub cannot write until stall
-// is closed. It must run in a synctest bubble.
-func dialStalledClient(t *testing.T, hub *WebSocketHub) (conn *websocket.Conn, client *hubClient, stall io.Closer) {
-	t.Helper()
+// trackHandler returns the hub's handler and a channel that closes when the handler
+// returns for its one connection, which it does once readPump has ended.
+func trackHandler(hub *WebSocketHub) (handler http.HandlerFunc, returned <-chan struct{}) {
+	done := make(chan struct{})
 
-	server := httptest.NewTestServer(t, http.HandlerFunc(hub.HandleConnection))
-	conn, resp, err := websocket.Dial(t.Context(), server.URL, &websocket.DialOptions{HTTPClient: server.Client()})
-	if err != nil {
-		t.Fatalf("Dial() error = %v", err)
-	}
-	t.Cleanup(func() { conn.CloseNow() }) //nolint:errcheck,gosec // Best-effort cleanup
-	if resp != nil && resp.Body != nil {
-		resp.Body.Close() //nolint:errcheck,gosec // Best-effort cleanup
-	}
-
-	synctest.Wait()
-	hub.mu.RLock()
-	for _, c := range hub.clients {
-		client = c
-	}
-	hub.mu.RUnlock()
-	if client == nil {
-		t.Fatal("client is not registered")
-	}
-
-	// An open message writer holds up every other message on the connection.
-	stall, err = client.conn.Writer(t.Context(), websocket.MessageText)
-	if err != nil {
-		t.Fatalf("Writer() error = %v", err)
-	}
-	return conn, client, stall
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer close(done)
+		hub.HandleConnection(w, r)
+	}, done
 }
 
-// overflowSendBuffer broadcasts until a stalled client with a send buffer of one
-// has a message being written, a message queued and a message that does not fit.
-func overflowSendBuffer(hub *WebSocketHub) {
-	for i := range 3 {
-		hub.Broadcast(map[string]any{"i": i})
-		synctest.Wait()
+func waitForHandler(t *testing.T, done <-chan struct{}, timeout time.Duration) {
+	t.Helper()
+
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		t.Fatal("timed out waiting for HandleConnection to return")
 	}
 }
 
