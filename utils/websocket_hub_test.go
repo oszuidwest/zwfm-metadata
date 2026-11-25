@@ -195,9 +195,20 @@ func TestWebSocketHubCloseDuringOnConnectRemovesClient(t *testing.T) {
 		t.Fatalf("CloseNow() error = %v", err)
 	}
 
+	// The count is also 0 before the client is registered. The read lock holds up the
+	// registration, and TryRLock fails once HandleConnection waits for it.
+	hub.mu.RLock()
 	close(releaseOnConnect)
+	for hub.mu.TryRLock() {
+		hub.mu.RUnlock()
+		select {
+		case <-handlerDone:
+			t.Fatal("handler returned without registering the client")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	hub.mu.RUnlock()
 
-	// The count is also 0 before the client is registered, so wait until it has been.
 	waitForHandler(t, handlerDone, time.Second)
 
 	waitForClientCount(t, hub, 0, time.Second)
