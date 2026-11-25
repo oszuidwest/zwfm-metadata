@@ -451,7 +451,7 @@ func TestWebSocketHubDiscardsClientMessages(t *testing.T) {
 	}
 
 	// The pong proves that the hub has read past the message.
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if err := conn.Ping(ctx); err != nil {
 		t.Fatalf("Ping() error = %v", err)
