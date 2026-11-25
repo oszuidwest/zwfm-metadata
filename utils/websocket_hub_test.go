@@ -1,9 +1,11 @@
 package utils
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/coder/websocket"
@@ -438,6 +441,58 @@ func TestWebSocketHubDropsPeerThatStopsAnsweringPings(t *testing.T) {
 	case <-disconnected:
 	case <-time.After(time.Second):
 		t.Fatal("expected a peer that does not answer pings to be disconnected")
+	}
+}
+
+// pipeResponse hands one end of a pipe to the handler as its connection.
+type pipeResponse struct {
+	*httptest.ResponseRecorder
+	conn net.Conn
+}
+
+func (p pipeResponse) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return p.conn, bufio.NewReadWriter(bufio.NewReader(p.conn), bufio.NewWriter(p.conn)), nil
+}
+
+func TestWebSocketHubCountsDeadlineFromLastPong(t *testing.T) {
+	tests := []struct {
+		name  string
+		pongs []time.Duration
+		want  time.Duration
+	}{
+		{"no pong", nil, 60 * time.Second},
+		{"pong 10 seconds after the ping, then silence", []time.Duration{40 * time.Second}, 100 * time.Second},
+		{"pongs 29 and 58 seconds after the ping", []time.Duration{59 * time.Second, 118 * time.Second}, 178 * time.Second},
+		{"unsolicited pong before the first ping", []time.Duration{time.Second}, 61 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				hub := NewWebSocketHub("test")
+				server, client := net.Pipe()
+				defer client.Close() //nolint:errcheck // Best-effort cleanup
+
+				r := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+				r.Header.Set("Connection", "Upgrade")
+				r.Header.Set("Upgrade", "websocket")
+				r.Header.Set("Sec-WebSocket-Version", "13")
+				r.Header.Set("Sec-WebSocket-Key", "AAAAAAAAAAAAAAAAAAAAAA==")
+
+				start := time.Now()
+				go io.Copy(io.Discard, client) //nolint:errcheck // Ends when the hub closes the pipe
+				for i, at := range tt.pongs {
+					time.AfterFunc(at, func() {
+						client.Write([]byte{0x8a, 0x81, 0, 0, 0, 0, byte('1' + i)}) //nolint:errcheck,gosec // The hub may have closed the pipe
+					})
+				}
+
+				hub.HandleConnection(pipeResponse{httptest.NewRecorder(), server}, r)
+				if got := time.Since(start); got != tt.want {
+					t.Fatalf("dropped after %v, want %v", got, tt.want)
+				}
+			})
+		})
 	}
 }
 
