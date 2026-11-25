@@ -1,22 +1,30 @@
 package utils
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	"fmt"
+	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 )
 
 func TestWebSocketHubBroadcastSerializesConcurrentWriters(t *testing.T) {
 	hub := NewWebSocketHub("test")
-	conn, server := dialTestWebSocket(t, hub)
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
 	messages := startMessageReader(conn)
 	waitForClientCount(t, hub, 1, time.Second)
@@ -58,33 +66,35 @@ func TestWebSocketHubBroadcastSerializesConcurrentWriters(t *testing.T) {
 }
 
 func TestWebSocketHubBroadcastSerializesWithPingWriter(t *testing.T) {
+	const broadcasts = 300
+
 	hub := NewWebSocketHub("test")
 	hub.pingInterval = 5 * time.Millisecond
+	hub.sendBufferSize = broadcasts // the burst never makes the client too slow
 
-	conn, server := dialTestWebSocket(t, hub)
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
 	messages := startMessageReader(conn)
 	waitForClientCount(t, hub, 1, time.Second)
 
-	const broadcasts = 30
-	expectedIDs := make(map[string]struct{}, broadcasts)
-
 	for i := range broadcasts {
-		id := fmt.Sprintf("ping-race-%d", i)
-		expectedIDs[id] = struct{}{}
-
 		hub.Broadcast(map[string]any{
-			"id":   id,
+			"id":   fmt.Sprintf("ping-race-%d", i),
 			"kind": "broadcast",
 		})
 
-		time.Sleep(2 * time.Millisecond)
+		if i%10 == 9 {
+			time.Sleep(2 * time.Millisecond)
+		}
 	}
 
-	received := waitForMessages(t, messages, len(expectedIDs), 5*time.Second)
-	assertMessageIDs(t, received, expectedIDs)
+	for i, message := range waitForMessages(t, messages, broadcasts, 5*time.Second) {
+		if want := fmt.Sprintf("ping-race-%d", i); message["id"] != want {
+			t.Fatalf("message %d has id %v, want %s", i, message["id"], want)
+		}
+	}
 
 	if got := hub.ClientCount(); got != 1 {
 		t.Fatalf("ClientCount() = %d, want 1", got)
@@ -101,9 +111,9 @@ func TestWebSocketHubBroadcastSerializesWithOnConnectWriter(t *testing.T) {
 		}
 	})
 
-	conn, server := dialTestWebSocket(t, hub)
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
 	messages := startMessageReader(conn)
 	waitForClientCount(t, hub, 1, time.Second)
@@ -172,9 +182,9 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 		}
 	})
 
-	conn, server := dialTestWebSocket(t, hub)
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
 	// The client is not yet registered (onConnect is blocking), so we wait
 	// for the callback to start instead of polling ClientCount.
@@ -187,8 +197,8 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 	// Close the client connection while onConnect is still blocked. When
 	// released, HandleConnection will enqueue the message, register the
 	// client, and start writePump -- which will fail on the closed connection.
-	if err := conn.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
+	if err := conn.CloseNow(); err != nil {
+		t.Fatalf("CloseNow() error = %v", err)
 	}
 
 	close(releaseOnConnect)
@@ -206,6 +216,7 @@ func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
 	hub := NewWebSocketHub("test")
 	hub.sendBufferSize = 2
 	hub.writeTimeout = 50 * time.Millisecond
+	logs := captureLogs(t)
 
 	disconnected := make(chan struct{}, 1)
 	hub.SetOnDisconnect(func() {
@@ -217,9 +228,9 @@ func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
 
 	// Connect but intentionally do not read messages. The small send buffer
 	// will fill up and Broadcast will detect the slow client.
-	conn, server := dialTestWebSocket(t, hub)
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
 	waitForClientCount(t, hub, 1, time.Second)
 
@@ -234,6 +245,13 @@ func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
 	}
 
 	waitForClientCount(t, hub, 0, 2*time.Second)
+
+	if got := strings.Count(logs.String(), "too slow"); got != 1 {
+		t.Fatalf("logged %d slow client warnings, want 1", got)
+	}
+	if !strings.Contains(logs.String(), "remote_addr=127.0.0.1:") {
+		t.Fatalf("log = %s, want the client address", logs)
+	}
 }
 
 func TestWebSocketHubClientInitiatedClose(t *testing.T) {
@@ -247,19 +265,14 @@ func TestWebSocketHubClientInitiatedClose(t *testing.T) {
 		}
 	})
 
-	conn, server := dialTestWebSocket(t, hub)
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
 
 	waitForClientCount(t, hub, 1, time.Second)
 
 	// Client-initiated close: readPump detects the closed connection,
-	// signals done, writePump sends a close frame and exits via its
-	// deferred disconnectClient.
-	conn.WriteMessage( //nolint:errcheck,gosec // Best-effort close frame
-		websocket.CloseMessage,
-		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
-	)
-	conn.Close() //nolint:errcheck,gosec // Best-effort cleanup
+	// signals done, writePump exits via its deferred disconnectClient.
+	conn.Close(websocket.StatusNormalClosure, "") //nolint:errcheck,gosec // Best-effort cleanup
 
 	select {
 	case <-disconnected:
@@ -273,9 +286,9 @@ func TestWebSocketHubClientInitiatedClose(t *testing.T) {
 func TestWebSocketHubBroadcastMarshalFailure(t *testing.T) {
 	hub := NewWebSocketHub("test")
 
-	conn, server := dialTestWebSocket(t, hub)
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
 	waitForClientCount(t, hub, 1, time.Second)
 
@@ -295,13 +308,17 @@ func TestWebSocketHubOnConnectMarshalFailureRemovesClient(t *testing.T) {
 		return make(chan int)
 	})
 
-	conn, server := dialTestWebSocket(t, hub)
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
 	// The marshal failure in HandleConnection closes the connection
 	// before registration, so the client never appears in the map.
-	time.Sleep(100 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if _, _, err := conn.Read(ctx); err == nil || ctx.Err() != nil {
+		t.Fatalf("Read() error = %v, want a closed connection", err)
+	}
 
 	if got := hub.ClientCount(); got != 0 {
 		t.Fatalf("ClientCount() = %d after onConnect marshal failure, want 0", got)
@@ -326,9 +343,13 @@ func TestWebSocketHubOnDisconnectCalledOnce(t *testing.T) {
 	})
 
 	// Connect but do not read, so the send buffer fills quickly.
-	conn, server := dialTestWebSocket(t, hub)
+	handlerDone := make(chan struct{})
+	conn, server := dialTestWebSocket(t, func(w http.ResponseWriter, r *http.Request) {
+		defer close(handlerDone)
+		hub.HandleConnection(w, r)
+	}, nil)
 	defer server.Close()
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
 	waitForClientCount(t, hub, 1, time.Second)
 
@@ -341,6 +362,14 @@ func TestWebSocketHubOnDisconnectCalledOnce(t *testing.T) {
 
 	count.Wait()
 	waitForClientCount(t, hub, 0, 2*time.Second)
+
+	// The handler returns when readPump does. Both pumps have to be past their
+	// cleanup before the calls are counted.
+	select {
+	case <-handlerDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("readPump did not exit")
+	}
 
 	// Give any stray goroutines a moment to settle.
 	time.Sleep(50 * time.Millisecond)
@@ -356,9 +385,9 @@ func TestWebSocketHubSendsHeartbeatWhenIdle(t *testing.T) {
 	hub := NewWebSocketHub("test")
 	hub.SetHeartbeat(20*time.Millisecond, []byte(`{"kind":"heartbeat"}`))
 
-	conn, server := dialTestWebSocket(t, hub)
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
 	messages := startMessageReader(conn)
 	for _, message := range waitForMessages(t, messages, 2, time.Second) {
@@ -372,9 +401,9 @@ func TestWebSocketHubBroadcastPostponesHeartbeat(t *testing.T) {
 	hub := NewWebSocketHub("test")
 	hub.SetHeartbeat(250*time.Millisecond, []byte(`{"kind":"heartbeat"}`))
 
-	conn, server := dialTestWebSocket(t, hub)
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
 	messages := startMessageReader(conn)
 	waitForClientCount(t, hub, 1, time.Second)
@@ -395,13 +424,229 @@ func TestWebSocketHubBroadcastPostponesHeartbeat(t *testing.T) {
 	}
 }
 
-func dialTestWebSocket(t *testing.T, hub *WebSocketHub) (*websocket.Conn, *httptest.Server) {
+func TestWebSocketHubDropsPeerThatStopsAnsweringPings(t *testing.T) {
+	hub := NewWebSocketHub("test")
+	hub.pingInterval = 20 * time.Millisecond
+	hub.pongWait = 50 * time.Millisecond
+
+	disconnected := make(chan struct{}, 1)
+	hub.SetOnDisconnect(func() { disconnected <- struct{}{} })
+
+	// A client that does not read does not answer pings either.
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
+	defer server.Close()
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
+
+	select {
+	case <-disconnected:
+	case <-time.After(time.Second):
+		t.Fatal("expected a peer that does not answer pings to be disconnected")
+	}
+}
+
+// pipeResponse hands one end of a pipe to the handler as its connection.
+type pipeResponse struct {
+	*httptest.ResponseRecorder
+	conn net.Conn
+}
+
+func (p pipeResponse) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return p.conn, bufio.NewReadWriter(bufio.NewReader(p.conn), bufio.NewWriter(p.conn)), nil
+}
+
+func TestWebSocketHubCountsDeadlineFromLastPong(t *testing.T) {
+	tests := []struct {
+		name  string
+		pongs []time.Duration
+		want  time.Duration
+	}{
+		{"no pong", nil, 60 * time.Second},
+		{"pong 10 seconds after the ping, then silence", []time.Duration{40 * time.Second}, 100 * time.Second},
+		{"pongs 29 and 58 seconds after the ping", []time.Duration{59 * time.Second, 118 * time.Second}, 178 * time.Second},
+		{"unsolicited pong before the first ping", []time.Duration{time.Second}, 61 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				hub := NewWebSocketHub("test")
+				server, client := net.Pipe()
+				defer client.Close() //nolint:errcheck // Best-effort cleanup
+
+				r := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+				r.Header.Set("Connection", "Upgrade")
+				r.Header.Set("Upgrade", "websocket")
+				r.Header.Set("Sec-WebSocket-Version", "13")
+				r.Header.Set("Sec-WebSocket-Key", "AAAAAAAAAAAAAAAAAAAAAA==")
+
+				start := time.Now()
+				go io.Copy(io.Discard, client) //nolint:errcheck // Ends when the hub closes the pipe
+				for i, at := range tt.pongs {
+					time.AfterFunc(at, func() {
+						client.Write([]byte{0x8a, 0x81, 0, 0, 0, 0, byte('1' + i)}) //nolint:errcheck,gosec // The hub may have closed the pipe
+					})
+				}
+
+				hub.HandleConnection(pipeResponse{httptest.NewRecorder(), server}, r)
+				if got := time.Since(start); got != tt.want {
+					t.Fatalf("dropped after %v, want %v", got, tt.want)
+				}
+			})
+		})
+	}
+}
+
+func TestWebSocketHubDropsPeerInEndlessFrame(t *testing.T) {
+	for name, keepsSending := range map[string]bool{"keeps sending": true, "stops sending": false} {
+		t.Run(name, func(t *testing.T) {
+			hub := NewWebSocketHub("test")
+			hub.pingInterval = 20 * time.Millisecond
+			hub.pongWait = 50 * time.Millisecond
+
+			handlerDone := make(chan struct{})
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer close(handlerDone)
+				hub.HandleConnection(w, r)
+			}))
+			defer server.Close()
+
+			conn, err := net.Dial("tcp", server.Listener.Addr().String())
+			if err != nil {
+				t.Fatalf("Dial() error = %v", err)
+			}
+			defer conn.Close() //nolint:errcheck // Best-effort cleanup
+
+			// A binary frame header that announces 1 TiB. The peer cannot answer a ping
+			// or a close frame in the middle of a frame.
+			request := "GET / HTTP/1.1\r\nHost: test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n" +
+				"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: AAAAAAAAAAAAAAAAAAAAAA==\r\n\r\n"
+			header := "\x82\xff\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+			if _, err := conn.Write([]byte(request + header)); err != nil {
+				t.Fatalf("Write() error = %v", err)
+			}
+			go func() {
+				payload := make([]byte, 1024)
+				for keepsSending {
+					if _, err := conn.Write(payload); err != nil {
+						return
+					}
+					time.Sleep(time.Millisecond)
+				}
+			}()
+
+			select {
+			case <-handlerDone:
+			case <-time.After(2 * time.Second):
+				t.Fatal("expected a peer in an endless frame to be disconnected")
+			}
+		})
+	}
+}
+
+func TestWebSocketHubPendingPongDoesNotHoldUpMessages(t *testing.T) {
+	hub := NewWebSocketHub("test")
+	hub.pingInterval = 20 * time.Millisecond
+
+	pinged := make(chan struct{}, 1)
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, &websocket.DialOptions{
+		OnPingReceived: func(context.Context, []byte) bool {
+			select {
+			case pinged <- struct{}{}:
+			default:
+			}
+			return false
+		},
+	})
+	defer server.Close()
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
+
+	messages := startMessageReader(conn)
+	select {
+	case <-pinged:
+	case <-time.After(time.Second):
+		t.Fatal("expected a ping")
+	}
+
+	hub.Broadcast(map[string]any{"kind": "broadcast"})
+	waitForMessages(t, messages, 1, time.Second)
+}
+
+func TestWebSocketHubDropsClientOnWriteTimeout(t *testing.T) {
+	hub := NewWebSocketHub("test")
+	hub.writeTimeout = 50 * time.Millisecond
+
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
+	defer server.Close()
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
+
+	waitForClientCount(t, hub, 1, time.Second)
+
+	// Too large for the socket buffers, so the write stalls on a client that does not read.
+	hub.BroadcastMessage(make([]byte, 32<<20))
+	waitForClientCount(t, hub, 0, 2*time.Second)
+}
+
+func TestWebSocketHubDiscardsClientMessages(t *testing.T) {
+	hub := NewWebSocketHub("test")
+
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
+	defer server.Close()
+	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
+
+	conn.CloseRead(t.Context())
+	if err := conn.Write(t.Context(), websocket.MessageBinary, make([]byte, 1<<20)); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	// The pong proves that the hub has read past the message.
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if err := conn.Ping(ctx); err != nil {
+		t.Fatalf("Ping() error = %v", err)
+	}
+}
+
+func TestWebSocketHubAcceptsAnyOrigin(t *testing.T) {
+	hub := NewWebSocketHub("test")
+
+	conn, server := dialTestWebSocket(t, hub.HandleConnection, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Origin": {"https://other.example"}},
+	})
+	conn.CloseNow() //nolint:errcheck,gosec // Best-effort cleanup
+	server.Close()
+}
+
+func TestWebSocketHubLimitsUpgradeErrorLog(t *testing.T) {
+	hub := NewWebSocketHub("test")
+	logs := captureLogs(t)
+
+	r := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	r.Header.Set("Connection", strings.Repeat("x", 10000))
+	hub.HandleConnection(httptest.NewRecorder(), r)
+
+	if !strings.Contains(logs.String(), "Failed to upgrade") || logs.Len() > 1000 {
+		t.Fatalf("log has %d bytes, want one short upgrade error", logs.Len())
+	}
+}
+
+// captureLogs redirects the default logger to a buffer for the duration of the test.
+func captureLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 
-	server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
-	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	return &logs
+}
+
+func dialTestWebSocket(t *testing.T, handler http.HandlerFunc, opts *websocket.DialOptions) (*websocket.Conn, *httptest.Server) {
+	t.Helper()
+
+	server := httptest.NewServer(handler)
+
+	conn, resp, err := websocket.Dial(t.Context(), server.URL, opts)
 	if err != nil {
 		server.Close()
 		t.Fatalf("Dial() error = %v", err)
@@ -422,7 +667,7 @@ func startMessageReader(conn *websocket.Conn) <-chan map[string]any {
 
 		for {
 			var message map[string]any
-			if err := conn.ReadJSON(&message); err != nil {
+			if err := wsjson.Read(context.Background(), conn, &message); err != nil {
 				return
 			}
 			messages <- message
