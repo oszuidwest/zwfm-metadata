@@ -76,7 +76,13 @@ func (h *WebSocketHub) disconnectClient(client *hubClient) {
 
 // HandleConnection upgrades an HTTP connection to WebSocket and manages its lifecycle.
 func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) {
-	var pongDeadline *time.Timer // set before readPump, which handles the pongs
+	// The deferred cancel runs when readPump returns and tells writePump to stop.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pongDeadline := time.AfterFunc(h.pongWait, cancel)
+	defer pongDeadline.Stop()
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true, // any origin may connect
 		OnPongReceived:     func(context.Context, []byte) { pongDeadline.Reset(h.pongWait) },
@@ -86,10 +92,6 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		slog.Error("Failed to upgrade WebSocket connection", "hub", h.name, "error", fmt.Sprintf("%.200s", err))
 		return
 	}
-
-	// The deferred cancel runs when readPump returns and tells writePump to stop.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	client := &hubClient{
 		conn:       conn,
@@ -122,9 +124,6 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	h.mu.Unlock()
 
 	slog.Debug("WebSocket client connected", "hub", h.name, "clients", clientCount)
-
-	pongDeadline = time.AfterFunc(h.pongWait, client.signalDone)
-	defer pongDeadline.Stop()
 
 	go h.writePump(client)
 	h.readPump(client)
