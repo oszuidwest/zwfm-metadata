@@ -164,7 +164,7 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 
 	onConnectStarted := make(chan struct{})
 	releaseOnConnect := make(chan struct{})
-	disconnected := make(chan struct{}, 1)
+	handler, handlerDone := trackHandler(hub)
 
 	hub.SetOnConnect(func() any {
 		close(onConnectStarted)
@@ -175,14 +175,7 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 		}
 	})
 
-	hub.SetOnDisconnect(func() {
-		select {
-		case disconnected <- struct{}{}:
-		default:
-		}
-	})
-
-	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
+	conn, server := dialTestWebSocket(t, handler, nil)
 	defer server.Close()
 	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
@@ -203,11 +196,8 @@ func TestWebSocketHubOnConnectWriteFailureRemovesClient(t *testing.T) {
 
 	close(releaseOnConnect)
 
-	select {
-	case <-disconnected:
-	case <-time.After(time.Second):
-		t.Fatal("expected onDisconnect callback after failed initial write")
-	}
+	// The count is also 0 before the client is registered, so wait until it has been.
+	waitForHandler(t, handlerDone, time.Second)
 
 	waitForClientCount(t, hub, 0, time.Second)
 }
@@ -217,18 +207,11 @@ func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
 	hub.sendBufferSize = 2
 	hub.writeTimeout = 50 * time.Millisecond
 	logs := captureLogs(t)
-
-	disconnected := make(chan struct{}, 1)
-	hub.SetOnDisconnect(func() {
-		select {
-		case disconnected <- struct{}{}:
-		default:
-		}
-	})
+	handler, handlerDone := trackHandler(hub)
 
 	// Connect but intentionally do not read messages. The small send buffer
 	// will fill up and Broadcast will detect the slow client.
-	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
+	conn, server := dialTestWebSocket(t, handler, nil)
 	defer server.Close()
 	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
@@ -238,12 +221,7 @@ func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
 		hub.Broadcast(map[string]any{"i": i})
 	}
 
-	select {
-	case <-disconnected:
-	case <-time.After(5 * time.Second):
-		t.Fatal("expected slow client to be disconnected")
-	}
-
+	waitForHandler(t, handlerDone, 5*time.Second)
 	waitForClientCount(t, hub, 0, 2*time.Second)
 
 	if got := strings.Count(logs.String(), "too slow"); got != 1 {
@@ -257,30 +235,16 @@ func TestWebSocketHubSlowClientDisconnected(t *testing.T) {
 func TestWebSocketHubClientInitiatedClose(t *testing.T) {
 	hub := NewWebSocketHub("test")
 
-	disconnected := make(chan struct{}, 1)
-	hub.SetOnDisconnect(func() {
-		select {
-		case disconnected <- struct{}{}:
-		default:
-		}
-	})
-
 	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
 	defer server.Close()
 
 	waitForClientCount(t, hub, 1, time.Second)
 
-	// Client-initiated close: readPump detects the closed connection,
-	// signals done, writePump exits via its deferred disconnectClient.
+	// Client-initiated close: readPump detects the closed connection and
+	// returns, which makes writePump exit via its deferred disconnectClient.
 	conn.Close(websocket.StatusNormalClosure, "") //nolint:errcheck,gosec // Best-effort cleanup
 
-	select {
-	case <-disconnected:
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected onDisconnect after client-initiated close")
-	}
-
-	waitForClientCount(t, hub, 0, time.Second)
+	waitForClientCount(t, hub, 0, 2*time.Second)
 }
 
 func TestWebSocketHubBroadcastMarshalFailure(t *testing.T) {
@@ -322,62 +286,6 @@ func TestWebSocketHubOnConnectMarshalFailureRemovesClient(t *testing.T) {
 
 	if got := hub.ClientCount(); got != 0 {
 		t.Fatalf("ClientCount() = %d after onConnect marshal failure, want 0", got)
-	}
-}
-
-func TestWebSocketHubOnDisconnectCalledOnce(t *testing.T) {
-	hub := NewWebSocketHub("test")
-	hub.sendBufferSize = 1
-	hub.writeTimeout = 50 * time.Millisecond
-
-	var count sync.WaitGroup
-	count.Add(1)
-
-	var calls int32
-	var mu sync.Mutex
-	hub.SetOnDisconnect(func() {
-		mu.Lock()
-		calls++
-		mu.Unlock()
-		count.Done()
-	})
-
-	// Connect but do not read, so the send buffer fills quickly.
-	handlerDone := make(chan struct{})
-	conn, server := dialTestWebSocket(t, func(w http.ResponseWriter, r *http.Request) {
-		defer close(handlerDone)
-		hub.HandleConnection(w, r)
-	}, nil)
-	defer server.Close()
-	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
-
-	waitForClientCount(t, hub, 1, time.Second)
-
-	// Flood broadcasts to trigger signalDone from Broadcast (slow client)
-	// while writePump may also exit due to a write error. Both paths
-	// converge on disconnectClient, which must call onDisconnect exactly once.
-	for i := range 50 {
-		hub.Broadcast(map[string]any{"i": i})
-	}
-
-	count.Wait()
-	waitForClientCount(t, hub, 0, 2*time.Second)
-
-	// The handler returns when readPump does. Both pumps have to be past their
-	// cleanup before the calls are counted.
-	select {
-	case <-handlerDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("readPump did not exit")
-	}
-
-	// Give any stray goroutines a moment to settle.
-	time.Sleep(50 * time.Millisecond)
-
-	mu.Lock()
-	defer mu.Unlock()
-	if calls != 1 {
-		t.Fatalf("onDisconnect called %d times, want 1", calls)
 	}
 }
 
@@ -429,19 +337,14 @@ func TestWebSocketHubDropsPeerThatStopsAnsweringPings(t *testing.T) {
 	hub.pingInterval = 20 * time.Millisecond
 	hub.pongWait = 50 * time.Millisecond
 
-	disconnected := make(chan struct{}, 1)
-	hub.SetOnDisconnect(func() { disconnected <- struct{}{} })
-
 	// A client that does not read does not answer pings either.
-	conn, server := dialTestWebSocket(t, hub.HandleConnection, nil)
+	handler, handlerDone := trackHandler(hub)
+	conn, server := dialTestWebSocket(t, handler, nil)
 	defer server.Close()
 	defer conn.CloseNow() //nolint:errcheck // Best-effort cleanup
 
-	select {
-	case <-disconnected:
-	case <-time.After(time.Second):
-		t.Fatal("expected a peer that does not answer pings to be disconnected")
-	}
+	waitForHandler(t, handlerDone, time.Second)
+	waitForClientCount(t, hub, 0, time.Second)
 }
 
 // pipeResponse hands one end of a pipe to the handler as its connection.
@@ -503,11 +406,8 @@ func TestWebSocketHubDropsPeerInEndlessFrame(t *testing.T) {
 			hub.pingInterval = 20 * time.Millisecond
 			hub.pongWait = 50 * time.Millisecond
 
-			handlerDone := make(chan struct{})
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				defer close(handlerDone)
-				hub.HandleConnection(w, r)
-			}))
+			handler, handlerDone := trackHandler(hub)
+			server := httptest.NewServer(handler)
 			defer server.Close()
 
 			conn, err := net.Dial("tcp", server.Listener.Addr().String())
@@ -534,11 +434,7 @@ func TestWebSocketHubDropsPeerInEndlessFrame(t *testing.T) {
 				}
 			}()
 
-			select {
-			case <-handlerDone:
-			case <-time.After(2 * time.Second):
-				t.Fatal("expected a peer in an endless frame to be disconnected")
-			}
+			waitForHandler(t, handlerDone, 2*time.Second)
 		})
 	}
 }
@@ -657,6 +553,27 @@ func dialTestWebSocket(t *testing.T, handler http.HandlerFunc, opts *websocket.D
 	}
 
 	return conn, server
+}
+
+// trackHandler returns the hub's handler and a channel that closes when the handler
+// returns for its one connection, which it does once readPump has ended.
+func trackHandler(hub *WebSocketHub) (handler http.HandlerFunc, returned <-chan struct{}) {
+	done := make(chan struct{})
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer close(done)
+		hub.HandleConnection(w, r)
+	}, done
+}
+
+func waitForHandler(t *testing.T, done <-chan struct{}, timeout time.Duration) {
+	t.Helper()
+
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		t.Fatal("timed out waiting for HandleConnection to return")
+	}
 }
 
 func startMessageReader(conn *websocket.Conn) <-chan map[string]any {

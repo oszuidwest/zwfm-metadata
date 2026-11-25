@@ -19,14 +19,8 @@ type hubClient struct {
 	conn       *websocket.Conn
 	remoteAddr string
 	send       chan []byte
-	done       chan struct{}
-	closeOnce  sync.Once
-}
-
-func (c *hubClient) signalDone() {
-	c.closeOnce.Do(func() {
-		close(c.done)
-	})
+	done       <-chan struct{}
+	signalDone context.CancelFunc
 }
 
 // WebSocketHub manages WebSocket connections and broadcasting.
@@ -35,7 +29,6 @@ type WebSocketHub struct {
 	clients        map[*websocket.Conn]*hubClient
 	mu             sync.RWMutex
 	onConnect      func() any
-	onDisconnect   func()
 	heartbeat      []byte
 	heartbeatAfter time.Duration
 	pingInterval   time.Duration
@@ -69,44 +62,27 @@ func (h *WebSocketHub) SetHeartbeat(interval time.Duration, msg []byte) {
 	h.heartbeat = msg
 }
 
-// SetOnDisconnect sets the callback for disconnections.
-func (h *WebSocketHub) SetOnDisconnect(fn func()) {
-	h.onDisconnect = fn
-}
-
-func (h *WebSocketHub) removeClient(client *hubClient) (int, bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if _, exists := h.clients[client.conn]; !exists {
-		return 0, false
-	}
-
-	delete(h.clients, client.conn)
-	return len(h.clients), true
-}
-
 func (h *WebSocketHub) disconnectClient(client *hubClient) {
-	clientCount, removed := h.removeClient(client)
-	if !removed {
-		return
-	}
-
-	client.signalDone()
+	h.mu.Lock()
+	delete(h.clients, client.conn)
+	clientCount := len(h.clients)
+	h.mu.Unlock()
 
 	// CloseNow, because Close waits without a limit for a peer that keeps sending.
 	client.conn.CloseNow() //nolint:errcheck,gosec // The peer may have closed it already
-
-	if h.onDisconnect != nil {
-		h.onDisconnect()
-	}
 
 	slog.Debug("WebSocket client disconnected", "hub", h.name, "clients", clientCount)
 }
 
 // HandleConnection upgrades an HTTP connection to WebSocket and manages its lifecycle.
 func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) {
-	var pongDeadline *time.Timer // set before readPump, which handles the pongs
+	// The deferred cancel runs when readPump returns and tells writePump to stop.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pongDeadline := time.AfterFunc(h.pongWait, cancel)
+	defer pongDeadline.Stop()
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true, // any origin may connect
 		OnPongReceived:     func(context.Context, []byte) { pongDeadline.Reset(h.pongWait) },
@@ -121,7 +97,8 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		conn:       conn,
 		remoteAddr: r.RemoteAddr,
 		send:       make(chan []byte, h.sendBufferSize),
-		done:       make(chan struct{}),
+		done:       ctx.Done(),
+		signalDone: cancel,
 	}
 
 	// Enqueue the onConnect payload before registering the client in the map.
@@ -147,9 +124,6 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	h.mu.Unlock()
 
 	slog.Debug("WebSocket client connected", "hub", h.name, "clients", clientCount)
-
-	pongDeadline = time.AfterFunc(h.pongWait, client.signalDone)
-	defer pongDeadline.Stop()
 
 	go h.writePump(client)
 	h.readPump(client)
@@ -222,10 +196,8 @@ func (h *WebSocketHub) writeText(client *hubClient, msg []byte) bool {
 }
 
 // readPump reads from the WebSocket connection until an error occurs. All messages
-// are discarded as the hub is write-only. On exit it signals the write pump to stop.
+// are discarded as the hub is write-only.
 func (h *WebSocketHub) readPump(client *hubClient) {
-	defer client.signalDone()
-
 	// Messages are discarded without buffering, so their size does not matter.
 	client.conn.SetReadLimit(-1)
 
