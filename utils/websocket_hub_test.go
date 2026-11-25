@@ -497,45 +497,49 @@ func TestWebSocketHubCountsDeadlineFromLastPong(t *testing.T) {
 }
 
 func TestWebSocketHubDropsPeerInEndlessFrame(t *testing.T) {
-	hub := NewWebSocketHub("test")
-	hub.pingInterval = 20 * time.Millisecond
-	hub.pongWait = 50 * time.Millisecond
+	for name, keepsSending := range map[string]bool{"keeps sending": true, "stops sending": false} {
+		t.Run(name, func(t *testing.T) {
+			hub := NewWebSocketHub("test")
+			hub.pingInterval = 20 * time.Millisecond
+			hub.pongWait = 50 * time.Millisecond
 
-	handlerDone := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer close(handlerDone)
-		hub.HandleConnection(w, r)
-	}))
-	defer server.Close()
+			handlerDone := make(chan struct{})
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				defer close(handlerDone)
+				hub.HandleConnection(w, r)
+			}))
+			defer server.Close()
 
-	conn, err := net.Dial("tcp", server.Listener.Addr().String())
-	if err != nil {
-		t.Fatalf("Dial() error = %v", err)
-	}
-	defer conn.Close() //nolint:errcheck // Best-effort cleanup
-
-	// A binary frame header that announces 1 TiB, followed by payload without end.
-	// The peer cannot answer a ping or a close frame in the middle of a frame.
-	request := "GET / HTTP/1.1\r\nHost: test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n" +
-		"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: AAAAAAAAAAAAAAAAAAAAAA==\r\n\r\n"
-	header := "\x82\xff\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-	if _, err := conn.Write([]byte(request + header)); err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-	go func() {
-		payload := make([]byte, 1024)
-		for {
-			if _, err := conn.Write(payload); err != nil {
-				return
+			conn, err := net.Dial("tcp", server.Listener.Addr().String())
+			if err != nil {
+				t.Fatalf("Dial() error = %v", err)
 			}
-			time.Sleep(time.Millisecond)
-		}
-	}()
+			defer conn.Close() //nolint:errcheck // Best-effort cleanup
 
-	select {
-	case <-handlerDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected a peer in an endless frame to be disconnected")
+			// A binary frame header that announces 1 TiB. The peer cannot answer a ping
+			// or a close frame in the middle of a frame.
+			request := "GET / HTTP/1.1\r\nHost: test\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n" +
+				"Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: AAAAAAAAAAAAAAAAAAAAAA==\r\n\r\n"
+			header := "\x82\xff\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+			if _, err := conn.Write([]byte(request + header)); err != nil {
+				t.Fatalf("Write() error = %v", err)
+			}
+			go func() {
+				payload := make([]byte, 1024)
+				for keepsSending {
+					if _, err := conn.Write(payload); err != nil {
+						return
+					}
+					time.Sleep(time.Millisecond)
+				}
+			}()
+
+			select {
+			case <-handlerDone:
+			case <-time.After(2 * time.Second):
+				t.Fatal("expected a peer in an endless frame to be disconnected")
+			}
+		})
 	}
 }
 
